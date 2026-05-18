@@ -23,6 +23,10 @@ frontend/dist/
 frontend/dist-check-*/
 .vite-cache/
 
+# Hostinger deploy output (may contain secrets)
+deploy/*.zip
+deploy/.env.hostinger
+
 # OS files
 .DS_Store
 Thumbs.db

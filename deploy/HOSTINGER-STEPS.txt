@@ -1,0 +1,45 @@
+﻿Hostinger backend deploy (after uploading the zip)
+==================================================
+
+1. Upload & extract
+   - hPanel -> File Manager -> your API folder (e.g. domains/api.yourdomain.com)
+   - Upload backend-hostinger-*.zip and extract so "backend" files match your layout
+   - Document root must point to: backend/public
+
+2. .env on server (do NOT upload .env from your PC zip - create/edit on server)
+   APP_ENV=production
+   APP_DEBUG=false
+   APP_URL=https://api.YOUR-DOMAIN.com
+   APP_KEY=... (same as local or run: php artisan key:generate)
+
+   DB_HOST=...
+   DB_DATABASE=...
+   DB_USERNAME=...
+   DB_PASSWORD=...
+
+   ATTENDANCE_IMAGE_DISK=public
+
+   Place .env one folder ABOVE backend/ (project root), OR inside backend/ if you adjust bootstrap.
+
+3. SSH or Hostinger Terminal (inside backend folder):
+   composer install --no-dev --optimize-autoloader
+   php artisan storage:link
+   php artisan migrate --force
+   php artisan config:cache
+   php artisan route:cache
+
+4. Permissions (if 500 errors):
+   chmod -R 775 storage bootstrap/cache
+
+5. Vercel frontend env:
+   VITE_API_URL=https://api.YOUR-DOMAIN.com/api
+   Then redeploy Vercel.
+
+Updates later
+-------------
+- Change code locally -> git push (Vercel auto-updates frontend)
+- Run .\deploy-hostinger.ps1 again -> upload new zip -> SSH:
+    composer install --no-dev
+    php artisan migrate --force
+    php artisan config:cache
+    php artisan route:cache
