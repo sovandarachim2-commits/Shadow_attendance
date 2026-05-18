@@ -14,7 +14,8 @@ return [
     */
 
     'default' => env('FILESYSTEM_DISK', 'local'),
-    'attendance_disk' => env('ATTENDANCE_IMAGE_DISK', 'r2'),
+    // Images always use the r2 disk (see ImageUploadService). Kept for legacy config reads.
+    'attendance_disk' => 'r2',
 
     /*
     |--------------------------------------------------------------------------

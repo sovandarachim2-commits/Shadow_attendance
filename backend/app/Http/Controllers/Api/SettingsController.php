@@ -6,8 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\SystemSetting;
 use App\Services\ImageUploadService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Storage;
-
 class SettingsController extends Controller
 {
     public function index()
@@ -41,8 +39,7 @@ class SettingsController extends Controller
         ]);
 
         $path = $images->store($request->file('logo'), 'logos');
-        $disk = config('filesystems.attendance_disk', 'public');
-        $url  = Storage::disk($disk)->url($path);
+        $url  = $images->url($path);
 
         SystemSetting::updateOrCreate(
             ['key' => 'company_logo_url'],

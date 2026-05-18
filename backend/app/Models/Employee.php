@@ -21,9 +21,7 @@ class Employee extends Model
             return null;
         }
 
-        $disk = config('filesystems.attendance_disk', 'public');
-
-        return Storage::disk($disk)->url($this->photo_path);
+        return Storage::disk('r2')->url($this->photo_path);
     }
 
     public function getFullNameAttribute(): string
