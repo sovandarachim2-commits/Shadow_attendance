@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Install Local Certificate</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: Arial, sans-serif;
+        background: #f5f7fb;
+        color: #172033;
+      }
+
+      body {
+        margin: 0;
+        padding: 24px;
+      }
+
+      main {
+        max-width: 520px;
+        margin: 0 auto;
+      }
+
+      h1 {
+        font-size: 26px;
+        margin: 0 0 12px;
+      }
+
+      p {
+        font-size: 16px;
+        line-height: 1.5;
+      }
+
+      a {
+        display: block;
+        margin: 14px 0;
+        padding: 14px 16px;
+        border-radius: 8px;
+        background: #155eef;
+        color: #fff;
+        text-align: center;
+        text-decoration: none;
+        font-weight: 700;
+      }
+
+      section {
+        margin-top: 22px;
+        padding-top: 18px;
+        border-top: 1px solid #d8deea;
+      }
+
+      ol {
+        padding-left: 22px;
+      }
+
+      li {
+        margin: 10px 0;
+        line-height: 1.45;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Install Local Certificate</h1>
+      <p>Install this certificate so your phone trusts the Shadow Attendance local HTTPS server.</p>
+
+      <a href="/mkcert-root-ca.crt">Download certificate (.crt)</a>
+      <a href="/mkcert-root-ca.pem">Download certificate (.pem)</a>
+
+      <section>
+        <h2>iPhone</h2>
+        <ol>
+          <li>Tap Download certificate.</li>
+          <li>Open Settings and install the downloaded profile.</li>
+          <li>Go to General > About > Certificate Trust Settings.</li>
+          <li>Enable full trust for the mkcert certificate.</li>
+        </ol>
+      </section>
+
+      <section>
+        <h2>Android</h2>
+        <ol>
+          <li>Tap Download certificate.</li>
+          <li>Install it as a CA certificate or VPN/app certificate.</li>
+          <li>Use your lock screen PIN if Android asks.</li>
+        </ol>
+      </section>
+    </main>
+  </body>
+</html>

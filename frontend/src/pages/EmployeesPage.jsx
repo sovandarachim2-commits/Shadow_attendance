@@ -76,9 +76,9 @@ export default function EmployeesPage({ appData, refresh, setModal, setEditingEm
     setBranch('all')
   }
 
-  const canCreate = canAccess(user, ['manage_employees', 'create_employee'])
-  const canEdit = canAccess(user, ['manage_employees', 'edit_employee'])
-  const canDelete = canAccess(user, ['manage_employees', 'delete_employee'])
+  const canCreate = canAccess(user, ['employees.create'])
+  const canEdit   = canAccess(user, ['employees.update'])
+  const canDelete = canAccess(user, ['employees.delete'])
 
   const deleteEmployee = (employee) => setConfirmEmployee(employee)
 

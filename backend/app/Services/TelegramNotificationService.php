@@ -4,6 +4,8 @@ namespace App\Services;
 
 use App\Models\SystemSetting;
 use App\Models\TelegramDestination;
+use App\Models\TelegramLog;
+use App\Models\TelegramSetting;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -11,40 +13,72 @@ class TelegramNotificationService
 {
     private function getToken(): ?string
     {
-        $dbToken = SystemSetting::where('key', 'telegram_bot_token')->value('value');
+        $dbToken = TelegramSetting::query()->value('bot_token')
+            ?: SystemSetting::where('key', 'telegram_bot_token')->value('value');
 
         return ($dbToken && trim($dbToken) !== '') ? trim($dbToken) : config('services.telegram.bot_token');
     }
 
-    public function send(string $message, string $eventKey = 'daily_attendance'): void
+    public function alertEnabled(string $settingKey, bool $default = true): bool
+    {
+        $pref = SystemSetting::where('key', $settingKey)->value('value');
+
+        if ($pref === null || $pref === '') {
+            return $default;
+        }
+
+        return in_array($pref, ['1', 1, true], true);
+    }
+
+    public function send(string $message, string|array $eventKeys = 'daily_attendance'): void
     {
         $token = $this->getToken();
 
-        if (! $token) {
+        if (! $token || ! $this->alertEnabled('telegram_bot_enabled', true)) {
             return;
         }
 
+        $keys = is_array($eventKeys) ? $eventKeys : [$eventKeys];
+        $destinations = collect();
+
+        foreach (array_values(array_unique($keys)) as $eventKey) {
+            $destinations = $destinations->merge($this->resolveDestinations($eventKey));
+        }
+
+        $destinations
+            ->unique(fn ($destination) => $destination->chat_id.'|'.($destination->message_thread_id ?? ''))
+            ->each(function ($destination) use ($token, $message) {
+                $this->sendPayload($token, $destination->chat_id, $message, $destination->message_thread_id ?? null);
+            });
+    }
+
+    private function resolveDestinations(string $eventKey)
+    {
         $destinations = TelegramDestination::query()
             ->where('enabled', true)
             ->whereIn('event_key', [$eventKey, 'other'])
             ->get();
 
-        if ($destinations->isEmpty()) {
-            $chatId = config('services.telegram.chat_id');
-
-            if (! $chatId) {
-                return;
-            }
-
-            $destinations = collect([(object) [
-                'chat_id' => $chatId,
-                'message_thread_id' => null,
-            ]]);
+        if ($destinations->isNotEmpty()) {
+            return $destinations;
         }
 
-        foreach ($destinations as $destination) {
-            $this->sendPayload($token, $destination->chat_id, $message, $destination->message_thread_id ?? null);
+        if ($eventKey !== 'daily_attendance') {
+            return collect();
         }
+
+        $chatId = TelegramSetting::query()->value('chat_id')
+            ?: SystemSetting::where('key', 'telegram_default_chat_id')->value('value')
+            ?: config('services.telegram.chat_id');
+
+        if (! $chatId || trim($chatId) === '') {
+            return collect();
+        }
+
+        return collect([(object) [
+            'chat_id' => $chatId,
+            'message_thread_id' => null,
+        ]]);
     }
 
     public function sendToDestination(TelegramDestination $destination, string $message): array
@@ -56,6 +90,44 @@ class TelegramNotificationService
         }
 
         return $this->sendPayload($token, $destination->chat_id, $message, $destination->message_thread_id);
+    }
+
+    public function sendTestMessage(string $message, string $messageType = 'test'): array
+    {
+        $token = $this->getToken();
+
+        if (! $token) {
+            return ['ok' => false, 'description' => 'TELEGRAM_BOT_TOKEN is not set in .env or Telegram settings'];
+        }
+
+        $setting = TelegramSetting::query()->firstOrCreate([]);
+        $chatId = $setting->chat_id
+            ?: SystemSetting::where('key', 'telegram_default_chat_id')->value('value')
+            ?: config('services.telegram.chat_id');
+
+        if (! $chatId || trim($chatId) === '') {
+            return ['ok' => false, 'description' => 'Telegram Chat ID is not configured.'];
+        }
+
+        $result = $this->sendPayload($token, $chatId, $message);
+        $sent = $result['ok'] ? now() : null;
+
+        TelegramLog::create([
+            'employee_id' => null,
+            'message_type' => $messageType,
+            'telegram_message' => $message,
+            'status' => $result['ok'] ? 'sent' : 'failed',
+            'sent_at' => $sent,
+        ]);
+
+        if ($result['ok']) {
+            $setting->update([
+                'status' => 'connected',
+                'last_notification_sent_at' => $sent,
+            ]);
+        }
+
+        return $result;
     }
 
     public function verifyBot(): array

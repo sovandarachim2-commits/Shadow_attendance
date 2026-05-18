@@ -1,7 +1,7 @@
 /* eslint-disable no-unused-vars */
 import clsx from 'clsx'
 import {
-  Activity, Bell, BriefcaseBusiness, Building2, CalendarCheck, Camera, CheckCircle2, ChevronDown, Clock, Download, Eye, EyeOff, FileText, Fingerprint, Folder, Home, KeyRound, List, LocateFixed, LogOut, Mail, MapPinned, Menu, Moon, Phone, ShieldCheck, ShoppingBag, Sun, UserPlus, Users, UserRound, X,
+  Activity, Bell, BriefcaseBusiness, Building2, CalendarCheck, Camera, CheckCircle2, ChevronDown, Clock, Cloud, Download, Eye, EyeOff, FileText, FileSpreadsheet, Fingerprint, Folder, Home, KeyRound, List, Loader2, LocateFixed, LogOut, Mail, MapPinned, Menu, Moon, Phone, Send, ShieldCheck, ShoppingBag, Sun, UploadCloud, UserPlus, Users, UserRound, X,
 } from 'lucide-react'
 import { initials } from '../../utils/format'
 
@@ -58,7 +58,7 @@ export function FormTextarea({ label, value, onChange, required = false }) {
 
 
 export function SubmitButton({ saving, label }) {
-  return <button className="rounded-lg bg-emerald-600 px-4 py-3 font-semibold text-white disabled:opacity-60" disabled={saving} type="submit">{saving ? 'Saving...' : label}</button>
+  return <LoadingButton loading={saving} type="submit" loadingText="Saving...">{label}</LoadingButton>
 }
 
 
@@ -67,15 +67,17 @@ export function ErrorText({ text }) {
 }
 
 
-export function Toggle({ checked, onChange }) {
+export function Toggle({ checked, onChange, disabled = false }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
-      onClick={onChange}
+      disabled={disabled}
+      onClick={disabled ? undefined : onChange}
       className={clsx(
-        'relative inline-flex h-6 w-14 shrink-0 cursor-pointer items-center rounded-full transition-colors duration-200 focus:outline-none',
+        'relative inline-flex h-6 w-14 shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-none',
+        disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer',
         checked ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600',
       )}
     >
@@ -148,12 +150,277 @@ export function Avatar({ name }) {
 
 
 export function LoadingScreen() {
+  const messages = ['Loading dashboard...', 'Preparing attendance data...', 'Initializing GPS services...']
+
   return (
-    <div className="grid min-h-screen place-items-center bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
-      <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <Activity className="mx-auto mb-3 animate-pulse" size={28} />
-        <p className="text-sm font-semibold">Loading secure session</p>
+    <div className="grid min-h-screen place-items-center bg-gradient-to-br from-slate-50 via-emerald-50/60 to-white p-6 text-slate-900 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 dark:text-slate-100">
+      <div className="w-full max-w-sm rounded-lg border border-white/70 bg-white/85 p-7 text-center shadow-2xl shadow-emerald-900/10 backdrop-blur dark:border-slate-800 dark:bg-slate-900/85">
+        <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-emerald-600 text-white shadow-lg shadow-emerald-700/25">
+          <Activity className="animate-pulse" size={30} />
+        </div>
+        <div className="mx-auto mt-5 h-9 w-9 rounded-full border-4 border-emerald-100 border-t-emerald-600 dark:border-slate-700 dark:border-t-emerald-400 animate-spin" />
+        <p className="mt-5 text-base font-bold">Loading secure session</p>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{messages[new Date().getSeconds() % messages.length]}</p>
+        <div className="mt-6 grid gap-2">
+          <SkeletonLine className="mx-auto h-2 w-44" />
+          <SkeletonLine className="mx-auto h-2 w-32" />
+        </div>
       </div>
+    </div>
+  )
+}
+
+export function SkeletonBlock({ className = '' }) {
+  return (
+    <span
+      className={clsx(
+        'relative block overflow-hidden rounded-lg bg-slate-200/80 dark:bg-slate-800',
+        'after:absolute after:inset-y-0 after:left-0 after:w-1/2 after:-translate-x-full after:bg-gradient-to-r after:from-transparent after:via-white/70 after:to-transparent after:animate-[loading-shimmer_1.5s_infinite]',
+        'dark:after:via-white/10',
+        className,
+      )}
+    />
+  )
+}
+
+export function SkeletonLine({ className = '' }) {
+  return <SkeletonBlock className={clsx('h-3 rounded-full', className)} />
+}
+
+export function CardSkeleton({ variant = 'dashboard' }) {
+  if (variant === 'profile') {
+    return (
+      <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex items-center gap-4">
+          <SkeletonBlock className="h-16 w-16 rounded-full" />
+          <div className="flex-1 space-y-3">
+            <SkeletonLine className="w-40" />
+            <SkeletonLine className="w-28" />
+          </div>
+        </div>
+        <div className="mt-6 grid gap-3 sm:grid-cols-2">
+          <SkeletonLine />
+          <SkeletonLine />
+          <SkeletonLine />
+          <SkeletonLine />
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex items-center justify-between">
+        <div className="space-y-3">
+          <SkeletonLine className="w-28" />
+          <SkeletonLine className="h-7 w-20" />
+        </div>
+        <SkeletonBlock className="h-12 w-12 rounded-full" />
+      </div>
+      <SkeletonLine className="mt-5 w-full" />
+    </div>
+  )
+}
+
+export function TableSkeleton({ rows = 5, columns = 5, showAvatar = true }) {
+  return (
+    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="border-b border-slate-100 p-5 dark:border-slate-800">
+        <SkeletonLine className="w-52" />
+      </div>
+      <div className="divide-y divide-slate-100 dark:divide-slate-800">
+        {Array.from({ length: rows }).map((_, rowIndex) => (
+          <div key={rowIndex} className="grid min-w-[680px] grid-cols-[1.5fr_repeat(4,1fr)_80px] items-center gap-4 px-5 py-4">
+            <div className="flex items-center gap-3">
+              {showAvatar && <SkeletonBlock className="h-10 w-10 rounded-full" />}
+              <div className="flex-1 space-y-2">
+                <SkeletonLine className="w-32" />
+                <SkeletonLine className="w-20" />
+              </div>
+            </div>
+            {Array.from({ length: Math.max(columns - 2, 1) }).map((__, colIndex) => (
+              <SkeletonLine key={colIndex} className="w-full" />
+            ))}
+            <div className="flex gap-2">
+              <SkeletonBlock className="h-8 w-8" />
+              <SkeletonBlock className="h-8 w-8" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+export function DashboardLoading() {
+  return (
+    <div className="grid gap-6 xl:grid-cols-[260px_1fr]">
+      <aside className="hidden rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 xl:block">
+        <SkeletonLine className="mb-5 w-28" />
+        <div className="space-y-3">
+          {Array.from({ length: 8 }).map((_, index) => <SkeletonLine key={index} className="h-10" />)}
+        </div>
+      </aside>
+      <div className="space-y-6">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => <CardSkeleton key={index} />)}
+        </div>
+        <div className="grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
+          <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <SkeletonLine className="w-44" />
+            <SkeletonBlock className="mt-5 h-72" />
+          </div>
+          <div className="space-y-4">
+            <CardSkeleton />
+            <CardSkeleton />
+          </div>
+        </div>
+        <TableSkeleton />
+      </div>
+    </div>
+  )
+}
+
+export function LoadingButton({
+  loading = false,
+  children,
+  loadingText = 'Loading...',
+  className = '',
+  type = 'button',
+  icon: Icon,
+  disabled,
+  ...props
+}) {
+  return (
+    <button
+      type={type}
+      disabled={disabled || loading}
+      className={clsx(
+        'inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 text-sm font-bold text-white shadow-lg shadow-emerald-600/20 transition-all duration-300 hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60',
+        className,
+      )}
+      {...props}
+    >
+      {loading ? <Loader2 size={17} className="animate-spin" /> : Icon ? <Icon size={17} /> : null}
+      {loading ? loadingText : children}
+    </button>
+  )
+}
+
+export function FormLoadingOverlay({ show, message = 'Saving changes...' }) {
+  if (!show) return null
+
+  return (
+    <div className="absolute inset-0 z-20 grid place-items-center rounded-lg bg-white/70 backdrop-blur-sm dark:bg-slate-950/60">
+      <div className="rounded-lg border border-white/70 bg-white px-5 py-4 text-center shadow-xl dark:border-slate-700 dark:bg-slate-900">
+        <Loader2 className="mx-auto animate-spin text-emerald-600" size={26} />
+        <p className="mt-2 text-sm font-bold text-slate-900 dark:text-white">{message}</p>
+      </div>
+    </div>
+  )
+}
+
+export function MapLoading({ message = 'Getting GPS location...' }) {
+  return (
+    <div className="grid min-h-64 place-items-center rounded-lg border border-slate-200 bg-slate-50 p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="text-center">
+        <div className="relative mx-auto grid h-20 w-20 place-items-center">
+          <span className="absolute h-full w-full animate-ping rounded-full bg-emerald-400/20" />
+          <span className="absolute h-14 w-14 animate-pulse rounded-full bg-emerald-400/20" />
+          <MapPinned className="relative text-emerald-600" size={34} />
+        </div>
+        <p className="mt-4 text-sm font-bold text-slate-900 dark:text-white">{message}</p>
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Verifying office radius and route data.</p>
+        <SkeletonBlock className="mt-5 h-28 w-full min-w-72" />
+      </div>
+    </div>
+  )
+}
+
+export function ImageUploadLoading({ progress = 0, message = 'Uploading selfie...', preview }) {
+  const pct = Math.max(0, Math.min(100, Number(progress) || 0))
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex items-center gap-4">
+        <div className="relative grid h-20 w-20 place-items-center overflow-hidden rounded-lg bg-slate-100 dark:bg-slate-800">
+          {preview && <img src={preview} alt="" className="h-full w-full object-cover blur-[2px]" />}
+          <UploadCloud className="absolute animate-bounce text-emerald-600" size={28} />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold text-slate-900 dark:text-white">{message}</p>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Syncing to secure storage.</p>
+          <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+            <div className="h-full rounded-full bg-emerald-500 transition-all duration-300" style={{ width: `${pct}%` }} />
+          </div>
+          <p className="mt-1 text-xs font-semibold text-emerald-600">{pct}%</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function ExportLoadingModal({ show, message = 'Generating Excel report...' }) {
+  if (!show) return null
+
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/45 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-sm rounded-lg border border-white/60 bg-white p-6 text-center shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+        <div className="mx-auto grid h-16 w-16 place-items-center rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40">
+          <FileSpreadsheet className="animate-pulse" size={30} />
+        </div>
+        <div className="mx-auto mt-5 h-10 w-10 rounded-full border-4 border-slate-100 border-t-emerald-600 animate-spin dark:border-slate-800 dark:border-t-emerald-400" />
+        <p className="mt-4 text-base font-bold text-slate-900 dark:text-white">{message}</p>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Preparing a clean file for download.</p>
+      </div>
+    </div>
+  )
+}
+
+export function TelegramTestLoading({ status = 'loading', message = 'Sending Telegram Message...' }) {
+  const ok = status === 'success'
+  const error = status === 'error'
+
+  return (
+    <div className={clsx(
+      'rounded-lg border p-4 shadow-sm',
+      ok ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : error ? 'border-rose-200 bg-rose-50 text-rose-800' : 'border-sky-200 bg-sky-50 text-sky-800',
+    )}>
+      <div className="flex items-center gap-3">
+        <div className="grid h-11 w-11 place-items-center rounded-full bg-white/80">
+          {ok ? <CheckCircle2 size={22} /> : error ? <X size={22} /> : <Send className="animate-pulse" size={21} />}
+        </div>
+        <div>
+          <p className="text-sm font-bold">{message}</p>
+          <p className="text-xs opacity-80">{ok ? 'Message sent successfully.' : error ? 'Please check bot token and chat ID.' : 'Verifying bot connection.'}</p>
+        </div>
+        {!ok && !error && <Loader2 className="ml-auto animate-spin" size={18} />}
+      </div>
+    </div>
+  )
+}
+
+export function MobileLoadingSheet({ show = true, message = 'Refreshing data...' }) {
+  if (!show) return null
+
+  return (
+    <div className="fixed inset-x-3 bottom-20 z-40 rounded-lg border border-white/70 bg-white/90 p-4 shadow-2xl backdrop-blur sm:hidden dark:border-slate-700 dark:bg-slate-900/90">
+      <div className="flex items-center gap-3">
+        <Loader2 className="animate-spin text-emerald-600" size={20} />
+        <div>
+          <p className="text-sm font-bold text-slate-900 dark:text-white">{message}</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Pull-to-refresh state ready.</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function FloatingSpinner({ message = 'Loading...' }) {
+  return (
+    <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+      <Loader2 size={14} className="animate-spin text-emerald-600" />
+      {message}
     </div>
   )
 }
@@ -166,7 +433,9 @@ export function PanelHeader({ title, subtitle, actionLabel = 'Add New', onAction
         <h3 className="text-lg font-bold">{title}</h3>
         <p className="text-sm text-slate-500 dark:text-slate-400">{subtitle}</p>
       </div>
-      <button className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white" onClick={onAction || (() => {})}>{actionLabel}</button>
+      {onAction && actionLabel && (
+        <button className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white" onClick={onAction}>{actionLabel}</button>
+      )}
     </div>
   )
 }

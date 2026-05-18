@@ -24,8 +24,7 @@ class EmployeeController extends Controller
     {
         $filters = $request->only(['search', 'status', 'per_page']);
 
-        $canViewAll = $request->user()->hasPermission('manage_employees')
-            || $request->user()->hasPermission('view_employee_profiles');
+        $canViewAll = $request->user()->hasPermission('employees.view');
 
         if (!$canViewAll) {
             $filters['employee_id'] = $request->user()->employee_id;
@@ -63,7 +62,7 @@ class EmployeeController extends Controller
             'require_gps' => ['nullable', 'boolean'],
             'create_login' => ['nullable', 'boolean'],
             'login_username' => ['required_if:create_login,1', 'nullable', 'string', 'max:100', Rule::unique('users', 'name')],
-            'login_email' => ['required_if:create_login,1', 'nullable', 'email', 'max:255', Rule::unique('users', 'email')],
+            'login_email' => ['nullable', 'email', 'max:255', Rule::unique('users', 'email')],
             'login_password' => ['required_if:create_login,1', 'nullable', 'string', 'min:8', 'max:255'],
             'role_id' => ['required_if:create_login,1', 'nullable', 'exists:roles,id'],
         ]);
@@ -88,9 +87,11 @@ class EmployeeController extends Controller
                         ['name' => 'Office Staff', 'description' => 'Office employee']
                     );
 
+                $email = $loginEmail ?: 'employee-'.$employee->id.'@no-email.attendance.local';
+
                 User::create([
                     'name' => $loginUsername ?? trim($employee->first_name.' '.$employee->last_name),
-                    'email' => $loginEmail,
+                    'email' => $email,
                     'password' => Hash::make($loginPassword),
                     'role_id' => $role->id,
                     'employee_id' => $employee->id,
@@ -164,7 +165,7 @@ class EmployeeController extends Controller
                 }
 
                 $employee->user->update($userData);
-            } elseif ($loginEmail && $loginPassword) {
+            } elseif ($loginPassword) {
                 $role = $roleId
                     ? Role::findOrFail($roleId)
                     : Role::firstOrCreate(
@@ -172,9 +173,11 @@ class EmployeeController extends Controller
                         ['name' => 'Office Staff', 'description' => 'Office employee']
                     );
 
+                $email = $loginEmail ?: 'employee-'.$employee->id.'@no-email.attendance.local';
+
                 User::create([
                     'name' => $loginUsername ?? trim($employee->first_name.' '.$employee->last_name),
-                    'email' => $loginEmail,
+                    'email' => $email,
                     'password' => Hash::make($loginPassword),
                     'role_id' => $role->id,
                     'employee_id' => $employee->id,

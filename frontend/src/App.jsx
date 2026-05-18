@@ -7,7 +7,6 @@ import {
   Building2,
   ChevronDown,
   Clock,
-  FileCheck2,
   FileText,
   Home,
   LogOut,
@@ -15,7 +14,6 @@ import {
   Menu,
   Moon,
   User,
-  Search,
   Settings as SettingsIcon,
   ShoppingBag,
   Sun,
@@ -38,35 +36,52 @@ import ProfilePage from './pages/ProfilePage'
 import SecurityPage from './pages/SecurityPage'
 import PermissionRequestsPage from './pages/PermissionRequestsPage'
 import AttendanceHistoryPage from './pages/AttendanceHistoryPage'
+import AdminAttendanceReportsPage from './pages/AdminAttendanceReportsPage'
+import MyAttendanceReportsPage from './pages/MyAttendanceReportsPage'
 import LoginPage from './pages/LoginPage'
 import MobileNav from './components/layout/MobileNav'
 import AttendanceActionModal from './components/attendance/AttendanceActionModal'
 import EmployeeModal from './components/employees/EmployeeModal'
 import VisitModal from './components/visits/VisitModal'
 import ReportModal from './components/reports/ReportModal'
-import { LoadingScreen, SummaryRow } from './components/shared/UI'
+import { FloatingSpinner, LoadingScreen, SummaryRow } from './components/shared/UI'
 import { canAccess, formatTime, userDisplayName } from './utils/format'
 
 const sidebarMainItems = [
-  { label: 'Dashboard', target: 'Dashboard', icon: Home, permissions: ['dashboard_access', 'employee_dashboard_access'] },
-  { label: 'My Attendance', target: 'My Attendance', icon: Clock, permissions: ['view_own_attendance', 'view_all_attendance'] },
-  { label: 'Customer Visits', target: 'Customer Visits', icon: ShoppingBag, permissions: ['create_customer_visit', 'view_customer_visits', 'manage_customer_visits'] },
-  { label: 'Daily Reports', target: 'Daily Reports', icon: FileText, permissions: ['submit_daily_report', 'view_own_reports', 'view_reports', 'view_sales_reports'] },
-  { label: 'Permission Requests', target: 'Permission Requests', icon: FileCheck2, permissions: ['view_all_permission_requests', 'view_own_permission_requests', 'submit_permission_request'] },
-  { label: 'Route Map', target: 'Route Map', icon: MapPinned, permissions: ['gps_tracking_access', 'route_tracking_access', 'view_gps_tracking', 'monitor_route_history'] },
-  { label: 'Profile', target: 'Profile', icon: UserRound, permissions: ['update_own_profile', 'update_profile', 'employee_dashboard_access', 'dashboard_access'] },
-  { label: 'Notifications', target: 'Notifications', icon: Bell, permissions: ['receive_notifications', 'manage_notifications'] },
+  { label: 'Dashboard', target: 'Dashboard', icon: Home, permissions: ['dashboard.admin', 'dashboard.employee'] },
+  { label: 'Customer Visits', target: 'Customer Visits', icon: ShoppingBag, permissions: ['visits.view', 'visits.create', 'visits.manage'] },
+  { label: 'Reports', target: 'Reports', icon: FileText, permissions: ['reports.create', 'reports.view_own', 'reports.view_all', 'reports.export'] },
+  { label: 'Route Map', target: 'Route Map', icon: MapPinned, permissions: ['gps.view', 'gps.live', 'gps.history'] },
+  { label: 'Profile', target: 'Profile', icon: UserRound, permissions: ['profile.update_own', 'profile.update_all', 'dashboard.admin', 'dashboard.employee'] },
+  { label: 'Notifications', target: 'Notifications', icon: Bell, permissions: ['notifications.view', 'notifications.manage'] },
 ]
 
+const attendanceSubItems = [
+  { label: 'All Attendance', target: 'Attendance History', activeTargets: ['Attendance History'], permissions: ['attendance.view_all'] },
+  { label: 'Attendance Reports', target: 'Admin Attendance Reports', activeTargets: ['Admin Attendance Reports'], permissions: ['reports.attendance.view_all', 'attendance.view_all'] },
+  { label: 'My Attendance Reports', target: 'My Attendance Reports', activeTargets: ['My Attendance Reports'], permissions: ['reports.attendance.view_own', 'attendance.view_own'] },
+  { label: 'My Attendance', target: 'My Attendance', activeTargets: ['My Attendance', 'Check In / Out'], permissions: ['attendance.view_own', 'attendance.view_all'] },
+  { label: 'Attendance Requests', target: 'Permission Requests', activeTargets: ['Permission Requests'], permissions: ['requests.view_all', 'requests.view_own', 'requests.create', 'requests.approve'] },
+]
+
+const ATTENDANCE_TARGETS = new Set(['My Attendance', 'Check In / Out', 'Attendance History', 'Admin Attendance Reports', 'My Attendance Reports', 'Permission Requests'])
+
+const rolePermissionSubItems = [
+  { label: 'Set Permissions', target: 'Roles & Permissions', activeTargets: ['Roles & Permissions', 'Users & Roles'], permissions: ['roles.manage', 'permissions.manage'] },
+  { label: 'Roles', target: 'Roles', activeTargets: ['Roles'], permissions: ['roles.manage'] },
+  { label: 'Permissions', target: 'Permissions', activeTargets: ['Permissions'], permissions: ['permissions.manage'] },
+  { label: 'IP Access', target: 'IP Access', activeTargets: ['IP Access'], permissions: ['roles.manage'] },
+]
+
+const ROLE_PERMISSION_TARGETS = new Set(['Roles & Permissions', 'Users & Roles', 'Roles', 'Permissions', 'IP Access'])
+
 const sidebarManageItems = [
-  { label: 'Attendance History', target: 'Attendance History', icon: Clock, permissions: ['view_all_attendance'] },
-  { label: 'Employees', target: 'Employees', icon: Users, permissions: ['manage_employees', 'create_employee', 'edit_employee', 'view_employee_profiles'] },
-  { label: 'Departments', target: 'Departments', icon: Building2, permissions: ['manage_departments'] },
-  { label: 'Positions', target: 'Positions', icon: BriefcaseBusiness, permissions: ['manage_positions'] },
-  { label: 'Outdoor Sales', target: 'Outdoor Sales', icon: MapPinned, permissions: ['manage_customer_visits', 'view_sales_team', 'view_customer_visits'] },
-  { label: 'Reports', target: 'Reports', icon: FileText, permissions: ['view_reports', 'export_reports', 'view_attendance_reports', 'view_sales_reports'] },
-  { label: 'Roles & Permissions', target: 'Roles & Permissions', icon: Users, permissions: ['manage_roles', 'manage_permissions'] },
-  { label: 'Settings', target: 'Settings', icon: SettingsIcon, permissions: ['manage_security_settings', 'manage_api_keys', 'system_settings_access', 'manage_roles'] },
+  { label: 'Employees', target: 'Employees', icon: Users, permissions: ['employees.view'] },
+  { label: 'Departments', target: 'Departments', icon: Building2, permissions: ['departments.view', 'departments.manage'] },
+  { label: 'Positions', target: 'Positions', icon: BriefcaseBusiness, permissions: ['positions.view', 'positions.manage'] },
+  { label: 'Outdoor Sales', target: 'Outdoor Sales', icon: MapPinned, permissions: ['sales.view', 'sales.manage'] },
+  { label: 'Roles & Permissions', target: 'Roles & Permissions', icon: Users, permissions: ['roles.manage', 'permissions.manage'] },
+  { label: 'Settings', target: 'Settings', icon: SettingsIcon, permissions: ['settings.view', 'settings.security', 'settings.api', 'settings.manage', 'settings.schedules', 'roles.manage'] },
 ]
 
 function GoogleMapsApp({ apiKey }) {
@@ -80,10 +95,14 @@ function GoogleMapsApp({ apiKey }) {
 function AppShell({ isLoaded }) {
   const [active, setActive] = useState('Dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [attendanceOpen, setAttendanceOpen] = useState(false)
+  const [rolesOpen, setRolesOpen] = useState(false)
   const [dark, setDark] = useState(() => localStorage.getItem('attendance_theme') === 'dark')
   const [user, setUser] = useState(null)
   const [authLoading, setAuthLoading] = useState(Boolean(localStorage.getItem('attendance_token')))
   const [attendanceAction, setAttendanceAction] = useState(null)
+  const [pendingRequestType, setPendingRequestType] = useState(null)
   const [modal, setModal] = useState(null)
   const [editingEmployee, setEditingEmployee] = useState(null)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
@@ -176,7 +195,30 @@ function AppShell({ isLoaded }) {
     setAttendanceAction(type)
   }
 
-  const props = { appData: data, isLoaded, refresh: loadRealData, user, onAttendanceAction: openAttendanceAction, setActive, setModal, setEditingEmployee, onLogout: handleLogout, onProfileUpdated: refreshUser }
+  const openPermissionRequest = (type) => {
+    setPendingRequestType(type)
+    setActive('Permission Requests')
+  }
+
+  const props = {
+    appData: data,
+    isLoaded,
+    refresh: loadRealData,
+    user,
+    onAttendanceAction: openAttendanceAction,
+    openPermissionRequest,
+    pendingRequestType,
+    onClearPendingRequest: () => setPendingRequestType(null),
+    setActive,
+    setModal,
+    setEditingEmployee,
+    onLogout: handleLogout,
+    onProfileUpdated: refreshUser,
+  }
+  const filteredAttendanceSubItems = attendanceSubItems.filter((item) => canAccess(user, item.permissions))
+  const isAttendanceExpanded = attendanceOpen || ATTENDANCE_TARGETS.has(active)
+  const filteredRolePermissionSubItems = rolePermissionSubItems.filter((item) => canAccess(user, item.permissions))
+  const isRolesExpanded = rolesOpen || ROLE_PERMISSION_TARGETS.has(active)
   const pages = {
     Dashboard: <DashboardPage {...props} />,
     'Check In / Out': <AttendancePage {...props} />,
@@ -186,16 +228,23 @@ function AppShell({ isLoaded }) {
     'My Reports': <ReportsPage {...props} />,
     'Permission Requests': <PermissionRequestsPage {...props} />,
     'Route Map': <OutdoorSalesPage {...props} />,
+    'Outdoor Check In': <AttendancePage {...props} />,
+    'Outdoor Check Out': <AttendancePage {...props} />,
     Notifications: <NotificationsPage {...props} />,
     Profile: <ProfilePage {...props} />,
     Settings: <SecurityPage refresh={loadRealData} />,
     'Help & Support': <SecurityPage refresh={loadRealData} />,
-    'Attendance History': <AttendanceHistoryPage {...props} />,
+    'Attendance History': <AttendanceHistoryPage {...props} viewMode="all" />,
+    'Admin Attendance Reports': <AdminAttendanceReportsPage {...props} />,
+    'My Attendance Reports': <MyAttendanceReportsPage {...props} />,
     Employees: <EmployeesPage {...props} />,
     Departments: <DepartmentsPage />,
     Positions: <PositionsPage />,
-    'Users & Roles': <UsersRolesPage />,
-    'Roles & Permissions': <UsersRolesPage />,
+    'Users & Roles': <UsersRolesPage initialTab="assign" />,
+    'Roles & Permissions': <UsersRolesPage initialTab="assign" />,
+    Roles: <UsersRolesPage initialTab="roles" />,
+    Permissions: <UsersRolesPage initialTab="permissions" />,
+    'IP Access': <UsersRolesPage initialTab="ip" />,
     'Outdoor Sales': <OutdoorSalesPage {...props} />,
     Reports: <ReportsPage {...props} />,
     Security: <SecurityPage refresh={loadRealData} />,
@@ -212,7 +261,7 @@ function AppShell({ isLoaded }) {
   const unreadCount = data.notifications.filter((item) => !item.read_at).length
   const mainSidebarItems = sidebarMainItems.filter((item) => canAccess(user, item.permissions))
   const manageSidebarItems = sidebarManageItems.filter((item) => canAccess(user, item.permissions))
-  const canSeeNotifications = canAccess(user, ['receive_notifications', 'manage_notifications'])
+  const canSeeNotifications = canAccess(user, ['notifications.view', 'notifications.manage'])
   const today = data.todayAttendance
   const companyName = data.appSettings?.company_name || 'SalesTrack'
   const companyLogoUrl = data.appSettings?.company_logo_url || ''
@@ -221,8 +270,9 @@ function AppShell({ isLoaded }) {
     <div className={clsx(dark && 'dark')}>
       <div className="min-h-screen bg-[#f7f9fc] text-slate-900 transition-colors dark:bg-slate-950 dark:text-slate-100">
         <aside className={clsx(
-          'fixed inset-y-0 left-0 z-40 flex w-72 flex-col overflow-y-auto bg-[#071927] text-white shadow-xl transition-transform lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-40 flex w-72 flex-col overflow-y-auto bg-[#071927] text-white shadow-xl transition-transform duration-300',
           sidebarOpen ? 'translate-x-0' : '-translate-x-full',
+          sidebarCollapsed ? 'lg:-translate-x-full' : 'lg:translate-x-0',
         )}>
           <div className="flex items-center justify-between border-b border-white/10 p-5">
             <div className="flex items-center gap-3">
@@ -268,19 +318,67 @@ function AppShell({ isLoaded }) {
               />
             ))}
 
+            {filteredAttendanceSubItems.length > 0 && (
+              <SidebarAccordion
+                label="Attendance"
+                icon={Clock}
+                isOpen={isAttendanceExpanded}
+                onToggle={() => setAttendanceOpen((v) => !v)}
+              >
+                {filteredAttendanceSubItems.map((item) => (
+                  <SidebarGroupItem
+                    key={item.label}
+                    label={item.label}
+                    isActive={item.activeTargets.includes(active)}
+                    onClick={() => {
+                      if (item.requestType) {
+                        openPermissionRequest(item.requestType)
+                      } else {
+                        setActive(item.target)
+                      }
+                      setSidebarOpen(false)
+                    }}
+                  />
+                ))}
+              </SidebarAccordion>
+            )}
+
             {manageSidebarItems.length > 0 && <div className="my-4 border-t border-white/10" />}
 
             {manageSidebarItems.map((item) => (
-              <SidebarButton
-                key={item.target}
-                item={item}
-                active={active}
-                withChevron
-                onClick={() => {
-                  setActive(item.target)
-                  setSidebarOpen(false)
-                }}
-              />
+              item.target === 'Roles & Permissions' && filteredRolePermissionSubItems.length > 0 ? (
+                <SidebarAccordion
+                  key={item.target}
+                  label="Roles & Permissions"
+                  icon={Users}
+                  isOpen={isRolesExpanded}
+                  onToggle={() => setRolesOpen((v) => !v)}
+                >
+                  {filteredRolePermissionSubItems.map((subItem) => (
+                    <SidebarGroupItem
+                      key={subItem.target}
+                      label={subItem.label}
+                      isActive={subItem.activeTargets.includes(active)}
+                      onClick={() => {
+                        setActive(subItem.target)
+                        setRolesOpen(true)
+                        setSidebarOpen(false)
+                      }}
+                    />
+                  ))}
+                </SidebarAccordion>
+              ) : (
+                <SidebarButton
+                  key={item.target}
+                  item={item}
+                  active={active}
+                  withChevron={false}
+                  onClick={() => {
+                    setActive(item.target)
+                    setSidebarOpen(false)
+                  }}
+                />
+              )
             ))}
           </nav>
 
@@ -299,14 +397,14 @@ function AppShell({ isLoaded }) {
 
         {sidebarOpen && <div className="fixed inset-0 z-30 bg-slate-950/40 lg:hidden" onClick={() => setSidebarOpen(false)} />}
 
-        <main className="lg:pl-72">
+        <main className={clsx('transition-all duration-300', sidebarCollapsed ? 'lg:pl-0' : 'lg:pl-72')}>
           <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-4 py-4 shadow-sm shadow-slate-200/30 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90 sm:px-6">
             <div className="flex items-center justify-between gap-4">
               <div className="flex min-w-0 items-center gap-4">
                 <button className="rounded-lg p-2 text-slate-800 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-900 lg:hidden" onClick={() => setSidebarOpen(true)}>
                   <Menu size={22} />
                 </button>
-                <button className="hidden rounded-lg p-2 text-slate-800 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-900 lg:block">
+                <button className="hidden rounded-lg p-2 text-slate-800 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-900 lg:block" onClick={() => setSidebarCollapsed((v) => !v)} title="Toggle sidebar">
                   <Menu size={22} />
                 </button>
                 <div className="min-w-0">
@@ -318,14 +416,6 @@ function AppShell({ isLoaded }) {
               </div>
 
               <div className="flex items-center gap-4">
-                <label className="relative hidden md:block">
-                  <span className="sr-only">Search employees</span>
-                  <input
-                    className="h-12 w-[360px] rounded-lg border border-slate-200 bg-white px-5 pr-12 text-sm outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-900"
-                    placeholder="Search employees..."
-                  />
-                  <Search className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-900 dark:text-slate-300" size={20} />
-                </label>
                 {canSeeNotifications && (
                   <button className="relative grid h-12 w-12 place-items-center rounded-full border border-slate-200 bg-white text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200" onClick={() => setActive('Notifications')}>
                     <Bell size={20} />
@@ -367,9 +457,9 @@ function AppShell({ isLoaded }) {
                       role="menu"
                     >
                       <div className="px-5 py-4">
-                        <p className="text-lg font-semibold text-slate-600 dark:text-slate-200">{displayName}</p>
-                        <p className="mt-3 text-lg text-slate-600 dark:text-slate-300">{username}</p>
-                        <p className="mt-3 text-sm font-semibold text-slate-400 dark:text-slate-500">{roleName}</p>
+                        <p className="text-base font-bold text-slate-900 dark:text-slate-100">{displayName}</p>
+                        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{user.email}</p>
+                        <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{roleName}</p>
                       </div>
                       <div className="border-t border-slate-200 py-2 dark:border-slate-800">
                         <button
@@ -402,7 +492,7 @@ function AppShell({ isLoaded }) {
           </header>
 
           <section className="space-y-6 p-4 pb-24 sm:p-8 lg:pb-8">
-            {data.loading && <p className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900">Refreshing live data...</p>}
+            {data.loading && <FloatingSpinner message="Refreshing live data..." />}
             {pages[active]}
           </section>
           <MobileNav active={active} setActive={setActive} user={user} onAttendanceAction={openAttendanceAction} todayAttendance={data.todayAttendance} />
@@ -432,6 +522,7 @@ function AppShell({ isLoaded }) {
           action={attendanceAction}
           user={user}
           onClose={() => setAttendanceAction(null)}
+          openPermissionRequest={openPermissionRequest}
           onSaved={() => {
             setAttendanceAction(null)
             loadRealData()
@@ -472,6 +563,43 @@ function SidebarButton({ item, active, unreadCount = 0, withChevron = false, onC
       ) : withChevron ? (
         <ChevronDown size={15} className="text-slate-400" />
       ) : null}
+    </button>
+  )
+}
+
+function SidebarAccordion({ label, icon: Icon, isOpen, onToggle, children }) {
+  return (
+    <div>
+      <button
+        onClick={onToggle}
+        className="flex w-full items-center justify-between rounded-lg px-3 py-3 text-left text-sm font-semibold text-slate-200 transition hover:bg-white/10 hover:text-white"
+      >
+        <span className="flex items-center gap-3">
+          <Icon size={18} />
+          {label}
+        </span>
+        <ChevronDown size={15} className={clsx('text-slate-400 transition-transform duration-200', isOpen && 'rotate-180')} />
+      </button>
+      {isOpen && (
+        <div className="ml-7 mt-1 space-y-0.5">
+          {children}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SidebarGroupItem({ label, isActive, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className={clsx(
+        'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-semibold transition',
+        isActive ? 'text-white' : 'text-slate-400 hover:text-slate-200',
+      )}
+    >
+      <span className={clsx('h-2 w-2 shrink-0 rounded-full', isActive ? 'bg-emerald-400' : 'bg-slate-500')} />
+      {label}
     </button>
   )
 }

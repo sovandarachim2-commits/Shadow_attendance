@@ -7,7 +7,7 @@ use Illuminate\Support\Facades\Storage;
 
 class Employee extends Model
 {
-    protected $appends = ['photo_url'];
+    protected $appends = ['photo_url', 'full_name'];
 
     protected $fillable = [
         'department_id', 'position_id', 'branch_id', 'employee_code', 'first_name', 'last_name',
@@ -24,6 +24,11 @@ class Employee extends Model
         $disk = config('filesystems.attendance_disk', 'public');
 
         return Storage::disk($disk)->url($this->photo_path);
+    }
+
+    public function getFullNameAttribute(): string
+    {
+        return trim("{$this->first_name} {$this->last_name}") ?: (string) $this->employee_code;
     }
 
     public function department() { return $this->belongsTo(Department::class); }

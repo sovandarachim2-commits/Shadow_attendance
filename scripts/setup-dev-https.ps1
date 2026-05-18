@@ -50,6 +50,19 @@ try {
     Pop-Location
 }
 
+$caRoot = (& mkcert -CAROOT).Trim()
+$rootCaFile = Join-Path $caRoot 'rootCA.pem'
+$publicDir = Join-Path $frontend 'public'
+$publicRootCaFile = Join-Path $publicDir 'mkcert-root-ca.pem'
+$publicRootCaCrtFile = Join-Path $publicDir 'mkcert-root-ca.crt'
+if (Test-Path $rootCaFile) {
+    if (-not (Test-Path $publicDir)) {
+        New-Item -ItemType Directory -Path $publicDir | Out-Null
+    }
+    Copy-Item -LiteralPath $rootCaFile -Destination $publicRootCaFile -Force
+    Copy-Item -LiteralPath $rootCaFile -Destination $publicRootCaCrtFile -Force
+}
+
 # Save LAN IP for Vite HMR
 $envFile = Join-Path $root '.env'
 $line = "DEV_LAN_IP=$lanIp"
@@ -70,9 +83,14 @@ Write-Host '  Done. Certificate includes:' -ForegroundColor Green
 Write-Host '    localhost, 127.0.0.1, ::1,' $lanIp -ForegroundColor Gray
 Write-Host ''
 Write-Host "  Phone URL:  https://${lanIp}:5174" -ForegroundColor Cyan
+if (Test-Path $publicRootCaFile) {
+    Write-Host "  Phone install page:  https://${lanIp}:5174/install-cert.html" -ForegroundColor Cyan
+    Write-Host "  Phone certificate:   https://${lanIp}:5174/mkcert-root-ca.crt" -ForegroundColor Cyan
+}
 Write-Host ''
-Write-Host '  iPhone: install mkcert root CA from folder shown by:  mkcert -CAROOT' -ForegroundColor Yellow
-Write-Host '    Then Settings - General - About - Certificate Trust Settings - enable.' -ForegroundColor Yellow
+Write-Host '  iPhone: open the Phone certificate URL, install the profile,' -ForegroundColor Yellow
+Write-Host '    then Settings - General - About - Certificate Trust Settings - enable it.' -ForegroundColor Yellow
+Write-Host '  Android: download/open the Phone certificate URL and install it as a CA certificate.' -ForegroundColor Yellow
 Write-Host ''
 Write-Host '  Restart:  .\start.ps1' -ForegroundColor Yellow
 Write-Host ''

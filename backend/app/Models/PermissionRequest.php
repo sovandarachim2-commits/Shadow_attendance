@@ -11,6 +11,7 @@ class PermissionRequest extends Model
         'request_code',
         'type',
         'request_date',
+        'request_date_end',
         'request_time',
         'reason',
         'status',
@@ -23,6 +24,7 @@ class PermissionRequest extends Model
 
     protected $casts = [
         'request_date' => 'date',
+        'request_date_end' => 'date',
         'is_emergency' => 'boolean',
         'reviewed_at' => 'datetime',
     ];

@@ -12,7 +12,7 @@ class Attendance extends Model
         'employee_id', 'branch_id', 'attendance_date', 'type', 'status', 'check_in_at', 'check_out_at',
         'check_in_latitude', 'check_in_longitude', 'check_in_address',
         'check_out_latitude', 'check_out_longitude', 'check_out_address',
-        'check_in_photo_path', 'check_out_photo_path', 'qr_code', 'late_minutes', 'work_minutes',
+        'check_in_photo_path', 'check_out_photo_path', 'qr_code', 'late_minutes', 'deduction_amount', 'deduction_reason', 'work_minutes',
         'notes', 'offline_sync_uuid', 'synced_at',
     ];
 

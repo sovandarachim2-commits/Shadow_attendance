@@ -1,8 +1,5 @@
-/* eslint-disable no-unused-vars */
 import clsx from 'clsx'
-import {
-  Activity, Bell, BriefcaseBusiness, Building2, CalendarCheck, Camera, CheckCircle2, ChevronDown, Clock, Download, Eye, EyeOff, FileCheck2, FileText, Fingerprint, Folder, Home, KeyRound, List, LocateFixed, LogOut, Mail, MapPinned, Menu, Moon, Phone, ShieldCheck, ShoppingBag, Sun, UserPlus, Users, UserRound, X,
-} from 'lucide-react'
+import { CalendarCheck, CheckCircle2, FileCheck2, Hand, Home, UserRound } from 'lucide-react'
 import { canAccess } from '../../utils/format'
 
 export default function MobileNav({ active, setActive, user, onAttendanceAction, todayAttendance }) {
@@ -10,71 +7,99 @@ export default function MobileNav({ active, setActive, user, onAttendanceAction,
   const completed = Boolean(todayAttendance?.check_out_at)
   const nextAction = checkedIn && !completed ? 'check-out' : 'check-in'
   const centerLabel = completed ? 'Done' : checkedIn ? 'Check Out' : 'Check In'
-  const CenterIcon = completed ? CheckCircle2 : checkedIn ? Clock : LocateFixed
-  const centerTone = completed
-    ? 'bg-slate-400 shadow-slate-400/20'
-    : checkedIn
-    ? 'bg-amber-500 shadow-amber-900/20'
-    : 'bg-emerald-500 shadow-emerald-900/20'
 
-  const canCheckInOut = canAccess(user, ['attendance_check_in', 'office_check_in', 'attendance_check_out', 'office_check_out'])
+  const fabClass = completed
+    ? 'bg-slate-400 shadow-slate-400/40'
+    : checkedIn
+      ? 'bg-amber-500 shadow-amber-500/50'
+      : 'bg-emerald-500 shadow-emerald-500/50'
+
+  const fabLabelColor = completed
+    ? 'text-slate-400'
+    : checkedIn
+    ? 'text-amber-500'
+    : 'text-emerald-600'
+
   const isAttendanceActive = active === 'My Attendance' || active === 'Check In / Out'
-  const isRequestsActive = active === 'Permission Requests'
 
   const leftItems = [
-    { label: 'Home', target: 'Dashboard', icon: Home, isActive: active === 'Dashboard', permissions: ['dashboard_access', 'employee_dashboard_access'] },
-    { label: 'Attendance', target: 'My Attendance', icon: CalendarCheck, isActive: isAttendanceActive, permissions: ['view_own_attendance', 'view_all_attendance', 'attendance_check_in', 'office_check_in'] },
+    { label: 'Home',       target: 'Dashboard',          icon: Home,          isActive: active === 'Dashboard',          permissions: ['dashboard.admin', 'dashboard.employee'] },
+    { label: 'Attendance', target: 'My Attendance',       icon: CalendarCheck, isActive: isAttendanceActive,             permissions: ['attendance.view_own', 'attendance.view_all', 'attendance.check_in'] },
   ].filter((item) => canAccess(user, item.permissions))
 
   const rightItems = [
-    { label: 'Requests', target: 'Permission Requests', icon: FileCheck2, isActive: isRequestsActive, permissions: ['view_all_permission_requests', 'view_own_permission_requests', 'submit_permission_request'] },
-    { label: 'Profile', target: 'Profile', icon: UserRound, isActive: active === 'Profile', permissions: ['update_own_profile', 'update_profile', 'employee_dashboard_access', 'dashboard_access'] },
+    { label: 'Requests', target: 'Permission Requests', icon: FileCheck2, isActive: active === 'Permission Requests', permissions: ['requests.view_all', 'requests.view_own', 'requests.create', 'requests.approve'] },
+    { label: 'Profile',  target: 'Profile',             icon: UserRound,  isActive: active === 'Profile',             permissions: ['profile.update_own', 'profile.update_all', 'dashboard.admin', 'dashboard.employee'] },
   ].filter((item) => canAccess(user, item.permissions))
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white px-3 py-2 shadow-[0_-8px_30px_rgba(15,23,42,0.08)] dark:border-slate-800 dark:bg-slate-900 lg:hidden">
-      <div className="grid grid-cols-5 items-end gap-1">
-        {leftItems.map((item) => (
-          <button
-            key={item.label}
-            onClick={() => setActive(item.target)}
-            className={clsx('flex flex-col items-center gap-1 rounded-lg px-1 py-1 text-[11px] font-semibold', item.isActive ? 'text-emerald-600' : 'text-slate-500')}
-          >
-            <span className="grid h-7 w-7 place-items-center">
-              <item.icon size={18} />
-            </span>
-            <span>{item.label}</span>
-          </button>
-        ))}
+    <nav className="fixed inset-x-0 bottom-0 z-30 lg:hidden">
+      <div className="rounded-t-[28px] border-t border-slate-100 bg-white/95 shadow-[0_-8px_40px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-slate-800/60 dark:bg-slate-900/95">
+        <div className="flex items-end px-4 pb-6">
 
-        {canCheckInOut ? (
+          {/* Left items */}
+          {leftItems.map((item) => (
+            <NavItem key={item.label} item={item} onClick={() => setActive(item.target)} />
+          ))}
+
+          {/* Center FAB — floats up via negative margin */}
           <button
             disabled={completed}
             onClick={() => !completed && onAttendanceAction(nextAction)}
-            className="flex flex-col items-center gap-1 rounded-lg px-1 py-1 text-[11px] font-semibold text-slate-500 disabled:opacity-50"
+            className="mx-auto flex flex-col items-center gap-1.5 pb-1 disabled:opacity-60"
           >
-            <span className={clsx('grid h-14 w-14 -translate-y-4 place-items-center rounded-full text-white shadow-lg', centerTone)}>
-              <CenterIcon size={24} />
+            <span className={clsx(
+              'grid h-[60px] w-[60px] -translate-y-5 place-items-center rounded-full text-white ring-4 ring-white transition-all duration-200 active:scale-95 dark:ring-slate-900',
+              'shadow-[0_8px_28px_-4px]',
+              fabClass,
+            )}>
+              {completed ? <CheckCircle2 size={26} strokeWidth={2} /> : <Hand size={26} strokeWidth={1.6} />}
             </span>
-            <span className="-mt-4">{centerLabel}</span>
+            <span className={clsx('mt-[-14px] text-[10px] font-bold tracking-wide', fabLabelColor)}>
+              {centerLabel}
+            </span>
           </button>
-        ) : (
-          <span />
-        )}
 
-        {rightItems.map((item) => (
-          <button
-            key={item.label}
-            onClick={() => setActive(item.target)}
-            className={clsx('flex flex-col items-center gap-1 rounded-lg px-1 py-1 text-[11px] font-semibold', item.isActive ? 'text-emerald-600' : 'text-slate-500')}
-          >
-            <span className="grid h-7 w-7 place-items-center">
-              <item.icon size={18} />
-            </span>
-            <span>{item.label}</span>
-          </button>
-        ))}
+          {/* Right items */}
+          {rightItems.map((item) => (
+            <NavItem key={item.label} item={item} onClick={() => setActive(item.target)} />
+          ))}
+
+        </div>
       </div>
     </nav>
+  )
+}
+
+function NavItem({ item, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="relative flex flex-1 flex-col items-center gap-1 px-1 pb-1 pt-4 transition-all duration-150 active:scale-95"
+    >
+      {/* top active indicator */}
+      <span className={clsx(
+        'absolute top-0 left-1/2 h-0.5 w-6 -translate-x-1/2 rounded-full transition-all duration-200',
+        item.isActive ? 'bg-emerald-500 opacity-100' : 'opacity-0',
+      )} />
+
+      {/* icon */}
+      <item.icon
+        size={22}
+        strokeWidth={item.isActive ? 2.3 : 1.8}
+        className={clsx(
+          'transition-colors duration-150',
+          item.isActive ? 'text-emerald-600' : 'text-slate-400 dark:text-slate-500',
+        )}
+      />
+
+      {/* label */}
+      <span className={clsx(
+        'text-[10px] font-semibold tracking-tight transition-colors duration-150',
+        item.isActive ? 'text-emerald-600' : 'text-slate-400 dark:text-slate-500',
+      )}>
+        {item.label}
+      </span>
+    </button>
   )
 }

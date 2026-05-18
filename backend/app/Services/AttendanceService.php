@@ -7,6 +7,7 @@ use App\Models\GpsLocation;
 use App\Models\User;
 use App\Repositories\AttendanceRepository;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 class AttendanceService
@@ -16,6 +17,9 @@ class AttendanceService
         private GpsValidationService $gps,
         private ImageUploadService $images,
         private TelegramNotificationService $telegram,
+        private LateRuleService $lateRules,
+        private WorkScheduleService $workSchedules,
+        private AttendanceRuleService $attendanceRules,
     ) {}
 
     private function assertIpAllowed(User $user): void
@@ -34,16 +38,64 @@ class AttendanceService
 
         $clientIp = request()->ip();
 
-        if (! $allowed->pluck('ip_address')->contains($clientIp)) {
+        $isAllowed = $allowed->pluck('ip_address')->contains(
+            fn (string $rule) => $this->ipMatchesRule($clientIp, $rule)
+        );
+
+        if (! $isAllowed) {
             throw ValidationException::withMessages([
                 'ip' => "Check-in not allowed from your current IP address ({$clientIp}). Your role is restricted to specific office networks. Contact your administrator.",
             ]);
         }
     }
 
+    private function ipMatchesRule(string $clientIp, string $rule): bool
+    {
+        $rule = trim($rule);
+
+        if ($rule === $clientIp) {
+            return true;
+        }
+
+        if (! str_contains($rule, '/')) {
+            return false;
+        }
+
+        [$network, $prefix] = explode('/', $rule, 2);
+        if (
+            ! filter_var($clientIp, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)
+            || ! filter_var($network, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)
+            || ! ctype_digit($prefix)
+        ) {
+            return false;
+        }
+
+        $prefixLength = (int) $prefix;
+        if ($prefixLength < 0 || $prefixLength > 32) {
+            return false;
+        }
+
+        $clientLong = ip2long($clientIp);
+        $networkLong = ip2long($network);
+        $mask = $prefixLength === 0 ? 0 : (-1 << (32 - $prefixLength));
+
+        return ($clientLong & $mask) === ($networkLong & $mask);
+    }
+
+    private function gpsMapLink(float|string $latitude, float|string $longitude): string
+    {
+        return 'https://www.google.com/maps?q='.rawurlencode("{$latitude},{$longitude}");
+    }
+
+    private function gpsOpenLink(float|string $latitude, float|string $longitude): string
+    {
+        return '<a href="'.$this->gpsMapLink($latitude, $longitude).'">Open</a>';
+    }
+
     public function checkIn(User $user, array $data): Attendance
     {
         $this->assertIpAllowed($user);
+        $this->workSchedules->assertCanCheckInToday($user);
 
         $employee = $user->employee()->with(['branch', 'position', 'department'])->firstOrFail();
         $existing = $this->attendanceRepository->todayForEmployee($employee->id);
@@ -77,22 +129,23 @@ class AttendanceService
         }
 
         $now = now();
-        $lateAfter = Carbon::today()->setTimeFromTimeString(config('attendance.office_start_time', '08:30:00'));
-        $lateMinutes = $now->greaterThan($lateAfter) ? $lateAfter->diffInMinutes($now) : 0;
+        $lateEval = $this->lateRules->evaluate($now);
 
         $attendance = Attendance::create([
             'employee_id' => $employee->id,
             'branch_id' => $employee->branch_id,
             'attendance_date' => Carbon::today(),
             'type' => $data['type'] ?? 'office',
-            'status' => $lateMinutes > 0 ? 'late' : 'present',
+            'status' => $lateEval['status'],
             'check_in_at' => $now,
             'check_in_latitude' => $data['latitude'],
             'check_in_longitude' => $data['longitude'],
             'check_in_address' => $data['address'] ?? null,
             'check_in_photo_path' => $this->images->store($data['photo'] ?? null, 'attendance/selfies'),
             'qr_code' => $data['qr_code'] ?? null,
-            'late_minutes' => $lateMinutes,
+            'late_minutes' => $lateEval['late_minutes'],
+            'deduction_amount' => $lateEval['deduction_amount'],
+            'deduction_reason' => $lateEval['deduction_reason'],
             'notes' => $data['notes'] ?? null,
             'offline_sync_uuid' => $data['offline_sync_uuid'] ?? null,
             'synced_at' => now(),
@@ -112,45 +165,65 @@ class AttendanceService
         $employeeName = trim("{$employee->first_name} {$employee->last_name}");
         $position     = $employee->position?->name ?? 'N/A';
         $address      = $data['address'] ?? 'N/A';
+        $gpsLink      = $this->gpsOpenLink($data['latitude'], $data['longitude']);
         $checkInFmt   = $now->format('h:i A');
         $dateFmt      = $now->format('d M Y');
-        $statusLabel  = $lateMinutes > 0 ? 'Late' : 'Present';
+        $statusLabel = $lateEval['is_late'] ? 'មកយឺត' : 'វត្តមាន';
 
-        $this->telegram->send(
-            "✅ <b>EMPLOYEE CHECK IN</b>\n\n"
-            . "👤 Employee: {$employeeName}\n"
-            . "🆔 ID: {$employee->employee_code}\n"
-            . "💼 Position: {$position}\n\n"
-            . "🕘 Check In Time: {$checkInFmt}\n"
-            . "📅 Date: {$dateFmt}\n\n"
-            . "📍 Location: {$address}\n"
-            . "📡 GPS Status: Verified\n\n"
-            . "✅ Status: {$statusLabel}",
-            'daily_attendance',
-        );
-
-        if ($attendance->status === 'late') {
-            $officeStart    = Carbon::today()->setTimeFromTimeString(config('attendance.office_start_time', '08:30:00'));
-            $officeStartFmt = $officeStart->format('h:i A');
-            $department     = $employee->department?->name ?? 'N/A';
+        $this->sendTelegramSafely(function () use ($employeeName, $employee, $position, $checkInFmt, $dateFmt, $address, $gpsLink, $statusLabel) {
+            if (! $this->telegram->alertEnabled('telegram_alert_check_in')) {
+                return false;
+            }
 
             $this->telegram->send(
-                "⚠️ <b>LATE CHECK IN ALERT</b>\n\n"
-                . "👤 Employee: {$employeeName}\n"
-                . "💼 Department: {$department}\n\n"
-                . "🕘 Office Start Time: {$officeStartFmt}\n"
-                . "⏰ Actual Check In: {$checkInFmt}\n\n"
-                . "⌛ Late Duration: {$lateMinutes} Minutes\n"
-                . "📍 Location: {$address}\n\n"
-                . "⚠️ Status: Late Attendance",
-                'late_attendance',
+                "✅ <b>បានចូលធ្វើការ</b>\n\n"
+                . "👤 បុគ្គលិក: {$employeeName}\n"
+                . "🆔 លេខសម្គាល់: {$employee->employee_code}\n"
+                . "💼 តួនាទី: {$position}\n\n"
+                . "🕘 ម៉ោងចូល: {$checkInFmt}\n"
+                . "📅 កាលបរិច្ឆេទ: {$dateFmt}\n\n"
+                . "📍 ទីតាំង: {$address}\n"
+                . "🗺️ តំណ GPS: {$gpsLink}\n\n"
+                . "✅ ស្ថានភាព: {$statusLabel}",
+                'daily_attendance',
             );
+
+            return true;
+        });
+
+        if ($lateEval['is_late'] && $this->shouldSendLateTelegram()) {
+            $lateMinutes = $lateEval['late_minutes'];
+            $rule        = $lateEval['applied_rule'];
+            $deduction   = $this->lateRules->formatDeductionAmount($lateEval['deduction_amount'], $rule);
+
+            $lateMessage = "⚠️ <b>ជូនដំណឹងមកយឺត</b>\n\n"
+                . "👤 បុគ្គលិក: {$employeeName}\n"
+                . "🆔 លេខសម្គាល់: {$employee->employee_code}\n"
+                . "🕘 ម៉ោងចូល: {$checkInFmt}\n"
+                . "⌛ យឺតចំនួន: {$lateMinutes} នាទី\n"
+                . "💰 កាត់ប្រាក់: {$deduction}\n\n"
+                . "ស្ថានភាព: មកយឺត";
+
+            $this->sendTelegramSafely(function () use ($lateMessage) {
+                $this->telegram->send($lateMessage, 'late_attendance');
+
+                return true;
+            });
         }
 
         return $attendance->fresh(['employee', 'branch']);
     }
 
-    public function checkOut(User $user, array $data): Attendance
+    private function shouldSendLateTelegram(): bool
+    {
+        if (! $this->lateRules->settings()->notify_admin) {
+            return false;
+        }
+
+        return $this->telegram->alertEnabled('telegram_alert_late_check_in');
+    }
+
+    public function checkOut(User $user, array $data): array
     {
         $this->assertIpAllowed($user);
 
@@ -166,6 +239,8 @@ class AttendanceService
         }
 
         $now = now();
+        $this->attendanceRules->assertCanCheckOut($user, $attendance, $now);
+
         $attendance->update([
             'check_out_at' => $now,
             'check_out_latitude' => $data['latitude'],
@@ -187,26 +262,51 @@ class AttendanceService
             'source' => 'check_out',
         ]);
 
+        $attendance = $attendance->fresh(['employee', 'branch']);
         $workMinutes  = $attendance->check_in_at->diffInMinutes($now);
         $workFmt      = sprintf('%02dh %02dm', intdiv($workMinutes, 60), $workMinutes % 60);
         $employeeName = trim("{$employee->first_name} {$employee->last_name}");
         $position     = $employee->position?->name ?? 'N/A';
         $address      = $data['address'] ?? 'N/A';
+        $gpsLink      = $this->gpsOpenLink($data['latitude'], $data['longitude']);
 
-        $this->telegram->send(
-            "🔔 <b>EMPLOYEE CHECK OUT</b>\n\n"
-            . "👤 Employee: {$employeeName}\n"
-            . "🆔 ID: {$employee->employee_code}\n"
-            . "💼 Position: {$position}\n\n"
-            . "🕔 Check Out Time: {$now->format('h:i A')}\n"
-            . "📅 Date: {$now->format('d M Y')}\n\n"
-            . "⏱ Working Hours: {$workFmt}\n"
-            . "📍 Location: {$address}\n"
-            . "📡 GPS Status: Verified\n\n"
-            . "✅ Attendance Completed",
-            'daily_attendance',
-        );
+        $telegramSent = $this->sendTelegramSafely(function () use ($employeeName, $employee, $position, $now, $workFmt, $address, $gpsLink) {
+            if (! $this->telegram->alertEnabled('telegram_alert_check_out')) {
+                return false;
+            }
 
-        return $attendance->fresh(['employee', 'branch']);
+            $this->telegram->send(
+                "🔔 <b>បានចេញពីធ្វើការ</b>\n\n"
+                . "👤 បុគ្គលិក: {$employeeName}\n"
+                . "🆔 លេខសម្គាល់: {$employee->employee_code}\n"
+                . "💼 តួនាទី: {$position}\n\n"
+                . "🕔 ម៉ោងចេញ: {$now->format('h:i A')}\n"
+                . "📅 កាលបរិច្ឆេទ: {$now->format('d M Y')}\n\n"
+                . "⏱ ម៉ោងធ្វើការ: {$workFmt}\n"
+                . "📍 ទីតាំង: {$address}\n"
+                . "🗺️ តំណ GPS: {$gpsLink}\n\n"
+                . "✅ វត្តមានបានបញ្ចប់",
+                'daily_attendance',
+            );
+
+            return true;
+        });
+
+        return [
+            'attendance' => $attendance,
+            'warnings' => [],
+            'telegram_sent' => $telegramSent,
+        ];
+    }
+
+    private function sendTelegramSafely(callable $callback): bool
+    {
+        try {
+            return (bool) $callback();
+        } catch (\Throwable $e) {
+            Log::warning('Telegram notification skipped', ['message' => $e->getMessage()]);
+
+            return false;
+        }
     }
 }

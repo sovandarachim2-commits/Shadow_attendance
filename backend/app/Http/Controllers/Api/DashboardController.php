@@ -15,7 +15,7 @@ class DashboardController extends Controller
     public function __invoke(Request $request)
     {
         $today = Carbon::today();
-        $employeeId = $request->user()->hasPermission('dashboard_access') ? null : $request->user()->employee_id;
+        $employeeId = $request->user()->hasPermission('dashboard.admin') ? null : $request->user()->employee_id;
 
         return [
             'cards' => [

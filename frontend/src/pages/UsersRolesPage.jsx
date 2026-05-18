@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   Activity, Bell, BriefcaseBusiness, Building2, CalendarCheck,
   CheckCircle2, ChevronDown, Clock, FileCheck2, FileText, Home, KeyRound,
-  MapPinned, Settings, ShieldCheck, ShoppingBag, UserRound, Users, X,
+  MapPinned, Search, Settings, ShieldCheck, ShoppingBag, UserPlus, UserRound, Users, X,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { api } from '../services/api'
@@ -49,6 +49,9 @@ function IpRestrictionsTab({ roles }) {
   }
 
   const removeIp = async (ipId) => {
+    const ipEntry = ipList.find((entry) => entry.id === ipId)
+    const label = ipEntry?.label ? `${ipEntry.label} (${ipEntry.ip_address})` : ipEntry?.ip_address || 'this IP restriction'
+    if (!window.confirm(`Delete ${label}?`)) return
     try { await api.delete(`/ip-restrictions/${ipId}`); await loadIpData() }
     catch (e) { setError(apiError(e)) }
   }
@@ -58,7 +61,7 @@ function IpRestrictionsTab({ roles }) {
       <div className="rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-800 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-sky-300">
         <p className="font-semibold">IP Address Restrictions for Attendance</p>
         <p className="mt-1 text-sky-700 dark:text-sky-400">
-          Every role <strong>must have at least one IP address configured</strong> before its employees can check in or out. Roles with no IPs will be blocked at check-in/out with an error message. Add the office Wi-Fi or network IP for each role below.
+          Every role <strong>must have at least one allowed IP or Wi-Fi range configured</strong> before its employees can check in or out. For office Wi-Fi, use a CIDR range like <strong>192.168.110.0/24</strong> so phones with different IPs can still check in/out.
         </p>
       </div>
 
@@ -119,12 +122,12 @@ function IpRestrictionsTab({ roles }) {
             </div>
             {selectedRole.slug !== 'super_admin' && (
               <div className="border-t border-slate-200 p-4 dark:border-slate-800">
-                <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">Add Allowed IP</p>
+                <p className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-500">Add Allowed IP or Wi-Fi Range</p>
                 <div className="grid gap-2">
-                  <input type="text" className="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100" placeholder="e.g. 192.168.1.100" value={newIp} onChange={(e) => setNewIp(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addIp()} />
-                  <input type="text" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100" placeholder="Label (e.g. Head Office, Branch A)" value={newLabel} onChange={(e) => setNewLabel(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addIp()} />
+                  <input type="text" className="w-full rounded-lg border border-slate-300 px-3 py-2 font-mono text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100" placeholder="e.g. 192.168.110.0/24 or 192.168.110.127" value={newIp} onChange={(e) => setNewIp(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addIp()} />
+                  <input type="text" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100" placeholder="Label (e.g. Office Wi-Fi, Branch A)" value={newLabel} onChange={(e) => setNewLabel(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addIp()} />
                   <button disabled={!newIp.trim() || saving} onClick={addIp} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">
-                    {saving ? 'Adding…' : '+ Add IP Address'}
+                    {saving ? 'Adding...' : '+ Add IP / Range'}
                   </button>
                 </div>
                 {error && <p className="mt-2 text-xs text-rose-600">{error}</p>}
@@ -144,22 +147,20 @@ const PERMISSION_MODULES = [
     label: 'Dashboard', desc: 'Main dashboard and overview statistics',
     Icon: Home, color: 'text-sky-600', iconBg: 'bg-sky-100 dark:bg-sky-950/50',
     rows: [
-      { label: 'Dashboard Access',    desc: 'View admin/manager dashboard',       view: 'dashboard_access' },
-      { label: 'Employee Dashboard',  desc: 'View employee self-service dashboard', view: 'employee_dashboard_access' },
+      { label: 'Admin Dashboard',    desc: 'View admin/manager dashboard',        view: 'dashboard.admin' },
+      { label: 'Employee Dashboard', desc: 'View employee self-service dashboard', view: 'dashboard.employee' },
     ],
   },
   {
     key: 'attendance',
-    label: 'My Attendance', desc: 'Check in/out and view personal attendance',
+    label: 'Attendance', desc: 'Check in/out and view attendance records',
     Icon: Clock, color: 'text-emerald-600', iconBg: 'bg-emerald-100 dark:bg-emerald-950/50',
     rows: [
-      { label: 'View All Attendance',  desc: 'View attendance for all employees',    view:   'view_all_attendance' },
-      { label: 'View Own Attendance',  desc: 'View personal attendance records',     view:   'view_own_attendance' },
-      { label: 'Office Check In',      desc: 'Check in from an office location',     create: 'office_check_in' },
-      { label: 'Office Check Out',     desc: 'Check out from an office location',    update: 'office_check_out' },
-      { label: 'Outdoor Check In',     desc: 'Check in from field / outdoor',        create: 'attendance_check_in' },
-      { label: 'Outdoor Check Out',    desc: 'Check out from field / outdoor',       update: 'attendance_check_out' },
-      { label: 'Edit Attendance',      desc: 'Edit existing attendance records',     update: 'edit_attendance' },
+      { label: 'View All Attendance', desc: 'View attendance for all employees', view:   'attendance.view_all' },
+      { label: 'View Own Attendance', desc: 'View personal attendance records',  view:   'attendance.view_own' },
+      { label: 'Check In',            desc: 'Check in (office or outdoor)',       create: 'attendance.check_in' },
+      { label: 'Check Out',           desc: 'Check out (office or outdoor)',      update: 'attendance.check_out' },
+      { label: 'Edit Attendance',     desc: 'Edit existing attendance records',   update: 'attendance.edit' },
     ],
   },
   {
@@ -167,9 +168,10 @@ const PERMISSION_MODULES = [
     label: 'Customer Visits', desc: 'Record and track customer visits',
     Icon: ShoppingBag, color: 'text-rose-600', iconBg: 'bg-rose-100 dark:bg-rose-950/50',
     rows: [
-      { label: 'View Customer Visits',   desc: 'View all customer visit records',     view:   'view_customer_visits' },
-      { label: 'Create Customer Visit',  desc: 'Log a new customer visit',            create: 'create_customer_visit' },
-      { label: 'Manage Customer Visits', desc: 'Edit and delete any customer visit',  update: 'manage_customer_visits' },
+      { label: 'View Visits',   desc: 'View all customer visit records',         view:   'visits.view' },
+      { label: 'Add Visit',     desc: 'Log a new customer visit',               create: 'visits.create' },
+      { label: 'Edit Visit',    desc: 'Edit an existing customer visit',         update: 'visits.update' },
+      { label: 'Manage Visits', desc: 'Full management of all customer visits',  update: 'visits.manage' },
     ],
   },
   {
@@ -177,12 +179,10 @@ const PERMISSION_MODULES = [
     label: 'Daily Reports', desc: 'Submit and view daily activity reports',
     Icon: FileText, color: 'text-blue-600', iconBg: 'bg-blue-100 dark:bg-blue-950/50',
     rows: [
-      { label: 'Submit Daily Report',      desc: 'Submit personal daily report',         create: 'submit_daily_report' },
-      { label: 'View Own Reports',         desc: 'View personal submitted reports',       view:   'view_own_reports' },
-      { label: 'View All Reports',         desc: 'View all submitted reports',            view:   'view_reports' },
-      { label: 'View Sales Reports',       desc: 'View sales-specific report data',       view:   'view_sales_reports' },
-      { label: 'View Attendance Reports',  desc: 'View attendance-specific reports',      view:   'view_attendance_reports' },
-      { label: 'Export Reports',           desc: 'Export reports to file',                update: 'export_reports' },
+      { label: 'View Own Reports', desc: 'View personal submitted reports', view:   'reports.view_own' },
+      { label: 'View All Reports', desc: 'View all submitted reports',      view:   'reports.view_all' },
+      { label: 'Submit Report',    desc: 'Submit a daily report',           create: 'reports.create' },
+      { label: 'Export Reports',   desc: 'Export reports to file',          update: 'reports.export' },
     ],
   },
   {
@@ -190,11 +190,10 @@ const PERMISSION_MODULES = [
     label: 'Route Map', desc: 'GPS tracking and live route map',
     Icon: MapPinned, color: 'text-amber-600', iconBg: 'bg-amber-100 dark:bg-amber-950/50',
     rows: [
-      { label: 'GPS Tracking Access',  desc: 'Access the GPS tracking page',        view:   'gps_tracking_access' },
-      { label: 'Route Tracking',       desc: 'Access route tracking features',      view:   'route_tracking_access' },
-      { label: 'View Current Locations',   desc: 'See live employee current locations',     view:   'view_gps_tracking' },
-      { label: 'Route History',        desc: 'View historical route data',          view:   'monitor_route_history' },
-      { label: 'Track Own Location',   desc: 'Send current location from device',       create: 'track_location' },
+      { label: 'View GPS Tracking',  desc: 'Access the GPS tracking page',       view:   'gps.view' },
+      { label: 'Live Locations',     desc: 'See live employee locations',         view:   'gps.live' },
+      { label: 'Route History',      desc: 'View historical route data',          view:   'gps.history' },
+      { label: 'Track Own Location', desc: 'Send current location from device',   create: 'gps.track' },
     ],
   },
   {
@@ -202,10 +201,10 @@ const PERMISSION_MODULES = [
     label: 'Permission Requests', desc: 'Leave, late arrival, and attendance permission requests',
     Icon: FileCheck2, color: 'text-fuchsia-600', iconBg: 'bg-fuchsia-100 dark:bg-fuchsia-950/50',
     rows: [
-      { label: 'View All Requests',    desc: 'View and manage every employee request (admin/HR)', view:   'view_all_permission_requests' },
-      { label: 'View Own Requests',    desc: 'View only personal submitted requests',             view:   'view_own_permission_requests' },
-      { label: 'Submit Request',       desc: 'Create a new permission request',                   create: 'submit_permission_request' },
-      { label: 'Approve / Reject',     desc: 'Approve or reject pending requests',                update: 'approve_permission_requests' },
+      { label: 'View All Requests', desc: 'View and manage every employee request (admin/HR)', view:   'requests.view_all' },
+      { label: 'View Own Requests', desc: 'View only personal submitted requests',             view:   'requests.view_own' },
+      { label: 'Submit Request',    desc: 'Create a new permission request',                   create: 'requests.create' },
+      { label: 'Approve / Reject',  desc: 'Approve or reject pending requests',                update: 'requests.approve' },
     ],
   },
   {
@@ -213,8 +212,8 @@ const PERMISSION_MODULES = [
     label: 'Profile', desc: 'View and update personal profile',
     Icon: UserRound, color: 'text-indigo-600', iconBg: 'bg-indigo-100 dark:bg-indigo-950/50',
     rows: [
-      { label: 'Update Own Profile',  desc: 'Edit own profile from the Profile page',              update: 'update_own_profile' },
-      { label: 'Update All Profiles', desc: 'Edit any employee profile (Employees management)', update: 'update_all_profiles' },
+      { label: 'Update Own Profile',  desc: 'Edit own profile from the Profile page', update: 'profile.update_own' },
+      { label: 'Update All Profiles', desc: 'Edit profile fields for any employee',   update: 'profile.update_all' },
     ],
   },
   {
@@ -222,8 +221,8 @@ const PERMISSION_MODULES = [
     label: 'Notifications', desc: 'Receive and manage system notifications',
     Icon: Bell, color: 'text-orange-600', iconBg: 'bg-orange-100 dark:bg-orange-950/50',
     rows: [
-      { label: 'Receive Notifications', desc: 'Receive system notifications',    view:   'receive_notifications' },
-      { label: 'Manage Notifications',  desc: 'Manage and dismiss all alerts',   update: 'manage_notifications' },
+      { label: 'View Notifications',   desc: 'Receive system notifications',  view:   'notifications.view' },
+      { label: 'Manage Notifications', desc: 'Manage and dismiss all alerts', update: 'notifications.manage' },
     ],
   },
   {
@@ -231,10 +230,10 @@ const PERMISSION_MODULES = [
     label: 'Employees', desc: 'View and manage employee records',
     Icon: Users, color: 'text-violet-600', iconBg: 'bg-violet-100 dark:bg-violet-950/50',
     rows: [
-      { label: 'View Employee Profiles', desc: 'View all employee profiles',          view:   'view_employee_profiles' },
-      { label: 'Create Employee',        desc: 'Add new employee records',            create: 'create_employee' },
-      { label: 'Edit Employee',          desc: 'Edit employee information',           update: 'edit_employee' },
-      { label: 'Manage Employees',       desc: 'Full employee management access',     update: 'manage_employees' },
+      { label: 'View Employees',  desc: 'Show Employees menu and employee list', view:   'employees.view' },
+      { label: 'Add Employee',    desc: 'Show "Add Employee" button',            create: 'employees.create' },
+      { label: 'Edit Employee',   desc: 'Show "Edit" button per row',            update: 'employees.update' },
+      { label: 'Delete Employee', desc: 'Show "Delete" button per row',          delete: 'employees.delete' },
     ],
   },
   {
@@ -242,7 +241,8 @@ const PERMISSION_MODULES = [
     label: 'Departments', desc: 'Manage company departments',
     Icon: Building2, color: 'text-teal-600', iconBg: 'bg-teal-100 dark:bg-teal-950/50',
     rows: [
-      { label: 'Manage Departments', desc: 'Create, edit and delete departments', update: 'manage_departments' },
+      { label: 'View Departments',   desc: 'View department list',                view:   'departments.view' },
+      { label: 'Manage Departments', desc: 'Create, edit and delete departments', update: 'departments.manage' },
     ],
   },
   {
@@ -250,7 +250,8 @@ const PERMISSION_MODULES = [
     label: 'Positions', desc: 'Manage job positions',
     Icon: BriefcaseBusiness, color: 'text-cyan-600', iconBg: 'bg-cyan-100 dark:bg-cyan-950/50',
     rows: [
-      { label: 'Manage Positions', desc: 'Create, edit and delete positions', update: 'manage_positions' },
+      { label: 'View Positions',   desc: 'View position list',                view:   'positions.view' },
+      { label: 'Manage Positions', desc: 'Create, edit and delete positions', update: 'positions.manage' },
     ],
   },
   {
@@ -258,9 +259,8 @@ const PERMISSION_MODULES = [
     label: 'Outdoor Sales', desc: 'Monitor the outdoor sales team',
     Icon: Activity, color: 'text-pink-600', iconBg: 'bg-pink-100 dark:bg-pink-950/50',
     rows: [
-      { label: 'View Sales Team',        desc: 'View outdoor sales team data',           view:   'view_sales_team' },
-      { label: 'View Customer Visits',   desc: 'View all customer visit records',        view:   'view_customer_visits' },
-      { label: 'Manage Customer Visits', desc: 'Edit and manage all customer visits',    update: 'manage_customer_visits' },
+      { label: 'View Sales',   desc: 'View outdoor sales team and data',        view:   'sales.view' },
+      { label: 'Manage Sales', desc: 'Edit and manage all customer visits',     update: 'sales.manage' },
     ],
   },
   {
@@ -268,8 +268,8 @@ const PERMISSION_MODULES = [
     label: 'Roles & Permissions', desc: 'Manage roles and assign permissions',
     Icon: ShieldCheck, color: 'text-slate-600', iconBg: 'bg-slate-100 dark:bg-slate-800',
     rows: [
-      { label: 'Manage Roles',       desc: 'Create and update roles',        update: 'manage_roles' },
-      { label: 'Manage Permissions', desc: 'Assign permissions to roles',    update: 'manage_permissions' },
+      { label: 'Manage Roles',       desc: 'Create and update roles',     update: 'roles.manage' },
+      { label: 'Manage Permissions', desc: 'Assign permissions to roles', update: 'permissions.manage' },
     ],
   },
   {
@@ -277,10 +277,11 @@ const PERMISSION_MODULES = [
     label: 'Settings', desc: 'System settings, security and API keys',
     Icon: Settings, color: 'text-gray-600', iconBg: 'bg-gray-100 dark:bg-gray-800',
     rows: [
-      { label: 'Security Settings', desc: 'Configure security options',          update: 'manage_security_settings' },
-      { label: 'API Keys',          desc: 'Manage API keys and integrations',    update: 'manage_api_keys' },
-      { label: 'System Settings',   desc: 'Access system-wide settings page',    update: 'system_settings_access' },
-      { label: 'Manage Schedules',  desc: 'Configure work schedules',            update: 'manage_schedules' },
+      { label: 'View Settings',    desc: 'Access the settings page',          view:   'settings.view' },
+      { label: 'Security Settings', desc: 'Configure security options',       update: 'settings.security' },
+      { label: 'API Keys',         desc: 'Manage API keys and integrations',  update: 'settings.api' },
+      { label: 'Manage Settings',  desc: 'Full system settings management',   update: 'settings.manage' },
+      { label: 'Manage Schedules', desc: 'Configure work schedules',          update: 'settings.schedules' },
     ],
   },
 ]
@@ -293,8 +294,8 @@ const CRUD_COLS = [
 ]
 
 /* ─── Main page ───────────────────────────────────────────────── */
-export default function UsersRolesPage() {
-  const [activeTab, setActiveTab] = useState('roles')
+export default function UsersRolesPage({ initialTab = 'assign' }) {
+  const [activeTab, setActiveTab] = useState(initialTab)
   const [roles, setRoles] = useState([])
   const [permissions, setPermissions] = useState({})
   const [permissionRows, setPermissionRows] = useState([])
@@ -306,11 +307,16 @@ export default function UsersRolesPage() {
   const [permissionForm, setPermissionForm] = useState({ name: '', slug: '', group: 'system' })
   const [assignRoleId, setAssignRoleId] = useState('')
   const [assignPermissionIds, setAssignPermissionIds] = useState([])
+  const [permissionSearch, setPermissionSearch] = useState('')
   const [rolePermMap, setRolePermMap] = useState({})
   const [collapsedGroups, setCollapsedGroups] = useState(new Set())
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    setActiveTab(initialTab)
+  }, [initialTab])
 
   const loadRoles = useCallback(async () => {
     const [roleRes, permRes, permListRes] = await Promise.all([
@@ -325,9 +331,10 @@ export default function UsersRolesPage() {
     const map = {}
     nextRoles.forEach((role) => { map[role.id] = new Set((role.permissions || []).map((p) => p.id)) })
     setRolePermMap(map)
-    setAssignRoleId((current) => current || nextRoles[0]?.id || '')
-    if (!assignRoleId && nextRoles[0]) {
-      setAssignPermissionIds((nextRoles[0].permissions || []).map((p) => p.id))
+    const defaultAssignRole = nextRoles.find((role) => role.slug !== 'super_admin') || nextRoles[0]
+    setAssignRoleId((current) => current || defaultAssignRole?.id || '')
+    if (!assignRoleId && defaultAssignRole) {
+      setAssignPermissionIds((defaultAssignRole.permissions || []).map((p) => p.id))
     }
     setLoading(false)
   }, [assignRoleId])
@@ -454,9 +461,9 @@ export default function UsersRolesPage() {
       <div className="rounded-lg border border-slate-200 bg-white p-2 shadow-sm dark:border-slate-800 dark:bg-slate-900">
         <div className="grid gap-2 sm:grid-cols-4">
           {[
+            ['assign', 'Set Permissions', CheckCircle2],
             ['roles', 'Roles', ShieldCheck],
             ['permissions', 'Permissions', KeyRound],
-            ['assign', 'Set Permissions', CheckCircle2],
             ['ip', 'IP Access', MapPinned],
           ].map(([key, label, Icon]) => (
             <button key={key}
@@ -572,13 +579,26 @@ export default function UsersRolesPage() {
         const originalPerms = new Set((roles.find((r) => String(r.id) === String(assignRoleId))?.permissions || []).map((p) => p.id))
         const hasChanges = selectedPerms.size !== originalPerms.size || [...selectedPerms].some((id) => !originalPerms.has(id))
 
-        const expandAll = () => setCollapsedGroups(new Set())
-        const collapseAll = () => setCollapsedGroups(new Set(PERMISSION_MODULES.map((m) => m.key)))
         const resetPermissions = () => {
           const original = roles.find((r) => String(r.id) === String(assignRoleId))
           if (!original) return
           setRolePermMap((prev) => ({ ...prev, [assignRoleId]: new Set((original.permissions || []).map((p) => p.id)) }))
         }
+
+        const searchText = permissionSearch.trim().toLowerCase()
+        const visibleModules = PERMISSION_MODULES.map((mod) => {
+          const moduleMatches = mod.label.toLowerCase().includes(searchText) || mod.desc.toLowerCase().includes(searchText)
+          const rows = !searchText
+            ? mod.rows
+            : mod.rows.filter((row) => (
+                moduleMatches
+                || row.label.toLowerCase().includes(searchText)
+                || row.desc.toLowerCase().includes(searchText)
+                || CRUD_COLS.some((col) => String(row[col.key] || '').toLowerCase().includes(searchText))
+              ))
+
+          return { ...mod, rows }
+        }).filter((mod) => mod.rows.length > 0)
 
         const saveSelectedRole = async () => {
           if (!selectedRole || selectedRole.slug === 'super_admin') return
@@ -596,216 +616,132 @@ export default function UsersRolesPage() {
         }
 
         return (
-          <div className="flex gap-5">
-            {/* Left: role card list */}
-            <div className="w-56 shrink-0 space-y-2">
-              <p className="px-1 text-[11px] font-bold uppercase tracking-wider text-slate-400">Choose Role</p>
-              {loading
-                ? <p className="text-sm text-slate-400">Loading…</p>
-                : roles.map((role) => {
-                    const permsForRole = rolePermMap[role.id] || new Set()
-                    const permCount = permsForRole.size
-                    const totalPerms = permissionRows.length
-                    const pct = totalPerms > 0 ? (permCount / totalPerms) * 100 : 0
-                    const isSelected = String(role.id) === String(assignRoleId)
-                    return (
-                      <button key={role.id} onClick={() => selectAssignRole(role.id)}
-                        className={clsx('w-full rounded-xl border p-4 text-left transition-all',
-                          isSelected
-                            ? 'border-emerald-400 bg-emerald-50 shadow-sm dark:border-emerald-600 dark:bg-emerald-950/20'
-                            : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700',
-                        )}>
-                        <div className="flex items-center gap-3">
-                          <div className={clsx('grid h-9 w-9 shrink-0 place-items-center rounded-lg',
-                            isSelected ? 'bg-emerald-100 dark:bg-emerald-900/50' : 'bg-slate-100 dark:bg-slate-800')}>
-                            <ShieldCheck size={17} className={isSelected ? 'text-emerald-600' : 'text-slate-400 dark:text-slate-500'} />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-bold text-slate-900 dark:text-slate-100">{role.name}</p>
-                            <p className="text-xs text-slate-400">{role.users_count ?? 0} users</p>
-                          </div>
-                        </div>
-                        <div className="mt-3">
-                          <div className="mb-1.5 flex items-center justify-between">
-                            <span className="text-[11px] text-slate-400">Permissions</span>
-                            <span className={clsx('text-[11px] font-bold', permCount > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400')}>
-                              {role.slug === 'super_admin' ? 'All' : `${permCount}/${totalPerms}`}
-                            </span>
-                          </div>
-                          <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                            <div className={clsx('h-full rounded-full transition-all duration-300', role.slug === 'super_admin' ? 'bg-violet-500' : 'bg-emerald-500')}
-                              style={{ width: role.slug === 'super_admin' ? '100%' : `${pct}%` }} />
-                          </div>
-                        </div>
-                      </button>
-                    )
-                  })
-              }
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-5 py-4 dark:border-slate-800 dark:bg-slate-900">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-500 dark:text-slate-400">
+                  <span>Dashboard</span>
+                  <ChevronDown size={14} className="-rotate-90" />
+                  <span>Users & Roles</span>
+                  <ChevronDown size={14} className="-rotate-90" />
+                  <span className="text-slate-950 dark:text-white">Roles & Permissions</span>
+                </div>
+                <h2 className="mt-6 text-2xl font-bold text-slate-950 dark:text-white">Roles & Permissions</h2>
+                <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">Assign permissions to roles. Toggle ON to allow, OFF to deny.</p>
+              </div>
+
+              <div className="flex flex-1 flex-wrap items-center justify-end gap-3">
+                <label className="relative min-w-[260px] flex-1 sm:max-w-sm">
+                  <span className="sr-only">Search permission</span>
+                  <Search size={18} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    className="h-11 w-full rounded-lg border border-slate-200 bg-white px-4 pr-10 text-sm font-medium outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                    placeholder="Search permission..."
+                    value={permissionSearch}
+                    onChange={(e) => setPermissionSearch(e.target.value)}
+                  />
+                </label>
+                <button onClick={openCreate} className="inline-flex h-11 items-center gap-2 rounded-lg bg-emerald-600 px-5 text-sm font-bold text-white shadow-sm hover:bg-emerald-700">
+                  <UserPlus size={17} /> Add Role
+                </button>
+                <button onClick={openPermissionCreate} className="inline-flex h-11 items-center gap-2 rounded-lg bg-blue-600 px-5 text-sm font-bold text-white shadow-sm hover:bg-blue-700">
+                  <KeyRound size={17} /> Add Permission
+                </button>
+              </div>
             </div>
 
-            {/* Right: permission matrix */}
-            <div className="min-w-0 flex-1">
-              {!selectedRole ? (
-                <div className="flex h-64 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900">
-                  <p className="text-sm text-slate-400">Select a role on the left to manage its permissions</p>
-                </div>
-              ) : selectedRole.slug === 'super_admin' ? (
-                <div className="flex h-64 flex-col items-center justify-center gap-3 rounded-xl border border-violet-200 bg-violet-50 dark:border-violet-900/40 dark:bg-violet-950/10">
-                  <ShieldCheck size={40} className="text-violet-500" />
-                  <p className="font-bold text-slate-700 dark:text-slate-200">Super Admin — Unrestricted Access</p>
-                  <p className="text-sm text-slate-500">Super Admin has all permissions granted automatically.</p>
-                </div>
-              ) : (
-                <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                  {/* Toolbar */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4 dark:border-slate-800">
-                    <div>
-                      <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Setting permissions for</p>
-                      <h3 className="mt-0.5 text-base font-bold text-slate-900 dark:text-slate-100">
-                        {selectedRole.name}
-                        <span className="ml-2 text-sm font-normal text-slate-400">{selectedRole.users_count ?? 0} users</span>
-                      </h3>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <button onClick={expandAll} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
-                        Expand All
-                      </button>
-                      <button onClick={collapseAll} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
-                        Collapse All
-                      </button>
-                      <button onClick={resetPermissions} className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:border-rose-900/40 dark:hover:bg-rose-950/20">
-                        Reset
-                      </button>
-                      <button
-                        onClick={saveSelectedRole}
-                        disabled={saving || !hasChanges}
-                        className={clsx(
-                          'flex items-center gap-2 rounded-lg px-4 py-1.5 text-sm font-semibold text-white transition disabled:opacity-60',
-                          hasChanges ? 'bg-emerald-600 shadow-lg shadow-emerald-600/20 hover:bg-emerald-700' : 'bg-slate-400 dark:bg-slate-600',
-                        )}
-                      >
-                        <CheckCircle2 size={14} />
-                        {saving ? 'Saving…' : hasChanges ? 'Save Changes' : 'Saved'}
-                      </button>
-                    </div>
+            <div className="flex flex-wrap items-center justify-end gap-3 border-b border-slate-200 bg-slate-50/70 px-5 py-4 dark:border-slate-800 dark:bg-slate-950">
+              <label className="text-sm font-bold text-slate-700 dark:text-slate-200">Role</label>
+              <select
+                className="h-11 min-w-[260px] rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                value={assignRoleId}
+                onChange={(e) => selectAssignRole(e.target.value)}
+              >
+                {roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}
+              </select>
+              <button onClick={() => setActiveTab('roles')} className="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                <Users size={16} /> Manage Roles
+              </button>
+            </div>
+
+            {!selectedRole ? (
+              <EmptyState text="Select a role to manage permissions." />
+            ) : (
+              <>
+                {selectedRole.slug === 'super_admin' && (
+                  <div className="border-b border-violet-200 bg-violet-50 px-5 py-3 text-sm font-semibold text-violet-700 dark:border-violet-900/40 dark:bg-violet-950/20 dark:text-violet-300">
+                    Super Admin has unrestricted access. Permission switches are shown for reference.
                   </div>
-
-                  {/* Matrix table */}
-                  <div className="max-h-[62vh] overflow-y-auto">
-                    <table className="w-full text-sm">
-                      <thead className="sticky top-0 z-10 border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-                        <tr>
-                          <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500">Module / Permission</th>
-                          {CRUD_COLS.map((col) => (
-                            <th key={col.key} className={clsx('w-24 py-3 text-center text-xs font-bold uppercase tracking-wider', col.color)}>{col.label}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-                        {PERMISSION_MODULES.map((mod) => {
-                          const isCollapsed = collapsedGroups.has(mod.key)
-                          const allSlugs = CRUD_COLS.flatMap((c) => modSlugs(mod, c.key))
-                          const moduleOnCount = allSlugs.filter(isOn).length
-                          const moduleAllOn = allSlugs.length > 0 && moduleOnCount === allSlugs.length
-                          const modulePartial = moduleOnCount > 0 && !moduleAllOn
-
-                          return [
-                            /* Module header row */
-                            <tr key={`h-${mod.key}`} className="bg-slate-50/80 dark:bg-slate-900/60">
-                              <td className="px-4 py-3">
-                                <div className="flex items-center gap-2">
-                                  <button onClick={() => toggleGroup(mod.key)} className="flex items-center gap-2.5">
-                                    <ChevronDown size={14} className={clsx('shrink-0 text-slate-400 transition-transform', isCollapsed && '-rotate-90')} />
-                                    <span className={clsx('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', mod.iconBg)}>
-                                      <mod.Icon size={15} className={mod.color} />
-                                    </span>
-                                    <div className="text-left">
-                                      <p className={clsx('text-xs font-bold uppercase tracking-wide', mod.color)}>{mod.label}</p>
-                                      <p className="text-[11px] text-slate-400 dark:text-slate-500">{mod.desc}</p>
-                                    </div>
-                                  </button>
-                                  {/* Module-level grant-all pill */}
-                                  <button onClick={() => toggleModuleAll(mod)}
-                                    className={clsx('ml-2 rounded-full px-2.5 py-0.5 text-[11px] font-bold transition',
-                                      moduleAllOn
-                                        ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-400'
-                                        : modulePartial
-                                          ? 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-950/50 dark:text-amber-400'
-                                          : 'bg-slate-100 text-slate-400 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-500 dark:hover:bg-slate-700',
-                                    )}>
-                                    {moduleAllOn ? 'All On' : modulePartial ? `${moduleOnCount}/${allSlugs.length}` : 'Grant All'}
-                                  </button>
-                                </div>
-                              </td>
-                              {CRUD_COLS.map((col) => {
-                                const slugs = modSlugs(mod, col.key)
-                                if (slugs.length === 0) return <td key={col.key} className="py-3 text-center text-slate-200 dark:text-slate-700">—</td>
-                                const onCount = slugs.filter(isOn).length
-                                const allOn = onCount === slugs.length
-                                return (
-                                  <td key={col.key} className="py-3 text-center">
-                                    <button onClick={() => toggleColAll(mod, col.key)}
-                                      className={clsx('inline-flex min-w-[40px] items-center justify-center rounded-full px-2 py-0.5 text-[11px] font-bold transition',
-                                        onCount > 0
-                                          ? `${col.color} ${col.activeBg}`
-                                          : 'bg-slate-100 text-slate-300 dark:bg-slate-800 dark:text-slate-600',
-                                      )}>
-                                      {onCount}/{slugs.length}
-                                    </button>
-                                  </td>
-                                )
-                              })}
-                            </tr>,
-                            /* Permission rows */
-                            ...(isCollapsed ? [] : mod.rows.map((row, ri) => (
-                              <tr key={`r-${mod.key}-${ri}`} className="bg-white hover:bg-slate-50/60 dark:bg-slate-900 dark:hover:bg-slate-800/40">
-                                <td className="py-3.5 pl-[62px] pr-5">
-                                  <p className="font-medium text-slate-700 dark:text-slate-200">{row.label}</p>
-                                  {row.desc && <p className="text-[11px] text-slate-400 dark:text-slate-500">{row.desc}</p>}
+                )}
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[1120px] text-left text-sm">
+                    <thead className="border-b border-slate-200 bg-white text-xs font-bold text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+                      <tr>
+                        <th className="w-[28%] px-5 py-4">Module / Permission</th>
+                        <th className="w-[28%] px-5 py-4">Description</th>
+                        {CRUD_COLS.map((col) => <th key={col.key} className="w-[11%] px-5 py-4 text-center">{col.label}</th>)}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {visibleModules.map((mod) => [
+                        <tr key={`h-${mod.key}`} className="bg-emerald-50/35 dark:bg-emerald-950/15">
+                          <td colSpan={6} className="px-5 py-3">
+                            <div className="flex items-center gap-3">
+                              <span className={clsx('grid h-8 w-8 place-items-center rounded-lg', mod.iconBg)}>
+                                <mod.Icon size={17} className={mod.color} />
+                              </span>
+                              <span className="text-sm font-extrabold uppercase tracking-wide text-emerald-900 dark:text-emerald-200">{mod.label}</span>
+                            </div>
+                          </td>
+                        </tr>,
+                        ...mod.rows.map((row, ri) => (
+                          <tr key={`r-${mod.key}-${ri}`} className="bg-white hover:bg-slate-50/70 dark:bg-slate-900 dark:hover:bg-slate-800/40">
+                            <td className="px-5 py-3.5 pl-14 font-bold text-slate-800 dark:text-slate-100">{row.label}</td>
+                            <td className="px-5 py-3.5 text-slate-500 dark:text-slate-400">{row.desc}</td>
+                            {CRUD_COLS.map((col) => {
+                              const slug = row[col.key]
+                              const canToggle = Boolean(slug) && selectedRole.slug !== 'super_admin'
+                              return (
+                                <td key={col.key} className="px-5 py-3.5 text-center">
+                                  {slug ? (
+                                    <Toggle checked={isOn(slug)} disabled={!canToggle} onChange={() => toggleSlug(slug)} />
+                                  ) : (
+                                    <Toggle checked={false} disabled />
+                                  )}
                                 </td>
-                                {CRUD_COLS.map((col) => {
-                                  const slug = row[col.key]
-                                  if (!slug) return <td key={col.key} className="py-3.5 text-center text-slate-200 dark:text-slate-700">—</td>
-                                  return (
-                                    <td key={col.key} className="py-3.5 text-center">
-                                      <Toggle checked={isOn(slug)} onChange={() => toggleSlug(slug)} />
-                                    </td>
-                                  )
-                                })}
-                              </tr>
-                            ))),
-                          ]
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-
-                  {/* Footer */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-3 dark:border-slate-800 dark:bg-slate-950">
-                    <div className="flex items-center gap-5 text-xs text-slate-500">
-                      <span className="flex items-center gap-1.5"><Toggle checked onChange={() => {}} /> Allowed</span>
-                      <span className="flex items-center gap-1.5"><Toggle checked={false} onChange={() => {}} /> Denied</span>
-                      {hasChanges && <span className="font-semibold text-amber-600 dark:text-amber-400">● Unsaved changes</span>}
-                    </div>
-                    <div className="flex gap-2">
-                      <button onClick={resetPermissions} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
-                        Cancel
-                      </button>
-                      <button
-                        onClick={saveSelectedRole}
-                        disabled={saving || !hasChanges}
-                        className={clsx('flex items-center gap-2 rounded-lg px-5 py-2 text-sm font-semibold text-white transition disabled:opacity-60',
-                          hasChanges ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-400 dark:bg-slate-600')}
-                      >
-                        <CheckCircle2 size={15} />
-                        {saving ? 'Saving…' : 'Save Changes'}
-                      </button>
-                    </div>
-                  </div>
-                  {error && <div className="border-t border-slate-200 p-4 dark:border-slate-800"><ErrorText text={error} /></div>}
+                              )
+                            })}
+                          </tr>
+                        )),
+                      ])}
+                    </tbody>
+                  </table>
                 </div>
-              )}
-            </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 dark:border-slate-800 dark:bg-slate-950">
+                  <div className="flex items-center gap-5 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    <span className="flex items-center gap-2"><Toggle checked onChange={() => {}} /> ON = Allowed</span>
+                    <span className="flex items-center gap-2"><Toggle checked={false} onChange={() => {}} /> OFF = Denied</span>
+                    {hasChanges && <span className="text-amber-600 dark:text-amber-400">Unsaved changes</span>}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button onClick={resetPermissions} className="inline-flex h-11 items-center gap-2 rounded-lg border border-slate-200 bg-white px-5 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                      <X size={16} /> Reset All
+                    </button>
+                    <button
+                      onClick={saveSelectedRole}
+                      disabled={saving || !hasChanges || selectedRole.slug === 'super_admin'}
+                      className={clsx('inline-flex h-11 items-center gap-2 rounded-lg px-6 text-sm font-bold text-white shadow-sm transition disabled:opacity-60',
+                        hasChanges ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-400 dark:bg-slate-600')}
+                    >
+                      <CheckCircle2 size={16} />
+                      {saving ? 'Saving...' : 'Save Changes'}
+                    </button>
+                  </div>
+                </div>
+                {error && <div className="border-t border-slate-200 p-4 dark:border-slate-800"><ErrorText text={error} /></div>}
+              </>
+            )}
           </div>
         )
       })()}

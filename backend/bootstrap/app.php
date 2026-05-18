@@ -22,9 +22,10 @@ $app = Application::configure(basePath: dirname(__DIR__))
         //
     })->create();
 
-// Single shared .env at project root (Attadance/.env)
+// Use project-root .env when running locally (monorepo layout).
+// In production (Railway/etc.) the .env won't exist there; env vars come from the host.
 $rootEnvPath = dirname(__DIR__, 2);
-if (is_file($rootEnvPath.DIRECTORY_SEPARATOR.'.env') || is_file($rootEnvPath.DIRECTORY_SEPARATOR.'.env.example')) {
+if (is_file($rootEnvPath.DIRECTORY_SEPARATOR.'.env')) {
     $app->useEnvironmentPath($rootEnvPath);
 }
 

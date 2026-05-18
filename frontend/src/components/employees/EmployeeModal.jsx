@@ -166,7 +166,7 @@ export default function EmployeeModal({ employee, onClose, onSaved }) {
                 <div className="grid gap-4 md:grid-cols-2">
                   <EmployeeTextField icon={UserRound} label="Full Name" value={form.full_name} onChange={(value) => updateField('full_name', value)} placeholder="Enter full name" required />
                   <EmployeeTextField icon={Phone} label="Phone Number" value={form.phone} onChange={(value) => updateField('phone', value)} placeholder="Enter phone number" />
-                  <EmployeeTextField icon={Mail} label="Email Address" type="email" value={form.login_email} onChange={(value) => updateField('login_email', value)} placeholder="Enter email address" required={!isEdit || Boolean(form.login_password)} />
+                  <EmployeeTextField icon={Mail} label="Email Address" type="email" value={form.login_email} onChange={(value) => updateField('login_email', value)} placeholder="Enter email address" />
                   <EmployeeTextareaField icon={MapPinned} label="Address" value={form.address} onChange={(value) => updateField('address', value)} placeholder="Enter present address" />
                 </div>
               </div>

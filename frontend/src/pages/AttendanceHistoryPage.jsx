@@ -2,12 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   CalendarCheck, ChevronLeft, ChevronRight, Clock,
   Download, Eye, LogOut, MapPin, Pencil, RefreshCw,
-  Search, UserMinus, Users, X,
+  Search, UserMinus, Users,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { api } from '../services/api'
 import { EmptyState } from '../components/shared/UI'
 import { attendanceLocationMapUrl, employeeFullName, initials } from '../utils/format'
+import EditAttendanceModal from '../components/attendance/EditAttendanceModal'
 
 const todayStr = () => new Date().toISOString().split('T')[0]
 
@@ -31,17 +32,18 @@ function formatWorkHours(minutes) {
   return `${h}h ${String(m).padStart(2, '0')}m`
 }
 
-export default function AttendanceHistoryPage({ appData }) {
-  const [rows, setRows]         = useState([])
-  const [loading, setLoading]   = useState(true)
-  const [date, setDate]         = useState(todayStr())
-  const [department, setDept]   = useState('')
-  const [branch, setBranch]     = useState('')
-  const [empSearch, setEmpSearch] = useState('')
-  const [status, setStatus]     = useState('')
-  const [type, setType]         = useState('')
-  const [page, setPage]         = useState(1)
-  const [perPage, setPerPage]   = useState(10)
+export default function AttendanceHistoryPage({ appData, isLoaded, viewMode = 'all' }) {
+  const [rows, setRows]                   = useState([])
+  const [loading, setLoading]             = useState(true)
+  const [date, setDate]                   = useState(todayStr())
+  const [department, setDept]             = useState('')
+  const [branch, setBranch]               = useState('')
+  const [empSearch, setEmpSearch]         = useState('')
+  const [status, setStatus]               = useState('')
+  const [type, setType]                   = useState('')
+  const [page, setPage]                   = useState(1)
+  const [perPage, setPerPage]             = useState(10)
+  const [editingAttendance, setEditing]   = useState(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -70,6 +72,7 @@ export default function AttendanceHistoryPage({ appData }) {
   const filtered = useMemo(() => {
     const q = empSearch.trim().toLowerCase()
     return rows.filter((item) => {
+      if (viewMode === 'missing_checkout' && (!item.check_in_at || item.check_out_at || item.status === 'absent')) return false
       if (q) {
         const name = employeeFullName(item.employee).toLowerCase()
         const code = (item.employee?.employee_code || '').toLowerCase()
@@ -80,7 +83,7 @@ export default function AttendanceHistoryPage({ appData }) {
       if (type       && item.type !== type)                              return false
       return true
     })
-  }, [rows, empSearch, department, branch, type])
+  }, [rows, empSearch, department, branch, type, viewMode])
 
   /* ── Stats (from all API rows, not client-filtered) ──────────── */
   const stats = useMemo(() => {
@@ -145,8 +148,8 @@ export default function AttendanceHistoryPage({ appData }) {
       {/* ── Page header ─────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-950 dark:text-white">Attendance</h2>
-          <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">View All Attendance</p>
+          <h2 className="text-2xl font-bold text-slate-950 dark:text-white">{viewMode === 'missing_checkout' ? 'Missing Check Out' : 'Attendance'}</h2>
+          <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">{viewMode === 'missing_checkout' ? 'Employees checked in without check out' : 'View All Attendance'}</p>
         </div>
         <button
           onClick={load}
@@ -375,7 +378,7 @@ export default function AttendanceHistoryPage({ appData }) {
                       <td className="px-4 py-4">
                         <div className="flex items-center gap-1.5">
                           <ActionBtn icon={Eye} label="View" tone="slate" onClick={() => {}} />
-                          <ActionBtn icon={Pencil} label="Edit" tone="sky" onClick={() => {}} />
+                          <ActionBtn icon={Pencil} label="Edit" tone="sky" onClick={() => setEditing(item)} />
                           {mapUrl && (
                             <a
                               href={mapUrl}
@@ -417,6 +420,15 @@ export default function AttendanceHistoryPage({ appData }) {
           </div>
         )}
       </div>
+
+      {editingAttendance && (
+        <EditAttendanceModal
+          attendance={editingAttendance}
+          isLoaded={isLoaded}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); load() }}
+        />
+      )}
     </div>
   )
 }

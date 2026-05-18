@@ -18,3 +18,9 @@ body.dark {
   background: #0f172a;
   color: #e2e8f0;
 }
+
+@keyframes loading-shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}

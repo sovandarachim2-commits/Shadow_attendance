@@ -13,6 +13,8 @@ dist-ssr
 *.local
 cert.pem
 key.pem
+public/mkcert-root-ca.pem
+public/mkcert-root-ca.crt
 
 # Editor directories and files
 .vscode/*

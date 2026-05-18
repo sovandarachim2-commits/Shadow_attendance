@@ -23,6 +23,14 @@ export function formatRelativeTime(value) {
   return formatDate(value)
 }
 
+export function formatDuration(seconds) {
+  if (seconds == null || Number.isNaN(Number(seconds))) return '-'
+  const total = Math.max(0, Math.floor(Number(seconds)))
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const secs = total % 60
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+}
 
 export function titleCase(value) {
   if (!value) return '-'
@@ -102,12 +110,12 @@ export function canAccess(user, permissions = []) {
 
 
 export function canUpdateOwnProfile(user) {
-  return canAccess(user, ['update_own_profile', 'update_profile'])
+  return canAccess(user, ['profile.update_own'])
 }
 
 
 export function canUpdateAllProfiles(user) {
-  return canAccess(user, ['update_all_profiles', 'edit_employee', 'manage_employees'])
+  return canAccess(user, ['profile.update_all', 'employees.update'])
 }
 
 

@@ -7,6 +7,7 @@ use App\Models\CustomerVisit;
 use App\Models\GpsLocation;
 use App\Services\ImageUploadService;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class CustomerVisitController extends Controller
 {
@@ -15,7 +16,7 @@ class CustomerVisitController extends Controller
     public function index(Request $request)
     {
         return CustomerVisit::with('employee.department')
-            ->when(! $request->user()->hasAnyPermission('view_customer_visits', 'manage_customer_visits'), fn ($query) => $query->where('employee_id', $request->user()->employee_id))
+            ->when(! $request->user()->hasAnyPermission('visits.view', 'visits.manage'), fn ($query) => $query->where('employee_id', $request->user()->employee_id))
             ->when($request->employee_id, fn ($query, $id) => $query->where('employee_id', $id))
             ->when($request->date, fn ($query, $date) => $query->whereDate('check_in_at', $date))
             ->latest('check_in_at')
@@ -58,8 +59,19 @@ class CustomerVisitController extends Controller
         return $visit;
     }
 
-    public function checkout(CustomerVisit $customerVisit)
+    public function checkout(Request $request, CustomerVisit $customerVisit)
     {
+        if (
+            ! $request->user()->hasAnyPermission('visits.manage', 'visits.update')
+            && $customerVisit->employee_id !== $request->user()->employee_id
+        ) {
+            abort(403, 'You can only check out your own customer visits.');
+        }
+
+        if ($customerVisit->status === 'closed') {
+            throw ValidationException::withMessages(['visit' => 'This customer visit is already checked out.']);
+        }
+
         $customerVisit->update([
             'check_out_at' => now(),
             'duration_minutes' => $customerVisit->check_in_at?->diffInMinutes(now()) ?? 0,

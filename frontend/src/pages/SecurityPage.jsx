@@ -1,48 +1,41 @@
 import { useEffect, useState } from 'react'
 import {
-  Bot,
+  AlertTriangle,
   CalendarDays,
   Check,
   ChevronRight,
-  ClipboardList,
   Cloud,
-  DatabaseBackup,
   Download,
-  Eye,
-  EyeOff,
   FileClock,
-  Info,
   Mail,
   Map,
   MapPin,
   QrCode,
   RefreshCcw,
+  Gift,
   Save,
-  Search,
   Send,
   Settings,
   ShieldCheck,
+  Wallet,
   Upload,
-  Users,
   Wifi,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { api } from '../services/api'
 import { EmptyState } from '../components/shared/UI'
-
-const telegramEvents = [
-  { value: 'daily_attendance', label: 'Daily Attendance' },
-  { value: 'permission_request', label: 'Permission Requests' },
-  { value: 'late_attendance', label: 'Late Attendance' },
-  { value: 'missing_checkout', label: 'Missing Check Out' },
-  { value: 'outdoor_visit', label: 'Outdoor Visits' },
-  { value: 'system_alert', label: 'System Alerts' },
-  { value: 'other', label: 'Other' },
-]
+import AttendanceRulesSettings from '../components/settings/AttendanceRulesSettings'
+import WorkScheduleSettings from '../components/settings/WorkScheduleSettings'
+import TelegramNotificationSettings from '../components/settings/TelegramNotificationSettings'
+import LateRulesSettings from '../components/settings/LateRulesSettings'
+import BonusRulesSettings from '../components/settings/BonusRulesSettings'
 
 const settingsSections = [
   { id: 'general', label: 'General Settings', icon: Settings },
   { id: 'attendance', label: 'Attendance Rules', icon: FileClock },
+  { id: 'late-rules', label: 'Late Deduction Rules', icon: AlertTriangle },
+  { id: 'bonus-rules', label: 'Bonus Rules', icon: Gift },
+  { id: 'payroll', label: 'Payroll Settings', icon: Wallet },
   { id: 'schedule', label: 'Work Schedule', icon: CalendarDays },
   { id: 'locations', label: 'Office Locations', icon: MapPin },
   { id: 'gps', label: 'GPS & Tracking', icon: Wifi },
@@ -52,24 +45,21 @@ const settingsSections = [
   { id: 'maps', label: 'Google Maps API', icon: Map },
   { id: 'r2', label: 'Cloudflare R2 Storage', icon: Cloud },
   { id: 'security', label: 'Security Settings', icon: ShieldCheck },
-  { id: 'roles', label: 'Roles & Permissions', icon: Users },
-  { id: 'backup', label: 'Backup & Restore', icon: DatabaseBackup },
-  { id: 'logs', label: 'System Logs', icon: ClipboardList },
-  { id: 'about', label: 'About System', icon: Info },
 ]
 
-const SAVEABLE_SECTIONS = new Set(['general', 'attendance', 'schedule', 'gps', 'security'])
+const SAVEABLE_SECTIONS = new Set(['general', 'gps', 'security'])
+const STANDALONE_SECTIONS = new Set(['late-rules', 'bonus-rules', 'payroll', 'telegram'])
 
 export default function SecurityPage({ refresh }) {
   const [activeSection, setActiveSection] = useState('general')
-  const [search, setSearch] = useState('')
   const [notice, setNotice] = useState({ text: '', ok: true })
   const [settings, setSettings] = useState({})
   const [loadingSettings, setLoadingSettings] = useState(true)
   const [saving, setSaving] = useState(false)
 
   const active = settingsSections.find((section) => section.id === activeSection) || settingsSections[0]
-  const filteredSections = settingsSections.filter((section) => section.label.toLowerCase().includes(search.toLowerCase()))
+  const filteredSections = settingsSections
+  const isStandaloneSection = STANDALONE_SECTIONS.has(activeSection)
 
   const showNotice = (text, ok = true) => {
     setNotice({ text, ok })
@@ -111,16 +101,6 @@ export default function SecurityPage({ refresh }) {
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Configure attendance, tracking, integrations, permissions, and system security.</p>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row">
-          <label className="relative">
-            <span className="sr-only">Search settings</span>
-            <Search className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-            <input
-              className="h-11 w-full rounded-lg border border-slate-200 bg-white px-4 pr-11 text-sm outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-900 sm:w-80"
-              placeholder="Search settings..."
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-          </label>
           <button
             className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 text-sm font-semibold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700 disabled:opacity-60"
             onClick={saveSettings}
@@ -174,21 +154,30 @@ export default function SecurityPage({ refresh }) {
           </nav>
         </aside>
 
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-5 dark:border-slate-800">
-            <div className="flex items-center gap-3">
-              <div className="grid h-11 w-11 place-items-center rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300">
-                <active.icon size={21} />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-slate-950 dark:text-white">{active.label}</h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400">Manage {active.label.toLowerCase()} for the attendance platform.</p>
+        <section
+          className={clsx(
+            'min-w-0 overflow-hidden',
+            isStandaloneSection
+              ? 'bg-transparent'
+              : 'rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900',
+          )}
+        >
+          {!isStandaloneSection && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-5 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="grid h-11 w-11 place-items-center rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300">
+                  <active.icon size={21} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-950 dark:text-white">{active.label}</h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Manage {active.label.toLowerCase()} for the attendance platform.</p>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
-          <div className="space-y-5 p-5">
-            {loadingSettings
+          <div className={clsx(isStandaloneSection ? '' : 'space-y-5 p-5')}>
+            {loadingSettings && !isStandaloneSection
               ? <p className="text-sm text-slate-500 dark:text-slate-400">Loading settings...</p>
               : renderSettingsContent(activeSection, showNotice, settings, updateSetting, refresh)}
           </div>
@@ -202,20 +191,19 @@ function renderSettingsContent(section, notify, settings, updateSetting, refresh
   const sp = { settings, onUpdate: updateSetting }
   switch (section) {
     case 'general':    return <GeneralSettings {...sp} onSettingsSaved={refresh} />
-    case 'attendance': return <AttendanceRules {...sp} />
-    case 'schedule':   return <WorkSchedule {...sp} />
+    case 'attendance': return <AttendanceRulesSettings />
+    case 'late-rules': return <LateRulesSettings />
+    case 'bonus-rules': return <BonusRulesSettings />
+    case 'payroll': return <PayrollSettingsPanel />
+    case 'schedule':   return <WorkScheduleSettings />
     case 'locations':  return <OfficeLocations notify={notify} />
     case 'gps':        return <GpsTracking {...sp} />
     case 'qr':         return <QrAttendance notify={notify} />
-    case 'telegram':   return <TelegramNotifications notify={notify} />
+    case 'telegram':   return <TelegramNotificationSettings notify={notify} />
     case 'email':      return <EmailNotifications />
     case 'maps':       return <GoogleMapsSettings />
     case 'r2':         return <CloudflareR2Settings />
     case 'security':   return <SecuritySettings {...sp} />
-    case 'roles':      return <RolesPermissions />
-    case 'backup':     return <BackupRestore notify={notify} />
-    case 'logs':       return <SystemLogs />
-    case 'about':      return <AboutSystem />
     default:           return <GeneralSettings {...sp} />
   }
 }
@@ -245,36 +233,6 @@ function GeneralSettings({ settings, onUpdate, onSettingsSaved }) {
   )
 }
 
-function AttendanceRules({ settings, onUpdate }) {
-  return (
-    <div className="grid gap-5 lg:grid-cols-2">
-      <SettingsCard title="Check In Rules" description="Office attendance time and radius validation.">
-        <Field label="Check In Time" type="time" settingKey="check_in_time" settings={settings} onUpdate={onUpdate} />
-        <Field label="Check Out Time" type="time" settingKey="check_out_time" settings={settings} onUpdate={onUpdate} />
-        <Field label="Late Minutes" type="number" placeholder="15" settingKey="late_minutes" settings={settings} onUpdate={onUpdate} />
-        <Field label="Attendance Radius" suffix="meters" type="number" placeholder="100" settingKey="attendance_radius" settings={settings} onUpdate={onUpdate} />
-      </SettingsCard>
-      <SettingsCard title="Advanced Rules" description="Overtime and weekend attendance behavior.">
-        <SelectField label="Overtime Rules" options={['After checkout time', 'Manual approval', 'Disabled']} settingKey="overtime_rules" settings={settings} onUpdate={onUpdate} />
-        <SelectField label="Weekend Rules" options={['Allow with approval', 'Block weekend', 'Always allow']} settingKey="weekend_rules" settings={settings} onUpdate={onUpdate} />
-      </SettingsCard>
-    </div>
-  )
-}
-
-function WorkSchedule({ settings, onUpdate }) {
-  return (
-    <SettingsCard title="Work Schedule" description="Set standard office schedule and working days.">
-      <div className="grid gap-4 md:grid-cols-2">
-        <Field label="Office Start Time" type="time" settingKey="work_start_time" settings={settings} onUpdate={onUpdate} />
-        <Field label="Office End Time" type="time" settingKey="work_end_time" settings={settings} onUpdate={onUpdate} />
-        <Field label="Break Time" placeholder="e.g. 12:00 - 13:00" settingKey="break_time" settings={settings} onUpdate={onUpdate} />
-        <SelectField label="Working Days" options={['Monday - Friday', 'Monday - Saturday', 'Every day']} settingKey="working_days" settings={settings} onUpdate={onUpdate} />
-      </div>
-      <ToggleRow title="Flexible Schedule" description="Allow selected roles to check in with flexible working hours." settingKey="flexible_schedule" settings={settings} onUpdate={onUpdate} />
-    </SettingsCard>
-  )
-}
 
 function OfficeLocations({ notify }) {
   return (
@@ -331,308 +289,6 @@ function QrAttendance({ notify }) {
         <p className="mt-4 text-sm font-semibold text-slate-600 dark:text-slate-300">QR Preview</p>
         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Code #{String(qrSeed).slice(-6)}</p>
       </div>
-    </div>
-  )
-}
-
-function TelegramNotifications({ notify }) {
-  const emptyForm = {
-    name: '',
-    event_key: 'daily_attendance',
-    chat_id: '',
-    message_thread_id: '',
-    enabled: true,
-  }
-  const [rows, setRows] = useState([])
-  const [form, setForm] = useState(emptyForm)
-  const [editingRow, setEditingRow] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [tokenInput, setTokenInput] = useState('')
-  const [showToken, setShowToken] = useState(false)
-  const [tokenSaving, setTokenSaving] = useState(false)
-  const [botStatus, setBotStatus] = useState(null)
-
-  const loadRows = async () => {
-    setLoading(true)
-    try {
-      const response = await api.get('/telegram-destinations')
-      setRows(response.data || [])
-    } catch {
-      notify('Cannot load Telegram destinations. Login as admin and check API server.', false)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const loadTokenStatus = async () => {
-    try {
-      const res = await api.get('/telegram-destinations/token-status')
-      setBotStatus(res.data)
-    } catch {
-      setBotStatus({ verified: false, error: 'Could not check bot status.' })
-    }
-  }
-
-  useEffect(() => {
-    loadRows()
-    loadTokenStatus()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const saveToken = async () => {
-    if (!tokenInput.trim()) { notify('Enter a bot token first.', false); return }
-    setTokenSaving(true)
-    try {
-      const res = await api.post('/telegram-destinations/save-token', { bot_token: tokenInput.trim() })
-      setBotStatus({ verified: true, source: 'database', bot: res.data.bot })
-      setTokenInput('')
-      notify('Bot token saved and verified: ' + res.data.bot.username)
-    } catch (ex) {
-      const msg = ex.response?.data?.message || 'Failed to save token.'
-      notify(msg, false)
-      setBotStatus((prev) => ({ ...prev, verified: false, error: msg }))
-    } finally {
-      setTokenSaving(false)
-    }
-  }
-
-  const updateField = (key, value) => setForm((current) => ({ ...current, [key]: value }))
-
-  const startEdit = (row) => {
-    setEditingRow(row)
-    setForm({
-      name: row.name,
-      event_key: row.event_key,
-      chat_id: row.chat_id || '',
-      message_thread_id: row.message_thread_id || '',
-      enabled: row.enabled,
-    })
-  }
-
-  const cancelEdit = () => {
-    setEditingRow(null)
-    setForm(emptyForm)
-  }
-
-  const saveDestination = async () => {
-    if (!form.name.trim() || !form.chat_id.trim()) {
-      notify('Name and Chat ID are required.', false)
-      return
-    }
-
-    setSaving(true)
-    try {
-      const payload = {
-        ...form,
-        name: form.name.trim(),
-        chat_id: form.chat_id.trim(),
-        message_thread_id: form.message_thread_id ? Number(form.message_thread_id) : null,
-      }
-
-      if (editingRow) {
-        await api.put(`/telegram-destinations/${editingRow.id}`, payload)
-        notify('Telegram destination updated.')
-      } else {
-        await api.post('/telegram-destinations', payload)
-        notify('Telegram destination saved.')
-      }
-
-      setForm(emptyForm)
-      setEditingRow(null)
-      await loadRows()
-    } catch {
-      notify(`Could not ${editingRow ? 'update' : 'save'} Telegram destination.`, false)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const toggleDestination = async (row) => {
-    try {
-      await api.put(`/telegram-destinations/${row.id}`, {
-        name: row.name,
-        event_key: row.event_key,
-        chat_id: row.chat_id,
-        message_thread_id: row.message_thread_id,
-        enabled: !row.enabled,
-      })
-      await loadRows()
-    } catch {
-      notify('Could not update Telegram destination.', false)
-    }
-  }
-
-  const removeDestination = async (row) => {
-    if (!confirm(`Remove ${row.name}?`)) return
-    try {
-      await api.delete(`/telegram-destinations/${row.id}`)
-      if (editingRow?.id === row.id) cancelEdit()
-      await loadRows()
-      notify('Telegram destination removed.')
-    } catch {
-      notify('Could not remove Telegram destination.', false)
-    }
-  }
-
-  const testDestination = async (row) => {
-    try {
-      const res = await api.post(`/telegram-destinations/${row.id}/test`)
-      notify(res.data?.message || 'Telegram test message sent.')
-    } catch (ex) {
-      const msg = ex.response?.data?.message || 'Could not send test. Check bot token, chat ID, and topic ID.'
-      notify(`Test failed: ${msg}`, false)
-    }
-  }
-
-  return (
-    <div className="grid gap-5">
-
-      {/* Bot Token Configuration */}
-      <SettingsCard
-        title="Telegram Bot Token"
-        description="Configure the bot token used to send all Telegram notifications. Set it here instead of the server .env file."
-      >
-        {/* Current status */}
-        <div className={clsx(
-          'flex items-center gap-3 rounded-xl border px-4 py-3',
-          botStatus === null
-            ? 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-800/60'
-            : botStatus.verified
-              ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-950/20'
-              : 'border-rose-200 bg-rose-50 dark:border-rose-900/50 dark:bg-rose-950/20',
-        )}>
-          <div className={clsx(
-            'grid h-10 w-10 shrink-0 place-items-center rounded-xl',
-            botStatus?.verified ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/50 dark:text-emerald-400' : 'bg-rose-100 text-rose-500 dark:bg-rose-900/50 dark:text-rose-400',
-          )}>
-            <Bot size={20} />
-          </div>
-          <div className="min-w-0 flex-1">
-            {botStatus === null && <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Checking bot status…</p>}
-            {botStatus?.verified && (
-              <>
-                <p className="text-sm font-bold text-emerald-700 dark:text-emerald-400">✅ Bot connected</p>
-                <p className="text-xs text-emerald-600 dark:text-emerald-500">
-                  {botStatus.bot?.first_name || botStatus.bot?.name} · @{botStatus.bot?.username} · Source: {botStatus.source}
-                </p>
-              </>
-            )}
-            {botStatus && !botStatus.verified && (
-              <>
-                <p className="text-sm font-bold text-rose-700 dark:text-rose-400">❌ Bot not connected</p>
-                <p className="text-xs text-rose-500 dark:text-rose-400">{botStatus.error || 'No token configured.'}</p>
-              </>
-            )}
-          </div>
-          <button
-            onClick={loadTokenStatus}
-            className="shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
-          >
-            Re-check
-          </button>
-        </div>
-
-        {/* Token input */}
-        <div className="space-y-2">
-          <label className="block text-sm font-semibold text-slate-700 dark:text-slate-200">
-            {botStatus?.source === 'database' ? 'Update Bot Token' : 'Enter Bot Token'}
-          </label>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <input
-                type={showToken ? 'text' : 'password'}
-                className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 pr-10 font-mono text-sm outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
-                placeholder="1234567890:AAHxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                value={tokenInput}
-                onChange={(e) => setTokenInput(e.target.value)}
-              />
-              <button
-                type="button"
-                onClick={() => setShowToken((v) => !v)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-              >
-                {showToken ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
-            <button
-              onClick={saveToken}
-              disabled={tokenSaving || !tokenInput.trim()}
-              className="inline-flex h-11 items-center gap-2 rounded-lg bg-emerald-600 px-5 text-sm font-semibold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700 disabled:opacity-50"
-            >
-              <Bot size={15} />
-              {tokenSaving ? 'Saving…' : 'Save & Verify'}
-            </button>
-          </div>
-          <p className="text-xs text-slate-400 dark:text-slate-500">
-            Get your bot token from <strong>@BotFather</strong> on Telegram. Format: <code className="rounded bg-slate-100 px-1 dark:bg-slate-800">123456:ABCxxx…</code>
-          </p>
-        </div>
-      </SettingsCard>
-
-      <SettingsCard
-        title={editingRow ? `Editing: ${editingRow.name}` : 'Telegram Destinations'}
-        description={editingRow ? 'Update the fields below and click Save to apply changes.' : 'Send each notification type to a different Telegram group or forum topic.'}
-      >
-        <div className="grid gap-4 lg:grid-cols-[1fr_1fr_1fr_1fr_auto]">
-          <Field label="Name" value={form.name} onChange={(event) => updateField('name', event.target.value)} placeholder="Daily attendance group" />
-          <SelectField label="Purpose" value={form.event_key} onChange={(event) => updateField('event_key', event.target.value)} options={telegramEvents.map((event) => event.label)} values={telegramEvents.map((event) => event.value)} />
-          <Field label="Group / Chat ID" value={form.chat_id} onChange={(event) => updateField('chat_id', event.target.value)} placeholder="-1001234567890" />
-          <Field label="Topic ID" value={form.message_thread_id} onChange={(event) => updateField('message_thread_id', event.target.value)} placeholder="Optional" type="number" />
-          <div className="flex items-end gap-2">
-            <button className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60" onClick={saveDestination} disabled={saving} type="button">
-              <Save size={16} />
-              {saving ? 'Saving...' : editingRow ? 'Update' : 'Add'}
-            </button>
-            {editingRow && (
-              <button className="inline-flex h-11 items-center justify-center rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-600 transition hover:bg-slate-100 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-800" onClick={cancelEdit} type="button">
-                Cancel
-              </button>
-            )}
-          </div>
-        </div>
-        <p className="text-xs text-slate-500 dark:text-slate-400">Bot token still comes from TELEGRAM_BOT_TOKEN in .env. For Telegram forum topics, use the topic message_thread_id.</p>
-      </SettingsCard>
-
-      <SettingsCard title="Saved Groups & Topics" description="Enable, edit, test, or remove Telegram destinations.">
-        {loading ? (
-          <p className="text-sm text-slate-500 dark:text-slate-400">Loading Telegram destinations...</p>
-        ) : rows.length === 0 ? (
-          <EmptyState text="No Telegram destinations yet." />
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[820px] text-left text-sm">
-              <thead className="bg-slate-50 text-xs uppercase text-slate-500 dark:bg-slate-950 dark:text-slate-400">
-                <tr>
-                  {['Name', 'Purpose', 'Chat ID', 'Topic ID', 'Status', 'Actions'].map((head) => <th key={head} className="px-4 py-3">{head}</th>)}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {rows.map((row) => (
-                  <tr key={row.id} className={clsx(editingRow?.id === row.id && 'bg-amber-50 dark:bg-amber-950/20')}>
-                    <td className="px-4 py-3 font-semibold text-slate-900 dark:text-slate-100">{row.name}</td>
-                    <td className="px-4 py-3">{telegramEvents.find((event) => event.value === row.event_key)?.label || row.event_key}</td>
-                    <td className="px-4 py-3 font-mono text-xs">{row.chat_id || '-'}</td>
-                    <td className="px-4 py-3 font-mono text-xs">{row.message_thread_id || '-'}</td>
-                    <td className="px-4 py-3">
-                      <button className={clsx('rounded-full px-3 py-1 text-xs font-bold', row.enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500')} onClick={() => toggleDestination(row)} type="button">
-                        {row.enabled ? 'Enabled' : 'Disabled'}
-                      </button>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-2">
-                        <button className="rounded-lg border border-sky-200 px-3 py-1.5 text-xs font-semibold text-sky-600 hover:bg-sky-50 dark:border-sky-800 dark:text-sky-400 dark:hover:bg-sky-950/30" onClick={() => startEdit(row)} type="button">Edit</button>
-                        <button className="rounded-lg border border-emerald-200 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50" onClick={() => testDestination(row)} type="button">Test</button>
-                        <button className="rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50" onClick={() => removeDestination(row)} type="button">Remove</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </SettingsCard>
     </div>
   )
 }
@@ -865,6 +521,30 @@ function ActionCard({ icon: Icon, title, description, action, onAction }) {
         <Check size={16} />
         {action}
       </button>
+    </div>
+  )
+}
+
+function PayrollSettingsPanel() {
+  return (
+    <div className="space-y-6 pb-8">
+      <div>
+        <h2 className="text-2xl font-bold text-slate-950 dark:text-white">Payroll Settings</h2>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+          Bonuses and deductions flow into payroll when enabled in Late Rules and Bonus Rules.
+        </p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <p className="text-sm font-bold text-slate-900 dark:text-white">Late deductions</p>
+          <p className="mt-1 text-xs text-slate-500">Settings → Late Deduction Rules → Include in Payroll</p>
+        </div>
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <p className="text-sm font-bold text-slate-900 dark:text-white">Employee bonuses</p>
+          <p className="mt-1 text-xs text-slate-500">Settings → Bonus Rules → Include in Payroll</p>
+        </div>
+      </div>
+      <p className="text-sm text-slate-500">Export payroll using approved bonuses and late deductions for the selected month.</p>
     </div>
   )
 }

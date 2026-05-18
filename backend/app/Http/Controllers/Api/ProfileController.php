@@ -13,7 +13,7 @@ class ProfileController extends Controller
 
     public function update(Request $request)
     {
-        if (! $request->user()->hasAnyPermission('update_own_profile', 'update_profile')) {
+        if (! $request->user()->hasAnyPermission('profile.update_own', 'profile.update_all')) {
             abort(403, 'You do not have permission to update your profile.');
         }
 

@@ -9,6 +9,8 @@ frontend/.env
 
 # Laravel cache & logs
 backend/storage/logs/*.log
+backend/storage/framework/sessions/*
+!backend/storage/framework/sessions/.gitignore
 backend/bootstrap/cache/*.php
 *.log
 *-server.log
@@ -18,6 +20,7 @@ mysql-start.err.log
 
 # Build output
 frontend/dist/
+frontend/dist-check-*/
 .vite-cache/
 
 # OS files

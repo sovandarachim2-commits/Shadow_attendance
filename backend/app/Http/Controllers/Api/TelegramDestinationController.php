@@ -18,8 +18,28 @@ class TelegramDestinationController extends Controller
         'missing_checkout',
         'outdoor_visit',
         'system_alert',
+        'bonus_approved',
         'other',
     ];
+
+    private const EVENT_LABELS = [
+        'daily_attendance' => 'Daily Attendance',
+        'permission_request' => 'Permission Requests',
+        'late_attendance' => 'Late Attendance',
+        'missing_checkout' => 'Missing Check Out',
+        'outdoor_visit' => 'Outdoor Visits',
+        'system_alert' => 'System Alerts',
+        'bonus_approved' => 'Bonus Approved',
+        'other' => 'Other',
+    ];
+
+    public function events()
+    {
+        return collect(self::EVENT_LABELS)->map(fn ($label, $value) => [
+            'value' => $value,
+            'label' => $label,
+        ])->values();
+    }
 
     public function index()
     {

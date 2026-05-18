@@ -1,50 +1,56 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+﻿import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  CalendarX,
   CalendarDays,
   Check,
   ChevronRight,
+  ClipboardList,
   Clock,
   Eye,
   FileText,
   Filter,
-  Heart,
+  History,
   ListChecks,
+  LogIn,
+  LogOut,
   MapPin,
   Pencil,
   Plus,
+  Shield,
   Trash2,
   X,
   XCircle,
 } from 'lucide-react'
 import clsx from 'clsx'
+import RequestTypePicker from '../components/requests/RequestTypePicker'
+import { newRequestForm, requestTypeMeta } from '../constants/permissionRequestTypes'
 import { permissionRequestService } from '../services/api'
-import { apiError, canAccess, employeeFullName, titleCase, userDisplayName } from '../utils/format'
-
-const requestTypes = [
-  'Leave Request',
-  'Sick Leave',
-  'Late Arrival',
-  'Attendance Edit',
-  'Outdoor Work',
-  'Early Leave',
-  'Overtime Request',
-  'GPS Override Request',
-]
+import { apiError, canAccess, employeeFullName, titleCase } from '../utils/format'
 
 const typeConfig = {
-  'Leave Request':        { icon: CalendarDays, bg: 'bg-violet-100 dark:bg-violet-950/40', text: 'text-violet-600 dark:text-violet-400' },
-  'Sick Leave':           { icon: Heart,        bg: 'bg-rose-100 dark:bg-rose-950/40',     text: 'text-rose-600 dark:text-rose-400' },
-  'Late Arrival':         { icon: Clock,        bg: 'bg-orange-100 dark:bg-orange-950/40', text: 'text-orange-600 dark:text-orange-400' },
-  'Attendance Edit':      { icon: Pencil,       bg: 'bg-orange-100 dark:bg-orange-950/40', text: 'text-orange-600 dark:text-orange-400' },
-  'Outdoor Work':         { icon: MapPin,       bg: 'bg-violet-100 dark:bg-violet-950/40', text: 'text-violet-600 dark:text-violet-400' },
-  'Early Leave':          { icon: FileText,     bg: 'bg-blue-100 dark:bg-blue-950/40',     text: 'text-blue-600 dark:text-blue-400' },
-  'Overtime Request':     { icon: Clock,        bg: 'bg-emerald-100 dark:bg-emerald-950/40', text: 'text-emerald-600 dark:text-emerald-400' },
-  'GPS Override Request': { icon: MapPin,       bg: 'bg-blue-100 dark:bg-blue-950/40',     text: 'text-blue-600 dark:text-blue-400' },
+  'Early Leave':          { icon: FileText,   bg: 'bg-blue-100 dark:bg-blue-950/40',     text: 'text-blue-600 dark:text-blue-400' },
+  'Attendance Edit':      { icon: Pencil,     bg: 'bg-orange-100 dark:bg-orange-950/40', text: 'text-orange-600 dark:text-orange-400' },
+  'Manual Check In':      { icon: LogIn,      bg: 'bg-emerald-100 dark:bg-emerald-950/40', text: 'text-emerald-600 dark:text-emerald-400' },
+  'Missing Check Out':    { icon: LogOut,     bg: 'bg-amber-100 dark:bg-amber-950/40',   text: 'text-amber-600 dark:text-amber-400' },
+  'Day Off':              { icon: CalendarX,  bg: 'bg-violet-100 dark:bg-violet-950/40', text: 'text-violet-600 dark:text-violet-400' },
+  'Outdoor Work':         { icon: MapPin,     bg: 'bg-emerald-100 dark:bg-emerald-950/40', text: 'text-emerald-600 dark:text-emerald-400' },
+  'Request Permission':   { icon: Shield,     bg: 'bg-indigo-100 dark:bg-indigo-950/40', text: 'text-indigo-600 dark:text-indigo-400' },
 }
 
 function fmtDate(iso) {
   if (!iso || iso === '-') return '-'
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+function fmtDateRange(start, end) {
+  if (!start) return '-'
+  const a = fmtDate(start)
+  const b = end ? fmtDate(end) : a
+  return a === b ? a : `${a} â€“ ${b}`
+}
+
+function isoDay(value) {
+  return value?.slice?.(0, 10) || value || ''
 }
 
 function fmtSubmittedAt(iso) {
@@ -67,6 +73,8 @@ function mapApiRequest(row) {
     employeeName,
     type: row.type,
     date: row.request_date,
+    dateEnd: row.request_date_end || row.request_date,
+    dateRange: fmtDateRange(row.request_date, row.request_date_end || row.request_date),
     time: row.request_time || '-',
     reason: row.reason,
     status: titleCase(row.status),
@@ -79,13 +87,12 @@ function mapApiRequest(row) {
   }
 }
 
-export default function PermissionRequestsPage({ user }) {
-  const employeeName = userDisplayName(user, 'User')
+export default function PermissionRequestsPage({ user, pendingRequestType, onClearPendingRequest }) {
   const employeeId = user?.employee?.id ?? null
 
-  const canViewAll = canAccess(user, ['view_all_permission_requests'])
-  const canApprove = canAccess(user, ['approve_permission_requests'])
-  const canSubmit = canAccess(user, ['submit_permission_request', 'view_own_permission_requests'])
+  const canViewAll = canAccess(user, ['requests.view_all'])
+  const canApprove = canAccess(user, ['requests.approve'])
+  const canSubmit  = canAccess(user, ['requests.create'])
 
   const [requests, setRequests] = useState([])
   const [loading, setLoading] = useState(true)
@@ -94,7 +101,8 @@ export default function PermissionRequestsPage({ user }) {
   const [editingId, setEditingId] = useState(null)
   const [selected, setSelected] = useState(null)
   const [notice, setNotice] = useState('')
-  const [form, setForm] = useState({ type: 'Leave Request', date: new Date().toISOString().slice(0, 10), time: '08:30', reason: '', attachment: '', gps: '', emergency: false })
+  const [form, setForm] = useState(() => newRequestForm('Early Leave'))
+  const [dateFilter, setDateFilter] = useState({ from: '', to: '' })
 
   const loadRequests = useCallback(async () => {
     setLoading(true)
@@ -114,7 +122,27 @@ export default function PermissionRequestsPage({ user }) {
     loadRequests()
   }, [loadRequests])
 
-  const visibleRequests = requests
+  const openRequestForm = (type) => {
+    setForm(newRequestForm(type))
+    setEditingId(null)
+    setShowForm(true)
+  }
+
+  useEffect(() => {
+    if (!pendingRequestType) return
+    openRequestForm(pendingRequestType)
+    onClearPendingRequest?.()
+  }, [pendingRequestType]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const visibleRequests = useMemo(() => requests.filter((req) => {
+    const requestStart = isoDay(req.date)
+    const requestEnd = isoDay(req.dateEnd || req.date)
+
+    if (dateFilter.from && requestEnd < dateFilter.from) return false
+    if (dateFilter.to && requestStart > dateFilter.to) return false
+
+    return true
+  }), [requests, dateFilter])
 
   const stats = useMemo(() => ({
     Pending:  visibleRequests.filter((r) => r.status === 'Pending').length,
@@ -125,14 +153,20 @@ export default function PermissionRequestsPage({ user }) {
 
   const notify = (msg) => { setNotice(msg); window.setTimeout(() => setNotice(''), 2800) }
 
-  const resetForm = () => setForm({ type: 'Leave Request', date: new Date().toISOString().slice(0, 10), time: '08:30', reason: '', attachment: '', gps: '', emergency: false })
+  const resetForm = () => setForm(newRequestForm('Early Leave'))
 
   const submitRequest = async (event) => {
     event.preventDefault()
+    const meta = requestTypeMeta(form.type)
+    if (meta.showDateRange && form.dateEnd && form.dateEnd < form.date) {
+      notify('End date must be on or after start date.')
+      return
+    }
     const payload = {
       type: form.type,
       request_date: form.date,
-      request_time: form.time || null,
+      request_date_end: meta.showDateRange ? (form.dateEnd || form.date) : form.date,
+      request_time: meta.showTime && form.time ? form.time : null,
       reason: form.reason || 'No reason provided.',
       is_emergency: form.emergency,
       gps_location: form.gps || null,
@@ -156,6 +190,7 @@ export default function PermissionRequestsPage({ user }) {
   }
 
   const deleteRequest = async (request) => {
+    if (!window.confirm(`Cancel request ${request.id}?`)) return
     try {
       await permissionRequestService.remove(request.dbId)
       if (selected?.dbId === request.dbId) setSelected(null)
@@ -184,6 +219,7 @@ export default function PermissionRequestsPage({ user }) {
     setForm({
       type: req.type,
       date: req.date?.slice?.(0, 10) || req.date,
+      dateEnd: req.dateEnd?.slice?.(0, 10) || req.date?.slice?.(0, 10) || req.date,
       time: req.time === '-' ? '' : req.time?.slice?.(0, 5) || req.time,
       reason: req.reason,
       attachment: '',
@@ -198,21 +234,15 @@ export default function PermissionRequestsPage({ user }) {
     <div className="space-y-5">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+        <div className="hidden sm:block">
           <h2 className="text-2xl font-bold text-slate-950 dark:text-white">Permission Requests</h2>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
             {canViewAll ? 'Review all employee requests' : 'Submit and track your own permission requests'}
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          {canViewAll && (
-            <button className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200" type="button">
-              <Filter size={15} />
-              Filter
-            </button>
-          )}
+        <div className="hidden items-center gap-3 sm:flex">
           {canSubmit && (
-            <button className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700" onClick={() => { setEditingId(null); resetForm(); setShowForm(true) }} type="button">
+            <button className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700" onClick={() => openRequestForm('Early Leave')} type="button">
               <Plus size={16} />
               New Permission Request
             </button>
@@ -233,7 +263,7 @@ export default function PermissionRequestsPage({ user }) {
       )}
 
       {loading && (
-        <p className="text-sm text-slate-500 dark:text-slate-400">Loading permission requests…</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Loading permission requestsâ€¦</p>
       )}
 
       {/* Stats */}
@@ -246,8 +276,43 @@ export default function PermissionRequestsPage({ user }) {
 
       {/* Table card */}
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="border-b border-slate-100 px-5 py-4 dark:border-slate-800">
-          <h3 className="font-bold text-slate-950 dark:text-white">{canViewAll ? 'All Permission Requests' : 'My Permission Requests'}</h3>
+        <div className="flex flex-col gap-4 border-b border-slate-100 px-5 py-4 dark:border-slate-800 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h3 className="font-bold text-slate-950 dark:text-white">{canViewAll ? 'All Permission Requests' : 'My Permission Requests'}</h3>
+            {(dateFilter.from || dateFilter.to) && (
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Showing {visibleRequests.length} of {requests.length} request{requests.length !== 1 ? 's' : ''}
+              </p>
+            )}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
+            <DateFilterInput
+              label="From date"
+              value={dateFilter.from}
+              onChange={(value) => setDateFilter((current) => ({
+                from: value,
+                to: current.to && value && current.to < value ? value : current.to,
+              }))}
+            />
+            <DateFilterInput
+              label="To date"
+              value={dateFilter.to}
+              min={dateFilter.from}
+              onChange={(value) => setDateFilter((current) => ({
+                ...current,
+                to: value,
+              }))}
+            />
+            <button
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-default disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+              type="button"
+              disabled={!dateFilter.from && !dateFilter.to}
+              onClick={() => setDateFilter({ from: '', to: '' })}
+            >
+              <Filter size={15} />
+              Clear
+            </button>
+          </div>
         </div>
 
         {/* Desktop table */}
@@ -256,8 +321,8 @@ export default function PermissionRequestsPage({ user }) {
             <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-400 dark:bg-slate-950 dark:text-slate-500">
               <tr>
                 {(canViewAll
-                  ? ['Request ID', 'Employee', 'Type', 'Date', 'Time', 'Reason', 'Status', 'Submitted At', 'Actions']
-                  : ['Request ID', 'Type', 'Date', 'Time', 'Reason', 'Status', 'Submitted At', 'Actions']
+                  ? ['Request ID', 'Employee', 'Type', 'Period', 'Time', 'Reason', 'Status', 'Submitted At', 'Actions']
+                  : ['Request ID', 'Type', 'Period', 'Time', 'Reason', 'Status', 'Submitted At', 'Actions']
                 ).map((h) => (
                   <th key={h} className="px-5 py-3">{h}</th>
                 ))}
@@ -272,7 +337,7 @@ export default function PermissionRequestsPage({ user }) {
                 </tr>
               )}
               {visibleRequests.map((req) => {
-                const tc = typeConfig[req.type] || typeConfig['Leave Request']
+                const tc = typeConfig[req.type] || typeConfig['Early Leave']
                 const TypeIcon = tc.icon
                 const isOwnRequest = req.employeeId === employeeId
                 const canEditOwn = canSubmit && isOwnRequest && req.status === 'Pending'
@@ -290,7 +355,7 @@ export default function PermissionRequestsPage({ user }) {
                       <td className="px-5 py-4 text-slate-700 dark:text-slate-200">{req.employeeName || '-'}</td>
                     )}
                     <td className="px-5 py-4 text-slate-700 dark:text-slate-200">{req.type}</td>
-                    <td className="px-5 py-4 text-slate-700 dark:text-slate-200">{fmtDate(req.date)}</td>
+                    <td className="px-5 py-4 text-slate-700 dark:text-slate-200">{req.dateRange}</td>
                     <td className="px-5 py-4 text-slate-700 dark:text-slate-200">{req.time}</td>
                     <td className="max-w-[160px] px-5 py-4">
                       <span className="line-clamp-1 text-slate-600 dark:text-slate-300">{req.reason}</span>
@@ -321,46 +386,68 @@ export default function PermissionRequestsPage({ user }) {
         </div>
 
         {/* Mobile list */}
-        <div className="divide-y divide-slate-100 lg:hidden dark:divide-slate-800">
-          <div className="px-4 py-3">
-            <p className="text-sm font-bold text-slate-700 dark:text-slate-200">My Requests</p>
+        <div className="lg:hidden">
+          {/* History header */}
+          <div className="flex items-center gap-2.5 border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+            <div className="grid h-8 w-8 place-items-center rounded-lg bg-emerald-50 dark:bg-emerald-950/30">
+              <History size={15} className="text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-900 dark:text-white">
+                {canViewAll ? 'All Requests' : 'My Request History'}
+              </p>
+              <p className="text-[11px] text-slate-400">{visibleRequests.length} record{visibleRequests.length !== 1 ? 's' : ''}</p>
+            </div>
           </div>
-          {visibleRequests.map((req) => {
-            const tc = typeConfig[req.type] || typeConfig['Leave Request']
-            const TypeIcon = tc.icon
-            return (
-              <button
-                key={req.id}
-                className="flex w-full items-center gap-4 px-4 py-4 text-left transition hover:bg-slate-50 dark:hover:bg-slate-950"
-                onClick={() => setSelected(req)}
-                type="button"
-              >
-                <div className={clsx('grid h-11 w-11 shrink-0 place-items-center rounded-xl', tc.bg, tc.text)}>
-                  <TypeIcon size={20} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate font-bold text-slate-900 dark:text-white">{req.type}</p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">{req.id}</p>
+
+          {/* Empty state */}
+          {!loading && visibleRequests.length === 0 && (
+            <div className="flex flex-col items-center gap-2 px-5 py-10 text-center">
+              <ClipboardList size={32} className="text-slate-300 dark:text-slate-600" />
+              <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">No requests yet</p>
+              <p className="text-xs text-slate-400">Your permission request history will appear here.</p>
+            </div>
+          )}
+
+          {/* Request list */}
+          <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            {visibleRequests.map((req) => {
+              const tc = typeConfig[req.type] || typeConfig['Early Leave']
+              const TypeIcon = tc.icon
+              return (
+                <button
+                  key={req.id}
+                  className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition active:bg-slate-50 dark:active:bg-slate-950"
+                  onClick={() => setSelected(req)}
+                  type="button"
+                >
+                  <div className={clsx('grid h-10 w-10 shrink-0 place-items-center rounded-xl', tc.bg, tc.text)}>
+                    <TypeIcon size={18} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-sm font-bold text-slate-900 dark:text-white">{req.type}</p>
+                      <StatusBadge status={req.status} />
                     </div>
-                    <StatusBadge status={req.status} />
+                    <div className="mt-1 flex items-center gap-3 text-xs text-slate-400">
+                      {canViewAll && req.employeeName && (
+                        <span className="truncate font-medium text-slate-500 dark:text-slate-300">{req.employeeName}</span>
+                      )}
+                      <span className="flex items-center gap-1">
+                        <CalendarDays size={10} />
+                        {req.dateRange}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Clock size={10} />
+                        {req.submittedAt}
+                      </span>
+                    </div>
                   </div>
-                  <div className="mt-2 flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
-                    <span className="flex items-center gap-1">
-                      <CalendarDays size={11} />
-                      {fmtDate(req.date)}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Clock size={11} />
-                      {req.time}
-                    </span>
-                  </div>
-                </div>
-                <ChevronRight size={16} className="shrink-0 text-slate-300" />
-              </button>
-            )
-          })}
+                  <ChevronRight size={15} className="shrink-0 text-slate-300 dark:text-slate-600" />
+                </button>
+              )
+            })}
+          </div>
         </div>
 
         {/* Pagination */}
@@ -369,17 +456,18 @@ export default function PermissionRequestsPage({ user }) {
             Showing 1 to {visibleRequests.length} of {visibleRequests.length} requests
           </p>
           <div className="flex items-center gap-1">
-            <PageBtn label="‹" disabled />
+            <PageBtn label="â€¹" disabled />
             <PageBtn label="1" active />
-            <PageBtn label="›" disabled />
+            <PageBtn label="â€º" disabled />
           </div>
         </div>
       </div>
 
+
       {canSubmit && (
         <button
-          className="fixed bottom-24 right-5 z-30 grid h-14 w-14 place-items-center rounded-full bg-emerald-600 text-white shadow-xl shadow-emerald-900/25 transition hover:bg-emerald-700 lg:hidden"
-          onClick={() => { setEditingId(null); resetForm(); setShowForm(true) }}
+          className="fixed bottom-24 right-5 z-30 grid h-14 w-14 place-items-center rounded-full bg-emerald-600 text-white shadow-xl shadow-emerald-900/25 transition active:scale-95 sm:hidden"
+          onClick={() => openRequestForm('Early Leave')}
           type="button"
           aria-label="New permission request"
         >
@@ -477,7 +565,34 @@ function PageBtn({ label, active = false, disabled = false }) {
   )
 }
 
+function DateFilterInput({ label, value, min, onChange }) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</span>
+      <input
+        className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+        type="date"
+        value={value}
+        min={min}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
+  )
+}
+
 function RequestFormModal({ form, setForm, isEdit = false, onClose, onSubmit }) {
+  const meta = requestTypeMeta(form.type)
+
+  const setType = (type) => {
+    const next = newRequestForm(type)
+    setForm({
+      ...next,
+      reason: form.reason,
+      date: form.date,
+      dateEnd: form.dateEnd || form.date,
+    })
+  }
+
   return (
     <div className="fixed inset-0 z-50 grid place-items-end bg-slate-950/50 backdrop-blur-sm sm:place-items-center sm:p-4">
       <form
@@ -495,27 +610,59 @@ function RequestFormModal({ form, setForm, isEdit = false, onClose, onSubmit }) 
         </div>
 
         <div className="grid gap-4 p-5 sm:grid-cols-2">
-          <div>
-            <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-200">Request Type</label>
-            <select className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
-              {requestTypes.map((t) => <option key={t}>{t}</option>)}
-            </select>
+          <div className="sm:col-span-2">
+            <label className="mb-2 block text-sm font-semibold text-slate-700 dark:text-slate-200">Request Type</label>
+            <RequestTypePicker value={form.type} onChange={setType} />
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{meta.desc}</p>
           </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-200">Date</label>
-            <input className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} required />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-200">Time (optional)</label>
-            <input className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white" type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-200">Current Location (optional)</label>
-            <input className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white" placeholder="Lat, Lng" value={form.gps} onChange={(e) => setForm({ ...form, gps: e.target.value })} />
-          </div>
+          {meta.showDateRange ? (
+            <>
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-200">From date</label>
+                <input
+                  className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                  type="date"
+                  value={form.date}
+                  onChange={(e) => {
+                    const date = e.target.value
+                    setForm((f) => ({ ...f, date, dateEnd: f.dateEnd && f.dateEnd < date ? date : f.dateEnd }))
+                  }}
+                  required
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-200">To date</label>
+                <input
+                  className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                  type="date"
+                  value={form.dateEnd || form.date}
+                  min={form.date}
+                  onChange={(e) => setForm((f) => ({ ...f, dateEnd: e.target.value }))}
+                  required
+                />
+              </div>
+            </>
+          ) : (
+            <div>
+              <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-200">Date</label>
+              <input
+                className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                type="date"
+                value={form.date}
+                onChange={(e) => setForm((f) => ({ ...f, date: e.target.value, dateEnd: e.target.value }))}
+                required
+              />
+            </div>
+          )}
+          {meta.showTime && (
+            <div>
+              <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-200">Time</label>
+              <input className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white" type="time" value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} />
+            </div>
+          )}
           <div className="sm:col-span-2">
             <label className="mb-1.5 block text-sm font-semibold text-slate-700 dark:text-slate-200">Reason</label>
-            <textarea className="min-h-28 w-full rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} placeholder="Explain why you need this permission..." required />
+            <textarea className="min-h-28 w-full rounded-lg border border-slate-200 bg-white px-3 py-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white" value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} placeholder={meta.reasonPlaceholder} required />
           </div>
           <label className="flex cursor-pointer items-center justify-between rounded-xl border border-slate-200 p-4 dark:border-slate-800 sm:col-span-2">
             <div>
@@ -536,7 +683,7 @@ function RequestFormModal({ form, setForm, isEdit = false, onClose, onSubmit }) 
 }
 
 function RequestDetailModal({ request, canApprove, onClose, onStatus }) {
-  const tc = typeConfig[request.type] || typeConfig['Leave Request']
+  const tc = typeConfig[request.type] || typeConfig['Early Leave']
   const TypeIcon = tc.icon
 
   return (
@@ -562,9 +709,9 @@ function RequestDetailModal({ request, canApprove, onClose, onStatus }) {
 
         <div className="space-y-4 p-5">
           <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Date</p>
-              <p className="mt-1 font-semibold text-slate-900 dark:text-white">{fmtDate(request.date)}</p>
+            <div className="sm:col-span-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Period</p>
+              <p className="mt-1 font-semibold text-slate-900 dark:text-white">{request.dateRange}</p>
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Time</p>
