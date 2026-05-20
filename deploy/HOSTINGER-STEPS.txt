@@ -2,38 +2,59 @@
 ==================================================
 
 1. Upload & extract
-   - hPanel -> File Manager -> your API folder (e.g. domains/api.yourdomain.com)
-   - Upload backend-hostinger-*.zip and extract so "backend" files match your layout
-   - Document root must point to: backend/public
+   - hPanel -> File Manager -> domains/YOUR-SITE.hostingersite.com/public_html
+   - Upload backend-hostinger-*.zip and extract
+   - You must see: public_html/.env, public_html/backend/, public_html/deploy/
+   - WRONG: files named backend/app with backslashes in names - delete all, use latest zip
 
-2. .env on server (do NOT upload .env from your PC zip - create/edit on server)
-   APP_ENV=production
-   APP_DEBUG=false
-   APP_URL=https://api.YOUR-DOMAIN.com
-   APP_KEY=... (same as local or run: php artisan key:generate)
+   CRITICAL - Document root (hPanel -> Websites -> Manage -> Advanced):
+   Set to: public_html/backend/public
+   Full path example:
+   /home/u623004828/domains/lightgoldenrodyellow-mantis-338653.hostingersite.com/public_html/backend/public
+   Test in browser: https://YOUR-SITE.hostingersite.com/up  (must NOT be Hostinger "Page Does Not Exist")
 
-   DB_HOST=...
-   DB_DATABASE=...
-   DB_USERNAME=...
-   DB_PASSWORD=...
+   If hPanel will NOT let you change document root, use workaround (SSH):
+   cd ~/domains/YOUR-SITE.hostingersite.com/public_html
+   mv index.html index.html.bak 2>/dev/null || true
+   mv default.php default.php.bak 2>/dev/null || true
+   cp deploy/public_html.index.php index.php
+   cp deploy/public_html.htaccess .htaccess
+   Then test /up again.
 
-   ATTENDANCE_IMAGE_DISK=public
+2. .env on server
+   - Copy deploy/.env.hostinger to public_html/.env (one folder ABOVE backend/)
+   - Edit APP_URL (main domain, not api. subdomain unless SSL is fixed)
+   - Images use Cloudflare R2 (R2_* vars in .env.hostinger)
 
-   Place .env one folder ABOVE backend/ (project root), OR inside backend/ if you adjust bootstrap.
-
-3. SSH or Hostinger Terminal (inside backend folder):
+3. SSH (inside backend folder):
+   cd ~/domains/YOUR-SITE.hostingersite.com/public_html/backend
    composer install --no-dev --optimize-autoloader
    php artisan storage:link
    php artisan migrate --force
+   php artisan config:clear
    php artisan config:cache
    php artisan route:cache
 
 4. Permissions (if 500 errors):
    chmod -R 775 storage bootstrap/cache
 
-5. Vercel frontend env:
-   VITE_API_URL=https://api.YOUR-DOMAIN.com/api
+5. Vercel frontend env (main domain, not api. until SSL is fixed):
+   VITE_API_URL=https://YOUR-SITE.hostingersite.com/api
    Then redeploy Vercel.
+
+6. Login (seeded users in DB):
+   superadmin@shadow.com / SuperAdmin@123
+   admin@shadow.com / Admin@123
+
+8. Per-employee private Telegram (after migrate):
+   Each employee: open company bot -> Start -> paste Chat ID in Profile -> Save
+   php artisan migrate --force  (adds employees.telegram_chat_id)
+
+7. Test API (SSH):
+   curl -sS -w "\nHTTP:%{http_code}\n" "https://YOUR-SITE.hostingersite.com/up"
+   curl -sS -X POST "https://YOUR-SITE.hostingersite.com/api/auth/login" \
+     -H "Content-Type: application/json" -H "Accept: application/json" \
+     -d '{"username":"superadmin@shadow.com","password":"SuperAdmin@123"}'
 
 Updates later
 -------------

@@ -110,6 +110,30 @@ const LATE_ITEMS = [
   ['telegram_late_include_late_minutes', 'Include Late Minutes'],
 ]
 
+const GROUP_DESTINATIONS = [
+  {
+    event_key: 'daily_attendance',
+    name: 'Daily Attendance Group',
+    title: 'Daily Attendance',
+    description: 'Check-in and check-out messages for the attendance group.',
+    placeholder: '-1001111111111',
+  },
+  {
+    event_key: 'permission_request',
+    name: 'Permission Requests Group',
+    title: 'Permission Request',
+    description: 'New request and approval/rejection messages for the permission group.',
+    placeholder: '-1002222222222',
+  },
+  {
+    event_key: 'late_attendance',
+    name: 'Late Attendance Group',
+    title: 'Late Attendance',
+    description: 'Late check-in alerts for the late attendance group or topic.',
+    placeholder: '-1003333333333',
+  },
+]
+
 function applyTemplate(template) {
   return String(template || '').replace(/\{[a-z_]+\}/g, (match) => SAMPLE[match.slice(1, -1)] ?? match)
 }
@@ -121,10 +145,26 @@ function mapTemplates(rows = []) {
   }, {})
 }
 
+function mapDestinations(rows = []) {
+  return GROUP_DESTINATIONS.reduce((acc, item) => {
+    const row = rows.find((dest) => dest.event_key === item.event_key) || {}
+    acc[item.event_key] = {
+      ...item,
+      ...row,
+      name: row.name || item.name,
+      chat_id: row.chat_id || '',
+      message_thread_id: row.message_thread_id || '',
+      enabled: Boolean(row.id ? row.enabled : false),
+    }
+    return acc
+  }, {})
+}
+
 export default function TelegramNotificationSettings({ notify }) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
+  const [testingDestination, setTestingDestination] = useState(null)
   const [showToken, setShowToken] = useState(false)
   const [settings, setSettings] = useState({
     enabled: true,
@@ -136,6 +176,7 @@ export default function TelegramNotificationSettings({ notify }) {
   })
   const [toggles, setToggles] = useState({})
   const [templates, setTemplates] = useState({})
+  const [destinations, setDestinations] = useState({})
   const [variables, setVariables] = useState(FALLBACK_VARIABLES)
   const [activeTemplate, setActiveTemplate] = useState('check_in_success')
   const [logs, setLogs] = useState([])
@@ -149,10 +190,14 @@ export default function TelegramNotificationSettings({ notify }) {
   const loadData = async () => {
     setLoading(true)
     try {
-      const res = await api.get('/telegram-notifications')
+      const [res, destinationRes] = await Promise.all([
+        api.get('/telegram-notifications'),
+        api.get('/telegram-destinations'),
+      ])
       setSettings((current) => ({ ...current, ...(res.data.settings || {}) }))
       setToggles(res.data.toggles || {})
       setTemplates(mapTemplates(res.data.templates || []))
+      setDestinations(mapDestinations(destinationRes.data || []))
       setVariables(res.data.variables?.length ? res.data.variables : FALLBACK_VARIABLES)
       setLogs(res.data.logs || [])
     } catch {
@@ -168,6 +213,15 @@ export default function TelegramNotificationSettings({ notify }) {
 
   const setSetting = (key, value) => setSettings((current) => ({ ...current, [key]: value }))
   const toggle = (key) => setToggles((current) => ({ ...current, [key]: !current[key] }))
+  const setDestinationField = (eventKey, key, value) => {
+    setDestinations((current) => ({
+      ...current,
+      [eventKey]: {
+        ...current[eventKey],
+        [key]: value,
+      },
+    }))
+  }
   const setTemplateField = (key, value) => {
     setTemplates((current) => ({
       ...current,
@@ -188,6 +242,22 @@ export default function TelegramNotificationSettings({ notify }) {
         webhook_url: settings.webhook_url || '',
       })
       await api.put('/telegram-notifications/toggles', { toggles })
+      await Promise.all(GROUP_DESTINATIONS.map(async ({ event_key }) => {
+        const destination = destinations[event_key]
+        if (!destination) return null
+
+        const payload = {
+          name: destination.name || GROUP_DESTINATIONS.find((item) => item.event_key === event_key)?.name,
+          event_key,
+          chat_id: destination.chat_id || '',
+          message_thread_id: destination.message_thread_id || null,
+          enabled: Boolean(destination.enabled && destination.chat_id),
+        }
+
+        return destination.id
+          ? api.put(`/telegram-destinations/${destination.id}`, payload)
+          : api.post('/telegram-destinations', payload)
+      }))
       if (template?.id) {
         const updated = await api.put(`/telegram-notifications/templates/${template.id}`, {
           message_template: template.message_template || '',
@@ -236,6 +306,24 @@ export default function TelegramNotificationSettings({ notify }) {
       showNotice(ex.response?.data?.message || 'Could not send test notification.', false)
     } finally {
       setTesting(false)
+    }
+  }
+
+  const testDestination = async (eventKey) => {
+    const destination = destinations[eventKey]
+    if (!destination?.id) {
+      showNotice('Save this group destination before testing it.', false)
+      return
+    }
+
+    setTestingDestination(eventKey)
+    try {
+      const res = await api.post(`/telegram-destinations/${destination.id}/test`)
+      showNotice(res.data.message || 'Test message sent successfully.')
+    } catch (ex) {
+      showNotice(ex.response?.data?.message || 'Could not send destination test message.', false)
+    } finally {
+      setTestingDestination(null)
     }
   }
 
@@ -312,7 +400,58 @@ export default function TelegramNotificationSettings({ notify }) {
               </div>
               <div className="flex flex-wrap gap-3">
                 <SecondaryButton icon={Wifi} onClick={testConnection} loading={testing}>Test Connection</SecondaryButton>
-                <PrimaryButton icon={Save} onClick={saveAll} loading={saving}>Save Settings</PrimaryButton>
+              </div>
+            </SettingsSection>
+
+            <SettingsSection icon={Send} title="Group Destinations" description="Set a different Telegram group chat ID for each notification type.">
+              <div className="grid gap-3">
+                {GROUP_DESTINATIONS.map((item) => {
+                  const destination = destinations[item.event_key] || item
+                  const enabled = Boolean(destination.enabled)
+
+                  return (
+                    <div key={item.event_key} className="rounded-lg border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-700 dark:bg-slate-950/50">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <p className="text-sm font-bold text-slate-900 dark:text-white">{item.title}</p>
+                          <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">{item.description}</p>
+                        </div>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={enabled}
+                          onClick={() => setDestinationField(item.event_key, 'enabled', !enabled)}
+                          className={clsx('relative h-7 w-12 shrink-0 rounded-full transition-colors', enabled ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600')}
+                        >
+                          <span className={clsx('absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all', enabled ? 'left-6' : 'left-1')} />
+                        </button>
+                      </div>
+                      <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_150px_auto]">
+                        <Field label="Group Chat ID">
+                          <input
+                            className={clsx(inputCls, 'font-mono')}
+                            value={destination.chat_id || ''}
+                            onChange={(event) => setDestinationField(item.event_key, 'chat_id', event.target.value)}
+                            placeholder={item.placeholder}
+                          />
+                        </Field>
+                        <Field label="Topic ID">
+                          <input
+                            className={clsx(inputCls, 'font-mono')}
+                            value={destination.message_thread_id || ''}
+                            onChange={(event) => setDestinationField(item.event_key, 'message_thread_id', event.target.value)}
+                            placeholder="Optional"
+                            type="number"
+                            min="1"
+                          />
+                        </Field>
+                        <div className="flex items-end">
+                          <SecondaryButton icon={Wifi} onClick={() => testDestination(item.event_key)} loading={testingDestination === item.event_key}>Test</SecondaryButton>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </SettingsSection>
 

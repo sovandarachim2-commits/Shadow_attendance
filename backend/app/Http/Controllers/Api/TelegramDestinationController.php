@@ -149,12 +149,20 @@ class TelegramDestinationController extends Controller
 
     private function validated(Request $request): array
     {
-        return $request->validate([
+        $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
             'event_key' => ['required', 'string', Rule::in(self::EVENTS)],
-            'chat_id' => ['required', 'string', 'max:120'],
+            'chat_id' => ['nullable', 'string', 'max:120'],
             'message_thread_id' => ['nullable', 'integer', 'min:1'],
             'enabled' => ['required', 'boolean'],
         ]);
+
+        $data['chat_id'] = trim((string) ($data['chat_id'] ?? ''));
+
+        if ($data['enabled'] && $data['chat_id'] === '') {
+            abort(422, 'Chat ID is required when a Telegram destination is enabled.');
+        }
+
+        return $data;
     }
 }

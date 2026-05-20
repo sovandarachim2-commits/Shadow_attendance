@@ -120,6 +120,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Notifications
     Route::get('/notifications', [NotificationController::class, 'index'])
         ->middleware('permission:notifications.view,notifications.manage');
+    Route::post('/notifications', [NotificationController::class, 'store'])
+        ->middleware('permission:notifications.manage');
     Route::patch('/notifications/{notification}/read', [NotificationController::class, 'markRead'])
         ->middleware('permission:notifications.view,notifications.manage');
 

@@ -29,6 +29,7 @@ class ProfileController extends Controller
             'first_name'                => ['nullable', 'string', 'max:100'],
             'last_name'                 => ['nullable', 'string', 'max:100'],
             'phone'                     => ['nullable', 'string', 'max:40'],
+            'telegram_chat_id'          => ['nullable', 'string', 'max:32', 'regex:/^-?\d+$/'],
             'address'                   => ['nullable', 'string', 'max:1000'],
             'photo'                     => ['nullable', 'image', 'max:4096'],
             'new_password'              => ['nullable', 'string', 'min:8', 'max:255', 'confirmed'],
@@ -42,7 +43,7 @@ class ProfileController extends Controller
         }
 
         $emp = [];
-        foreach (['first_name', 'last_name', 'phone', 'address'] as $field) {
+        foreach (['first_name', 'last_name', 'phone', 'telegram_chat_id', 'address'] as $field) {
             if (array_key_exists($field, $data)) {
                 $emp[$field] = $data[$field];
             }

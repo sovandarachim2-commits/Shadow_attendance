@@ -66,15 +66,25 @@ class EmployeeBonusController extends Controller
                 $amount = number_format((float) $employeeBonus->bonus_amount, 2);
                 $month = $employeeBonus->month->format('M Y');
 
-                $telegram->send(
-                    "🎉 <b>ប្រាក់លើកទឹកចិត្តបានអនុម័ត</b>\n\n"
+                $bonusMessage = "🎉 <b>ប្រាក់លើកទឹកចិត្តបានអនុម័ត</b>\n\n"
                     ."👤 បុគ្គលិក: {$name}\n"
                     ."💰 ប្រភេទប្រាក់លើកទឹកចិត្ត: {$typeLabel}\n"
                     ."💵 ចំនួនទឹកប្រាក់: \${$amount}\n"
                     ."📅 ខែ: {$month}\n\n"
-                    .'ស្ថានភាព: បានអនុម័ត',
-                    'bonus_approved',
-                );
+                    .'ស្ថានភាព: បានអនុម័ត';
+
+                $telegram->send($bonusMessage, 'bonus_approved');
+
+                if ($settings->notify_employee) {
+                    $telegram->sendToEmployee(
+                        $employee,
+                        "🎉 <b>ប្រាក់លើកទឹកចិត្តរបស់អ្នកបានអនុម័ត</b>\n\n"
+                        ."💰 {$typeLabel}\n"
+                        ."💵 \${$amount}\n"
+                        ."📅 {$month}",
+                        'bonus_approved_private',
+                    );
+                }
             }
         }
 

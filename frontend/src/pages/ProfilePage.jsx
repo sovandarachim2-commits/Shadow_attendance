@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import {
   Activity, BriefcaseBusiness, Building2, CalendarCheck, Camera,
   CheckCircle2, ChevronLeft, Clock, Copy, Download, Eye, EyeOff, FileText, KeyRound,
-  LocateFixed, LogOut, Mail, MapPinned, Pencil, Phone,
+  Bell, LocateFixed, LogOut, Mail, MapPinned, Pencil, Phone,
   ShieldCheck, UserMinus, UserRound, Users, X,
 } from 'lucide-react'
 import clsx from 'clsx'
@@ -515,6 +515,7 @@ function EditProfileModal({ user, employee, onClose, onSaved }) {
   const [form, setForm] = useState({
     full_name: employeeFullName(employee, user.name),
     phone:      employee?.phone      || '',
+    telegram_chat_id: employee?.telegram_chat_id || '',
     address:    employee?.address    || '',
     new_password:              '',
     new_password_confirmation: '',
@@ -542,6 +543,7 @@ function EditProfileModal({ user, employee, onClose, onSaved }) {
       if (photoFile) fd.append('photo', photoFile)
       if (form.full_name.trim()) fd.append('full_name', form.full_name.trim())
       if (form.phone) fd.append('phone', form.phone)
+      fd.append('telegram_chat_id', form.telegram_chat_id.trim())
       if (form.address) fd.append('address', form.address)
       if (form.new_password) {
         fd.append('new_password', form.new_password)
@@ -626,6 +628,8 @@ function EditProfileModal({ user, employee, onClose, onSaved }) {
           <div className="overflow-hidden rounded-2xl bg-white shadow-sm dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800">
             <EditRow icon={UserRound}  label="Full Name"     value={form.full_name} onChange={set('full_name')} placeholder="Your full name" />
             <EditRow icon={Phone}      label="Phone Number"  value={form.phone}      onChange={set('phone')}      placeholder="+855 xx xxx xxx" type="tel" />
+            <EditRow icon={Bell}      label="Telegram Chat ID" value={form.telegram_chat_id} onChange={set('telegram_chat_id')} placeholder="e.g. 1793795246" type="text" />
+            <p className="px-4 pb-3 text-xs text-slate-500 dark:text-slate-400">Open your company bot in Telegram, tap <strong>Start</strong>, then paste your Chat ID here for private alerts.</p>
             <EditRow icon={Mail}       label="Email Address" value={user.email}      readOnly />
             <EditRow icon={MapPinned}  label="Address"       value={form.address}    onChange={set('address')}    placeholder="Your address" multiline />
           </div>

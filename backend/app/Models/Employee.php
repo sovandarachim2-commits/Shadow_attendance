@@ -11,7 +11,7 @@ class Employee extends Model
 
     protected $fillable = [
         'department_id', 'position_id', 'branch_id', 'employee_code', 'first_name', 'last_name',
-        'phone', 'address', 'photo_path', 'hire_date', 'employment_type', 'status', 'face_template_status',
+        'phone', 'telegram_chat_id', 'address', 'photo_path', 'hire_date', 'employment_type', 'status', 'face_template_status',
         'require_face_verification', 'require_gps',
     ];
 

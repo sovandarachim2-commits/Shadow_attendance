@@ -162,14 +162,20 @@ class PermissionRequestController extends Controller
             ],
         ]);
 
-        $telegram->send(
-            "✅ <b>សំណើសុំអនុញ្ញាត {$statusKhmer}</b>\n".
+        $statusMessage = "✅ <b>សំណើសុំអនុញ្ញាត {$statusKhmer}</b>\n".
             "<b>លេខសំណើ:</b> {$updated->request_code}\n".
             "<b>បុគ្គលិក:</b> {$updated->employee->first_name} {$updated->employee->last_name}\n".
             "<b>ស្ថានភាព:</b> {$statusKhmer}\n".
-            "<b>ពិនិត្យដោយ:</b> {$adminName}",
-            self::EVENT_KEY,
-        );
+            "<b>ពិនិត្យដោយ:</b> {$adminName}";
+
+        $telegram->send($statusMessage, self::EVENT_KEY);
+
+        $privateMessage = "📋 <b>សំណើរបស់អ្នក {$statusKhmer}</b>\n"
+            ."<b>លេខសំណើ:</b> {$updated->request_code}\n"
+            ."<b>ប្រភេទ:</b> {$updated->type}\n"
+            ."<b>ស្ថានភាព:</b> {$statusKhmer}";
+
+        $telegram->sendToEmployee($updated->employee, $privateMessage, 'permission_status_private');
 
         return $updated;
     }

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Employee;
 use App\Models\SystemSetting;
 use App\Models\TelegramDestination;
 use App\Models\TelegramLog;
@@ -90,6 +91,39 @@ class TelegramNotificationService
         }
 
         return $this->sendPayload($token, $destination->chat_id, $message, $destination->message_thread_id);
+    }
+
+    /** Send a private DM to one employee (uses telegram_chat_id on their profile). */
+    public function sendToEmployee(?Employee $employee, string $message, string $messageType = 'employee_private'): array
+    {
+        if (! $employee) {
+            return ['ok' => false, 'description' => 'No employee linked.'];
+        }
+
+        $chatId = trim((string) ($employee->telegram_chat_id ?? ''));
+
+        if ($chatId === '') {
+            return ['ok' => false, 'description' => 'Telegram Chat ID is not set on this employee profile.'];
+        }
+
+        $token = $this->getToken();
+
+        if (! $token || ! $this->alertEnabled('telegram_bot_enabled', true)) {
+            return ['ok' => false, 'description' => 'Telegram bot is not configured or disabled.'];
+        }
+
+        $result = $this->sendPayload($token, $chatId, $message);
+        $sent = $result['ok'] ? now() : null;
+
+        TelegramLog::create([
+            'employee_id' => $employee->id,
+            'message_type' => $messageType,
+            'telegram_message' => $message,
+            'status' => $result['ok'] ? 'sent' : 'failed',
+            'sent_at' => $sent,
+        ]);
+
+        return $result;
     }
 
     public function sendTestMessage(string $message, string $messageType = 'test'): array

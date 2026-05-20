@@ -9,13 +9,54 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Linux/Hostinger needs forward slashes in zip paths (Windows backslashes become literal filenames).
+function New-LinuxZipFromDirectory {
+    param(
+        [Parameter(Mandatory)][string]$SourceDirectory,
+        [Parameter(Mandatory)][string]$DestinationPath
+    )
+
+    Add-Type -AssemblyName System.IO.Compression
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+    $sourceFull = [System.IO.Path]::GetFullPath($SourceDirectory)
+    if (-not $sourceFull.EndsWith('\')) {
+        $sourceFull += '\'
+    }
+    if (Test-Path $DestinationPath) {
+        Remove-Item -LiteralPath $DestinationPath -Force
+    }
+
+    $zip = [System.IO.Compression.ZipFile]::Open(
+        $DestinationPath,
+        [System.IO.Compression.ZipArchiveMode]::Create
+    )
+
+    try {
+        foreach ($file in Get-ChildItem -LiteralPath $sourceFull -Recurse -File) {
+            $fileFull = [System.IO.Path]::GetFullPath($file.FullName)
+            $relative = $fileFull.Substring($sourceFull.Length)
+            $entryName = ($relative -replace '\\', '/')
+            [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
+                $zip,
+                $file.FullName,
+                $entryName,
+                [System.IO.Compression.CompressionLevel]::Optimal
+            )
+        }
+    } finally {
+        $zip.Dispose()
+    }
+}
+
 $root = $PSScriptRoot
 $backend = Join-Path $root "backend"
 $deployDir = Join-Path $root "deploy"
 $stamp = Get-Date -Format "yyyyMMdd-HHmm"
 $zipName = "backend-hostinger-$stamp.zip"
 $zipPath = Join-Path $deployDir $zipName
-$staging = Join-Path $env:TEMP "shadow-attendance-backend-$stamp"
+$wrapRoot = Join-Path $env:TEMP ("attendance-hostinger-pack-" + $stamp)
+$staging = Join-Path $wrapRoot "backend"
 
 if (-not (Test-Path $backend)) {
     Write-Host "backend folder not found: $backend" -ForegroundColor Red
@@ -26,8 +67,8 @@ Write-Host ""
 Write-Host "Shadow Attendance - Hostinger deploy package" -ForegroundColor Cyan
 Write-Host ""
 
-if (Test-Path $staging) {
-    Remove-Item -LiteralPath $staging -Recurse -Force
+if (Test-Path $wrapRoot) {
+    Remove-Item -LiteralPath $wrapRoot -Recurse -Force
 }
 
 New-Item -ItemType Directory -Path $staging -Force | Out-Null
@@ -65,74 +106,58 @@ $logFiles = Join-Path $staging "storage\logs"
 Get-ChildItem -Path $logFiles -Filter "*.log" -ErrorAction SilentlyContinue |
     Remove-Item -Force -ErrorAction SilentlyContinue
 
+# Include all deploy/ helpers next to backend/ inside the zip
+$deployInZip = Join-Path $wrapRoot "deploy"
+New-Item -ItemType Directory -Path $deployInZip -Force | Out-Null
+$deployFiles = @(
+    ".env.hostinger",
+    "HOSTINGER-STEPS.txt",
+    "public_html.index.php",
+    "public_html.htaccess"
+)
+foreach ($name in $deployFiles) {
+    $src = Join-Path $deployDir $name
+    if (Test-Path $src) {
+        Copy-Item -LiteralPath $src -Destination (Join-Path $deployInZip $name) -Force
+    }
+}
+$stepsPath = Join-Path $deployDir "HOSTINGER-STEPS.txt"
+$envTemplate = Join-Path $deployDir ".env.hostinger"
+
 if (Test-Path $zipPath) {
     Remove-Item -LiteralPath $zipPath -Force
 }
 
-Write-Host "Creating zip..." -ForegroundColor Gray
-Compress-Archive -Path (Join-Path $staging "*") -DestinationPath $zipPath -CompressionLevel Optimal
+Write-Host "Creating zip (Linux paths: backend/ + deploy/)..." -ForegroundColor Gray
+New-LinuxZipFromDirectory -SourceDirectory $wrapRoot -DestinationPath $zipPath
 
-Remove-Item -LiteralPath $staging -Recurse -Force
+Remove-Item -LiteralPath $wrapRoot -Recurse -Force
+
+# Verify zip uses forward slashes only (required for Hostinger/Linux)
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$verify = [System.IO.Compression.ZipFile]::OpenRead($zipPath)
+$topFolders = $verify.Entries |
+    Where-Object { $_.FullName -match '/' } |
+    ForEach-Object { ($_.FullName -split '/')[0] } |
+    Sort-Object -Unique
+$backslashEntries = @($verify.Entries | Where-Object { $_.FullName.IndexOf([char]92) -ge 0 })
+$verify.Dispose()
+Write-Host "Zip root folders: $($topFolders -join ', ')" -ForegroundColor DarkGray
+if ($backslashEntries.Count -gt 0) {
+    Write-Host "WARNING: zip still has backslash paths - Hostinger extract will break." -ForegroundColor Red
+    exit 1
+}
+Write-Host "Zip paths OK for Linux (forward slashes only)." -ForegroundColor DarkGray
 
 $sizeMb = [math]::Round((Get-Item $zipPath).Length / 1MB, 2)
 
-$stepsPath = Join-Path $deployDir "HOSTINGER-STEPS.txt"
-@'
-Hostinger backend deploy (after uploading the zip)
-==================================================
-
-1. Upload & extract
-   - hPanel -> File Manager -> your API folder (e.g. domains/api.yourdomain.com)
-   - Upload backend-hostinger-*.zip and extract so "backend" files match your layout
-   - Document root must point to: backend/public
-
-2. .env on server (do NOT upload .env from your PC zip - create/edit on server)
-   APP_ENV=production
-   APP_DEBUG=false
-   APP_URL=https://api.YOUR-DOMAIN.com
-   APP_KEY=... (same as local or run: php artisan key:generate)
-
-   DB_HOST=...
-   DB_DATABASE=...
-   DB_USERNAME=...
-   DB_PASSWORD=...
-
-   ATTENDANCE_IMAGE_DISK=public
-
-   Place .env one folder ABOVE backend/ (project root), OR inside backend/ if you adjust bootstrap.
-
-3. SSH or Hostinger Terminal (inside backend folder):
-   composer install --no-dev --optimize-autoloader
-   php artisan storage:link
-   php artisan migrate --force
-   php artisan config:cache
-   php artisan route:cache
-
-4. Permissions (if 500 errors):
-   chmod -R 775 storage bootstrap/cache
-
-5. Vercel frontend env:
-   VITE_API_URL=https://api.YOUR-DOMAIN.com/api
-   Then redeploy Vercel.
-
-Updates later
--------------
-- Change code locally -> git push (Vercel auto-updates frontend)
-- Run .\deploy-hostinger.ps1 again -> upload new zip -> SSH:
-    composer install --no-dev
-    php artisan migrate --force
-    php artisan config:cache
-    php artisan route:cache
-'@ | Set-Content -LiteralPath $stepsPath -Encoding UTF8
-
 Write-Host ""
 Write-Host "Done." -ForegroundColor Green
-Write-Host "  Zip:   $zipPath ($sizeMb MB)" -ForegroundColor White
+Write-Host ('  Zip:   ' + $zipPath + ' (' + $sizeMb + ' MB)') -ForegroundColor White
 Write-Host "  Steps: $stepsPath" -ForegroundColor White
 Write-Host ""
-$envTemplate = Join-Path $deployDir ".env.hostinger"
 if (Test-Path $envTemplate) {
-    Write-Host "  Env:   $envTemplate  (copy to server as .env)" -ForegroundColor White
+    Write-Host "  Env:   also inside zip at deploy/.env.hostinger" -ForegroundColor White
 }
 
 Write-Host ""

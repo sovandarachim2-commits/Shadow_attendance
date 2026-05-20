@@ -15,6 +15,7 @@ export default function EmployeeModal({ employee, onClose, onSaved }) {
     employee_code: employee?.employee_code || '',
     full_name: [employee?.first_name, employee?.last_name].filter(Boolean).join(' '),
     phone: employee?.phone || '',
+    telegram_chat_id: employee?.telegram_chat_id || '',
     address: employee?.address || '',
     department_id: employee?.department_id || '',
     position_id: employee?.position_id || '',
@@ -166,6 +167,7 @@ export default function EmployeeModal({ employee, onClose, onSaved }) {
                 <div className="grid gap-4 md:grid-cols-2">
                   <EmployeeTextField icon={UserRound} label="Full Name" value={form.full_name} onChange={(value) => updateField('full_name', value)} placeholder="Enter full name" required />
                   <EmployeeTextField icon={Phone} label="Phone Number" value={form.phone} onChange={(value) => updateField('phone', value)} placeholder="Enter phone number" />
+                  <EmployeeTextField icon={Bell} label="Telegram Chat ID (private alerts)" value={form.telegram_chat_id} onChange={(value) => updateField('telegram_chat_id', value)} placeholder="e.g. 1793795246" />
                   <EmployeeTextField icon={Mail} label="Email Address" type="email" value={form.login_email} onChange={(value) => updateField('login_email', value)} placeholder="Enter email address" />
                   <EmployeeTextareaField icon={MapPinned} label="Address" value={form.address} onChange={(value) => updateField('address', value)} placeholder="Enter present address" />
                 </div>
