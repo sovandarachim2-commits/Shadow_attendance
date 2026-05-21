@@ -126,6 +126,54 @@ class TelegramNotificationService
         return $result;
     }
 
+    public function sendRaw(string $chatId, string $message, ?int $threadId = null): array
+    {
+        $token = $this->getToken();
+
+        if (! $token) {
+            return ['ok' => false, 'description' => 'TELEGRAM_BOT_TOKEN is not set.'];
+        }
+
+        return $this->sendPayload($token, $chatId, $message, $threadId);
+    }
+
+    public function sendPhotoRaw(string $chatId, string $photoUrl, string $caption, ?int $threadId = null): array
+    {
+        $token = $this->getToken();
+
+        if (! $token) {
+            return ['ok' => false, 'description' => 'TELEGRAM_BOT_TOKEN is not set.'];
+        }
+
+        try {
+            $payload = [
+                'chat_id'    => $chatId,
+                'photo'      => $photoUrl,
+                'caption'    => $caption,
+                'parse_mode' => 'HTML',
+            ];
+
+            if ($threadId) {
+                $payload['message_thread_id'] = $threadId;
+            }
+
+            $response = Http::withOptions(['proxy' => false])->timeout(15)->post("https://api.telegram.org/bot{$token}/sendPhoto", $payload);
+            $body     = $response->json();
+
+            if (! ($body['ok'] ?? false)) {
+                $desc = $body['description'] ?? 'Unknown Telegram error';
+                Log::warning('Telegram sendPhoto failed', ['chat_id' => $chatId, 'description' => $desc]);
+                // Fall back to text-only message
+                return $this->sendPayload($token, $chatId, $caption, $threadId);
+            }
+
+            return ['ok' => true];
+        } catch (\Throwable $e) {
+            Log::warning('Telegram sendPhoto exception', ['message' => $e->getMessage()]);
+            return $this->sendPayload($token, $chatId, $caption, $threadId);
+        }
+    }
+
     public function sendTestMessage(string $message, string $messageType = 'test'): array
     {
         $token = $this->getToken();

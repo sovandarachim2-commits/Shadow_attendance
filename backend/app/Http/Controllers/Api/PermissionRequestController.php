@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Notification;
 use App\Models\PermissionRequest;
+use App\Models\User;
 use App\Services\TelegramNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -100,6 +101,17 @@ class PermissionRequestController extends Controller
             self::EVENT_KEY,
         );
 
+        $this->sendPrivateAdminTelegram(
+            $telegram,
+            $this->buildAdminRequestPrivateMessage($record),
+        );
+
+        $telegram->sendToEmployee(
+            $employee,
+            $this->buildEmployeeRequestSubmittedMessage($record),
+            'permission_request_submitted_private',
+        );
+
         return $record;
     }
 
@@ -170,12 +182,11 @@ class PermissionRequestController extends Controller
 
         $telegram->send($statusMessage, self::EVENT_KEY);
 
-        $privateMessage = "📋 <b>សំណើរបស់អ្នក {$statusKhmer}</b>\n"
-            ."<b>លេខសំណើ:</b> {$updated->request_code}\n"
-            ."<b>ប្រភេទ:</b> {$updated->type}\n"
-            ."<b>ស្ថានភាព:</b> {$statusKhmer}";
-
-        $telegram->sendToEmployee($updated->employee, $privateMessage, 'permission_status_private');
+        $telegram->sendToEmployee(
+            $updated->employee,
+            $this->buildEmployeeStatusPrivateMessage($updated, $adminName),
+            'permission_status_private',
+        );
 
         return $updated;
     }
@@ -187,6 +198,64 @@ class PermissionRequestController extends Controller
         $permissionRequest->delete();
 
         return response()->noContent();
+    }
+
+    private function sendPrivateAdminTelegram(TelegramNotificationService $telegram, string $message): void
+    {
+        User::query()
+            ->with(['role', 'employee'])
+            ->where('status', 'active')
+            ->whereHas('role', fn ($query) => $query->whereIn('slug', ['super_admin', 'admin']))
+            ->whereHas('employee', fn ($query) => $query->whereNotNull('telegram_chat_id')->where('telegram_chat_id', '!=', ''))
+            ->get()
+            ->each(fn (User $user) => $telegram->sendToEmployee($user->employee, $message, 'permission_request_admin_private'));
+    }
+
+    private function buildAdminRequestPrivateMessage(PermissionRequest $record): string
+    {
+        $employee = $record->employee;
+
+        return "✅ <b>បានដាក់សំណើសុំអនុញ្ញាត</b>\n\n"
+            ."📄 <b>លេខសំណើ:</b> {$record->request_code}\n"
+            ."<b>👤 បុគ្គលិក:</b> {$employee->first_name} {$employee->last_name}\n"
+            ."📌 <b>ប្រភេទ:</b> {$record->type}\n"
+            ."📅 <b>រយៈពេល:</b> {$this->formatDateRange($record)}\n"
+            ."📝 <b>មូលហេតុ:</b> {$record->reason}\n\n"
+            ."⏳ <b>ស្ថានភាព:</b> កំពុងរង់ចាំអនុម័ត";
+    }
+
+    private function buildEmployeeRequestSubmittedMessage(PermissionRequest $record): string
+    {
+        return "📝 <b>សំណើរបស់អ្នកត្រូវបានដាក់រួចរាល់</b>\n\n"
+            ."📄 <b>លេខសំណើ:</b> {$record->request_code}\n"
+            ."📌 <b>ប្រភេទ:</b> {$record->type}\n"
+            ."📅 <b>រយៈពេល:</b> {$this->formatDateRange($record)}\n"
+            ."📝 <b>មូលហេតុ:</b> {$record->reason}\n\n"
+            ."⏳ <b>ស្ថានភាព:</b> កំពុងរង់ចាំអនុម័ត";
+    }
+
+    private function buildEmployeeStatusPrivateMessage(PermissionRequest $record, string $adminName): string
+    {
+        $reviewedAt = optional($record->reviewed_at)->format('d M Y · h:i A');
+
+        if ($record->status === 'approved') {
+            return "✅ <b>សំណើរបស់អ្នកត្រូវបានអនុម័ត</b>\n\n"
+                ."📄 <b>លេខសំណើ:</b> {$record->request_code}\n"
+                ."📌 <b>ប្រភេទ:</b> {$record->type}\n"
+                ."📅 <b>រយៈពេល:</b> {$this->formatDateRange($record)}\n\n"
+                ."👨‍💼 <b>អនុម័តដោយ:</b> {$adminName}\n"
+                ."🕒 <b>អនុម័តនៅ:</b> {$reviewedAt}\n\n"
+                ."✅ <b>ស្ថានភាព:</b> អនុម័តរួចរាល់";
+        }
+
+        return "❌ <b>សំណើរបស់អ្នកមិនត្រូវបានអនុម័ត</b>\n\n"
+            ."📄 <b>លេខសំណើ:</b> {$record->request_code}\n"
+            ."📌 <b>ប្រភេទ:</b> {$record->type}\n"
+            ."📅 <b>រយៈពេល:</b> {$this->formatDateRange($record)}\n\n"
+            ."👨‍💼 <b>ពិនិត្យដោយ:</b> {$adminName}\n"
+            ."🕒 <b>បដិសេធនៅ:</b> {$reviewedAt}\n"
+            ."📝 <b>មូលហេតុ:</b> {$record->admin_notes}\n\n"
+            ."❌ <b>ស្ថានភាព:</b> មិនអនុម័ត";
     }
 
     private function formatDateRange(PermissionRequest $record): string

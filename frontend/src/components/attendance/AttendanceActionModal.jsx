@@ -99,7 +99,7 @@ export default function AttendanceActionModal({ action, onClose, onSaved }) {
     fd.append('longitude', coords.longitude)
     fd.append('accuracy', coords.accuracy || '')
     fd.append('speed', coords.speed || 0)
-    if (address) fd.append('address', address)
+    fd.append('address', address || `${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)}`)
 
     if (isCheckIn) {
       fd.append('type', 'office')

@@ -50,13 +50,15 @@ class LateDeductionRuleController extends Controller
     private function validated(Request $request): array
     {
         return $request->validate([
-            'rule_name'        => ['required', 'string', 'max:100'],
-            'grace_minutes'    => ['nullable', 'integer', 'min:0', 'max:120'],
-            'from_minutes'     => ['required', 'integer', 'min:0'],
-            'to_minutes'       => ['nullable', 'integer', 'min:0'],
-            'deduction_type'   => ['required', 'in:none,fixed,percentage,half_day,full_day'],
-            'deduction_amount' => ['nullable', 'numeric', 'min:0'],
-            'status'           => ['nullable', 'boolean'],
+            'rule_name'          => ['required', 'string', 'max:100'],
+            'grace_minutes'      => ['nullable', 'integer', 'min:0', 'max:120'],
+            'from_minutes'       => ['required', 'integer', 'min:0'],
+            'to_minutes'         => ['nullable', 'integer', 'min:0'],
+            'deduction_type'     => ['required', 'in:none,fixed,percentage,half_day,full_day'],
+            'deduction_amount'   => ['nullable', 'numeric', 'min:0'],
+            'status'             => ['nullable', 'boolean'],
+            'telegram_chat_id'   => ['nullable', 'string', 'max:120'],
+            'telegram_topic_id'  => ['nullable', 'integer', 'min:1'],
         ]);
     }
 }

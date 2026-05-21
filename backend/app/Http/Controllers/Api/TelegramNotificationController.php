@@ -144,6 +144,26 @@ class TelegramNotificationController extends Controller
         return $telegramTemplate->fresh();
     }
 
+    public function testChat(Request $request, TelegramNotificationService $telegram)
+    {
+        $data = $request->validate([
+            'chat_id'   => ['required', 'string', 'max:120'],
+            'topic_id'  => ['nullable', 'integer', 'min:1'],
+        ]);
+
+        $result = $telegram->sendRaw(
+            $data['chat_id'],
+            "✅ <b>SalesTrack Test</b>\nThis is a test message from your attendance system.\nChat ID: <code>{$data['chat_id']}</code>",
+            $data['topic_id'] ?? null,
+        );
+
+        if (! $result['ok']) {
+            return response()->json(['message' => $result['description']], 422);
+        }
+
+        return response()->json(['message' => 'Test message sent successfully.']);
+    }
+
     public function testConnection(TelegramNotificationService $telegram)
     {
         $result = $telegram->verifyBot();

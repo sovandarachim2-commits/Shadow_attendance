@@ -26,6 +26,7 @@ import { api, attendanceService, authService, dashboardService } from './service
 import DashboardPage from './pages/DashboardPage'
 import AttendancePage from './pages/AttendancePage'
 import EmployeesPage from './pages/EmployeesPage'
+import BranchesPage from './pages/BranchesPage'
 import DepartmentsPage from './pages/DepartmentsPage'
 import PositionsPage from './pages/PositionsPage'
 import UsersRolesPage from './pages/UsersRolesPage'
@@ -77,6 +78,7 @@ const ROLE_PERMISSION_TARGETS = new Set(['Roles & Permissions', 'Users & Roles',
 
 const sidebarManageItems = [
   { label: 'Employees', target: 'Employees', icon: Users, permissions: ['employees.view'] },
+  { label: 'Branches', target: 'Branches', icon: Building2, permissions: ['departments.manage'] },
   { label: 'Departments', target: 'Departments', icon: Building2, permissions: ['departments.view', 'departments.manage'] },
   { label: 'Positions', target: 'Positions', icon: BriefcaseBusiness, permissions: ['positions.view', 'positions.manage'] },
   { label: 'Outdoor Sales', target: 'Outdoor Sales', icon: MapPinned, permissions: ['sales.view', 'sales.manage'] },
@@ -238,6 +240,7 @@ function AppShell({ isLoaded }) {
     'Admin Attendance Reports': <AdminAttendanceReportsPage {...props} />,
     'My Attendance Reports': <MyAttendanceReportsPage {...props} />,
     Employees: <EmployeesPage {...props} />,
+    Branches: <BranchesPage />,
     Departments: <DepartmentsPage />,
     Positions: <PositionsPage />,
     'Users & Roles': <UsersRolesPage initialTab="assign" />,

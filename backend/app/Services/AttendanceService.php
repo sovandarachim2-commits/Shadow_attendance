@@ -171,7 +171,7 @@ class AttendanceService
         $dateFmt      = $now->format('d M Y');
         $statusLabel = $lateEval['is_late'] ? 'មកយឺត' : 'វត្តមាន';
 
-        $this->sendTelegramSafely(function () use ($employeeName, $employee, $position, $checkInFmt, $dateFmt, $address, $gpsLink, $statusLabel) {
+        $this->sendTelegramSafely(function () use ($employeeName, $employee, $position, $checkInFmt, $dateFmt, $address, $gpsLink, $statusLabel, $lateEval) {
             if (! $this->telegram->alertEnabled('telegram_alert_check_in')) {
                 return false;
             }
@@ -188,14 +188,19 @@ class AttendanceService
 
             $this->telegram->send($checkInMessage, 'daily_attendance');
 
-            $this->notifyEmployeePrivate(
-                $employee,
-                "✅ <b>អ្នកបានចូលធ្វើការ</b>\n\n"
-                . "🕘 {$checkInFmt} · 📅 {$dateFmt}\n"
-                . "📍 {$address}\n"
-                . "ស្ថានភាព: {$statusLabel}",
-                'check_in_private',
-            );
+            $privateMsg = "✅ <b>អ្នកបានចូលធ្វើការ</b>\n\n"
+                . "🕘 ម៉ោង: {$checkInFmt}\n"
+                . "📅 ថ្ងៃទី: {$dateFmt}\n";
+
+            if ($lateEval['is_late']) {
+                $lateFmt = $this->lateRules->formatLateDuration($lateEval['late_seconds']);
+                $privateMsg .= "\n⚠️ ស្ថានភាព: មកយឺត\n"
+                    . "⏳ យឺតចំនួន: {$lateFmt}";
+            } else {
+                $privateMsg .= "\n✅ ស្ថានភាព: វត្តមាន";
+            }
+
+            $this->notifyEmployeePrivate($employee, $privateMsg, 'check_in_private');
 
             return true;
         });
@@ -204,17 +209,45 @@ class AttendanceService
             $lateMinutes = $lateEval['late_minutes'];
             $rule        = $lateEval['applied_rule'];
             $deduction   = $this->lateRules->formatDeductionAmount($lateEval['deduction_amount'], $rule);
+            $lateFmt     = $this->lateRules->formatLateDuration($lateEval['late_seconds']);
 
             $lateMessage = "⚠️ <b>ជូនដំណឹងមកយឺត</b>\n\n"
                 . "👤 បុគ្គលិក: {$employeeName}\n"
                 . "🆔 លេខសម្គាល់: {$employee->employee_code}\n"
                 . "🕘 ម៉ោងចូល: {$checkInFmt}\n"
-                . "⌛ យឺតចំនួន: {$lateMinutes} នាទី\n"
+                . "⏳ យឺតចំនួន: {$lateFmt}\n"
                 . "💰 កាត់ប្រាក់: {$deduction}\n\n"
                 . "ស្ថានភាព: មកយឺត";
 
-            $this->sendTelegramSafely(function () use ($employee, $lateMessage) {
+            $department = $employee->department?->name ?? 'N/A';
+            $branch     = $employee->branch?->name ?? 'N/A';
+            $photoUrl   = $this->images->url($attendance->check_in_photo_path);
+
+            $ruleMessage = "⚠️ <b>ជូនដំណឹងមកយឺត</b>\n\n"
+                . "👤 បុគ្គលិក: {$employeeName}\n"
+                . "🆔 លេខសម្គាល់: {$employee->employee_code}\n"
+                . "💼 តួនាទី: {$position}\n"
+                . "🏢 នាយកដ្ឋាន: {$department}\n"
+                . "🏬 សាខា: {$branch}\n\n"
+                . "🕘 ម៉ោងចូល: {$checkInFmt}\n"
+                . "📅 កាលបរិច្ឆេទ: {$dateFmt}\n"
+                . "⏳ យឺតចំនួន: {$lateFmt}\n"
+                . "💰 កាត់ប្រាក់: {$deduction}\n\n"
+                . "ស្ថានភាព: មកយឺត";
+
+            $this->sendTelegramSafely(function () use ($employee, $lateMessage, $ruleMessage, $rule, $photoUrl) {
+                // Always send to the global late attendance group
                 $this->telegram->send($lateMessage, 'late_attendance');
+
+                // Send richer profile message + photo to the rule's own group if configured
+                $ruleChatId = trim((string) ($rule->telegram_chat_id ?? ''));
+                if ($ruleChatId !== '') {
+                    if ($photoUrl) {
+                        $this->telegram->sendPhotoRaw($ruleChatId, $photoUrl, $ruleMessage, $rule->telegram_topic_id ?? null);
+                    } else {
+                        $this->telegram->sendRaw($ruleChatId, $ruleMessage, $rule->telegram_topic_id ?? null);
+                    }
+                }
 
                 if ($this->shouldNotifyEmployeeLate()) {
                     $this->notifyEmployeePrivate($employee, $lateMessage, 'late_private');
@@ -283,7 +316,7 @@ class AttendanceService
         $address      = $data['address'] ?? 'N/A';
         $gpsLink      = $this->gpsOpenLink($data['latitude'], $data['longitude']);
 
-        $telegramSent = $this->sendTelegramSafely(function () use ($employeeName, $employee, $position, $now, $workFmt, $address, $gpsLink) {
+        $telegramSent = $this->sendTelegramSafely(function () use ($employeeName, $employee, $position, $now, $workFmt, $address, $gpsLink, $attendance) {
             if (! $this->telegram->alertEnabled('telegram_alert_check_out')) {
                 return false;
             }
@@ -303,9 +336,12 @@ class AttendanceService
 
             $this->notifyEmployeePrivate(
                 $employee,
-                "🔔 <b>អ្នកបានចេញពីធ្វើការ</b>\n\n"
-                . "🕔 {$now->format('h:i A')} · ⏱ {$workFmt}\n"
-                . "📍 {$address}",
+                "🚪 <b>អ្នកបានចេញពីការងារ</b>\n\n"
+                . "🕘 ចូលម៉ោង: {$attendance->check_in_at->format('h:i A')}\n"
+                . "🕘 ចេញម៉ោង: {$now->format('h:i A')}\n"
+                . "📅 ថ្ងៃទី: {$now->format('d M Y')}\n\n"
+                . "⏳ ម៉ោងធ្វើការ: {$workFmt}\n"
+                . "📌 ស្ថានភាព: បញ្ចប់ការងារ",
                 'check_out_private',
             );
 

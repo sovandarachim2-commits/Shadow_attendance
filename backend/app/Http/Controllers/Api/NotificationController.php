@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Notification;
 use App\Models\User;
+use App\Services\TelegramNotificationService;
 use Illuminate\Http\Request;
 
 class NotificationController extends Controller
@@ -24,7 +25,7 @@ class NotificationController extends Controller
             ->paginate((int) $request->query('per_page', 20));
     }
 
-    public function store(Request $request)
+    public function store(Request $request, TelegramNotificationService $telegram)
     {
         if (! $request->user()->hasPermission('notifications.manage')) {
             abort(403, 'You cannot send notifications.');
@@ -38,10 +39,10 @@ class NotificationController extends Controller
         ]);
 
         $target = ! empty($data['user_id'])
-            ? User::query()->findOrFail($data['user_id'])
+            ? User::query()->with('employee')->findOrFail($data['user_id'])
             : null;
 
-        return Notification::create([
+        $notification = Notification::create([
             'user_id' => $target?->id,
             'type' => $data['type'] ?? 'admin_message',
             'title' => $data['title'],
@@ -51,6 +52,10 @@ class NotificationController extends Controller
                 'target' => $target ? 'user' : 'all',
             ],
         ])->load(['user.employee']);
+
+        $this->sendTelegramPrivateCopies($telegram, $notification, $target);
+
+        return $notification;
     }
 
     public function markRead(Request $request, Notification $notification)
@@ -66,5 +71,27 @@ class NotificationController extends Controller
         $notification->update(['read_at' => now()]);
 
         return $notification;
+    }
+
+    private function sendTelegramPrivateCopies(TelegramNotificationService $telegram, Notification $notification, ?User $target): void
+    {
+        $message = $this->buildTelegramMessage($notification);
+
+        if ($target) {
+            $telegram->sendToEmployee($target->employee, $message, 'website_notification_private');
+            return;
+        }
+
+        User::query()
+            ->with('employee')
+            ->where('status', 'active')
+            ->whereHas('employee', fn ($query) => $query->whereNotNull('telegram_chat_id')->where('telegram_chat_id', '!=', ''))
+            ->get()
+            ->each(fn (User $user) => $telegram->sendToEmployee($user->employee, $message, 'website_notification_private'));
+    }
+
+    private function buildTelegramMessage(Notification $notification): string
+    {
+        return "🔔 <b>{$notification->title}</b>\n\n{$notification->message}";
     }
 }

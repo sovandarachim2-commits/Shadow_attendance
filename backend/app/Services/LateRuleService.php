@@ -32,9 +32,11 @@ class LateRuleService
         $workStart = $this->workStartForCheckIn($settings, $checkInAt);
         $grace = (int) ($settings->grace_minutes ?? 0);
 
-        $rawLate = $checkInAt->greaterThan($workStart)
-            ? (int) ceil($workStart->diffInSeconds($checkInAt) / 60)
+        $rawSeconds  = $checkInAt->greaterThan($workStart)
+            ? (int) $workStart->diffInSeconds($checkInAt)
             : 0;
+        $rawLate     = (int) ceil($rawSeconds / 60);
+        $lateSeconds = max(0, $rawSeconds - ($grace * 60));
         $lateMinutes = max(0, $rawLate - $grace);
         $isLate = (bool) $settings->auto_mark_late && $lateMinutes > 0;
 
@@ -46,12 +48,30 @@ class LateRuleService
             'status'             => $isLate ? 'late' : 'present',
             'raw_late_minutes'   => $rawLate,
             'late_minutes'       => $lateMinutes,
+            'late_seconds'       => $lateSeconds,
             'grace_minutes'      => $grace,
             'work_start'         => $workStart,
             'applied_rule'       => $appliedRule,
             'deduction_amount'   => $deduction['amount'],
             'deduction_reason'   => $deduction['reason'],
         ];
+    }
+
+    public function formatLateDuration(int $seconds): string
+    {
+        $h = intdiv($seconds, 3600);
+        $m = intdiv($seconds % 3600, 60);
+        $s = $seconds % 60;
+
+        if ($h > 0) {
+            return "{$h}h {$m}m {$s}s";
+        }
+
+        if ($m > 0) {
+            return "{$m}m {$s}s";
+        }
+
+        return "{$s}s";
     }
 
     public function formatRuleRange(?LateDeductionRule $rule): string

@@ -57,6 +57,8 @@ const EMPTY_RULE = {
   deduction_type: 'none',
   deduction_amount: '',
   status: true,
+  telegram_chat_id: '',
+  telegram_topic_id: '',
 }
 
 function parseTimeToMinutes(timeStr) {
@@ -172,6 +174,8 @@ export default function LateRulesSettings() {
         ? Number(form.deduction_amount)
         : null,
       status: Boolean(form.status),
+      telegram_chat_id: form.telegram_chat_id?.trim() || null,
+      telegram_topic_id: form.telegram_topic_id !== '' && form.telegram_topic_id != null ? Number(form.telegram_topic_id) : null,
     }
     try {
       if (id) {
@@ -564,7 +568,30 @@ function Toggle({ label, description, checked, onChange }) {
 
 function RuleModal({ modal, onClose, onSave }) {
   const [form, setForm] = useState(modal.form)
+  const [testingChat, setTestingChat] = useState(false)
+  const [chatNotice, setChatNotice] = useState(null)
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
+
+  const testChat = async () => {
+    const chatId = form.telegram_chat_id?.trim()
+    if (!chatId) {
+      setChatNotice({ ok: false, text: 'Enter a Group Chat ID first.' })
+      return
+    }
+    setTestingChat(true)
+    setChatNotice(null)
+    try {
+      await api.post('/telegram-notifications/test-chat', {
+        chat_id: chatId,
+        topic_id: form.telegram_topic_id ? Number(form.telegram_topic_id) : null,
+      })
+      setChatNotice({ ok: true, text: 'Test message sent!' })
+    } catch (ex) {
+      setChatNotice({ ok: false, text: ex.response?.data?.message || 'Failed to send test message.' })
+    } finally {
+      setTestingChat(false)
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 backdrop-blur-sm sm:items-center">
@@ -589,6 +616,25 @@ function RuleModal({ modal, onClose, onSave }) {
             <ModalField label="Amount" type="number" value={form.deduction_amount} onChange={(v) => set('deduction_amount', v)} />
           )}
           <Toggle label="Active" checked={form.status} onChange={(v) => set('status', v)} />
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3 dark:border-slate-700 dark:bg-slate-950/50">
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Telegram Alert (optional)</p>
+            <p className="text-xs text-slate-400 dark:text-slate-500">Override the default late attendance group. Leave empty to use the global destination.</p>
+            <ModalField label="Group Chat ID" value={form.telegram_chat_id ?? ''} onChange={(v) => set('telegram_chat_id', v)} placeholder="-1001234567890" mono />
+            <ModalField label="Topic ID" type="number" value={form.telegram_topic_id ?? ''} onChange={(v) => set('telegram_topic_id', v)} placeholder="Optional" mono />
+            <button
+              type="button"
+              onClick={testChat}
+              disabled={testingChat}
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-xs font-bold text-slate-700 transition hover:bg-slate-100 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+            >
+              {testingChat ? '⏳ Sending...' : '📡 Test Bot'}
+            </button>
+            {chatNotice && (
+              <p className={clsx('text-xs font-semibold', chatNotice.ok ? 'text-emerald-600' : 'text-rose-500')}>
+                {chatNotice.text}
+              </p>
+            )}
+          </div>
         </div>
         <div className="mt-5 flex gap-2">
           <button type="button" onClick={onClose} className="flex-1 rounded-xl border py-2.5 text-sm font-semibold">Cancel</button>
@@ -599,11 +645,11 @@ function RuleModal({ modal, onClose, onSave }) {
   )
 }
 
-function ModalField({ label, value, onChange, type = 'text', placeholder }) {
+function ModalField({ label, value, onChange, type = 'text', placeholder, mono = false }) {
   return (
     <label className="block">
       <span className="mb-1 text-sm font-semibold">{label}</span>
-      <input type={type} className={inputCls} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+      <input type={type} className={clsx(inputCls, mono && 'font-mono')} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
     </label>
   )
 }

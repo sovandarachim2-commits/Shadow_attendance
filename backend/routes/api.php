@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\CustomerVisitController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\BranchController;
 use App\Http\Controllers\Api\DepartmentController;
 use App\Http\Controllers\Api\EmployeeController;
 use App\Http\Controllers\Api\IpRestrictionController;
@@ -74,6 +75,10 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('permission:employees.update,profile.update_all');
     Route::delete('/employees/{employee}', [EmployeeController::class, 'destroy'])
         ->middleware('permission:employees.delete');
+
+    // Branches
+    Route::apiResource('/branches', BranchController::class)
+        ->except(['show'])->middleware('permission:departments.manage');
 
     // Departments & Positions
     Route::apiResource('/departments', DepartmentController::class)
@@ -202,6 +207,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/telegram-notifications/test-connection', [TelegramNotificationController::class, 'testConnection'])
         ->middleware('permission:notifications.manage,settings.security,settings.manage');
     Route::post('/telegram-notifications/test', [TelegramNotificationController::class, 'test'])
+        ->middleware('permission:notifications.manage,settings.security,settings.manage');
+    Route::post('/telegram-notifications/test-chat', [TelegramNotificationController::class, 'testChat'])
         ->middleware('permission:notifications.manage,settings.security,settings.manage');
 
     Route::apiResource('/telegram-destinations', TelegramDestinationController::class)

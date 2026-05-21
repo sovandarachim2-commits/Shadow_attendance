@@ -26,6 +26,8 @@ frontend/dist-check-*/
 # Hostinger deploy output (may contain secrets)
 deploy/*.zip
 deploy/.env.hostinger
+deploy/_v/deploy/.env.hostinger
+deploy/_v/backend/.tmp-appdata/
 
 # OS files
 .DS_Store
