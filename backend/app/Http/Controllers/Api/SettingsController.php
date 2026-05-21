@@ -34,18 +34,28 @@ class SettingsController extends Controller
 
     public function uploadLogo(Request $request, ImageUploadService $images)
     {
+        return $this->uploadImageSetting($request, $images, 'logo', 'logos', 'company_logo_url', 'logo_url');
+    }
+
+    public function uploadIcon(Request $request, ImageUploadService $images)
+    {
+        return $this->uploadImageSetting($request, $images, 'icon', 'icons', 'company_icon_url', 'icon_url');
+    }
+
+    private function uploadImageSetting(Request $request, ImageUploadService $images, string $field, string $folder, string $settingKey, string $responseKey)
+    {
         $request->validate([
-            'logo' => ['required', 'image', 'max:2048'],
+            $field => ['required', 'image', 'max:2048'],
         ]);
 
-        $path = $images->store($request->file('logo'), 'logos');
+        $path = $images->store($request->file($field), $folder);
         $url  = $images->url($path);
 
         SystemSetting::updateOrCreate(
-            ['key' => 'company_logo_url'],
+            ['key' => $settingKey],
             ['value' => $url, 'group' => 'general'],
         );
 
-        return response()->json(['logo_url' => $url]);
+        return response()->json([$responseKey => $url]);
     }
 }

@@ -186,6 +186,8 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('permission:settings.security,settings.manage');
     Route::post('/settings/logo', [SettingsController::class, 'uploadLogo'])
         ->middleware('permission:settings.security,settings.manage');
+    Route::post('/settings/icon', [SettingsController::class, 'uploadIcon'])
+        ->middleware('permission:settings.security,settings.manage');
 
     // IP Restrictions
     Route::get('/ip-restrictions', [IpRestrictionController::class, 'index'])

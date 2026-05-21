@@ -9,6 +9,7 @@ import {
   Clock,
   FileText,
   Home,
+  Image,
   LogOut,
   MapPinned,
   Menu,
@@ -35,6 +36,7 @@ import ReportsPage from './pages/ReportsPage'
 import NotificationsPage from './pages/NotificationsPage'
 import ProfilePage from './pages/ProfilePage'
 import SecurityPage from './pages/SecurityPage'
+import BrandingPage from './pages/BrandingPage'
 import PermissionRequestsPage from './pages/PermissionRequestsPage'
 import AttendanceHistoryPage from './pages/AttendanceHistoryPage'
 import AdminAttendanceReportsPage from './pages/AdminAttendanceReportsPage'
@@ -82,6 +84,7 @@ const sidebarManageItems = [
   { label: 'Departments', target: 'Departments', icon: Building2, permissions: ['departments.view', 'departments.manage'] },
   { label: 'Positions', target: 'Positions', icon: BriefcaseBusiness, permissions: ['positions.view', 'positions.manage'] },
   { label: 'Outdoor Sales', target: 'Outdoor Sales', icon: MapPinned, permissions: ['sales.view', 'sales.manage'] },
+  { label: 'Website Branding', target: 'Website Branding', icon: Image, permissions: ['settings.manage'] },
   { label: 'Roles & Permissions', target: 'Roles & Permissions', icon: Users, permissions: ['roles.manage', 'permissions.manage'] },
   { label: 'Settings', target: 'Settings', icon: SettingsIcon, permissions: ['settings.view', 'settings.security', 'settings.api', 'settings.manage', 'settings.schedules', 'roles.manage'] },
 ]
@@ -166,6 +169,22 @@ function AppShell({ isLoaded }) {
   }, [dark])
 
   useEffect(() => {
+    const title = data.appSettings?.site_title || data.appSettings?.company_name || 'SalesTrack'
+    document.title = title
+
+    const iconUrl = data.appSettings?.company_icon_url || data.appSettings?.company_logo_url
+    if (!iconUrl) return
+
+    let icon = document.querySelector("link[rel='icon']")
+    if (!icon) {
+      icon = document.createElement('link')
+      icon.rel = 'icon'
+      document.head.appendChild(icon)
+    }
+    icon.href = iconUrl
+  }, [data.appSettings?.company_icon_url, data.appSettings?.company_logo_url, data.appSettings?.company_name, data.appSettings?.site_title])
+
+  useEffect(() => {
     if (!userMenuOpen) return
 
     const close = () => setUserMenuOpen(false)
@@ -234,6 +253,7 @@ function AppShell({ isLoaded }) {
     'Outdoor Check Out': <AttendancePage {...props} />,
     Notifications: <NotificationsPage {...props} />,
     Profile: <ProfilePage {...props} />,
+    'Website Branding': <BrandingPage {...props} />,
     Settings: <SecurityPage refresh={loadRealData} />,
     'Help & Support': <SecurityPage refresh={loadRealData} />,
     'Attendance History': <AttendanceHistoryPage {...props} viewMode="all" />,
