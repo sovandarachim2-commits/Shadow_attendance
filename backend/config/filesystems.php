@@ -14,8 +14,8 @@ return [
     */
 
     'default' => env('FILESYSTEM_DISK', 'local'),
-    // Images always use the r2 disk (see ImageUploadService). Kept for legacy config reads.
-    'attendance_disk' => 'r2',
+    // Image uploads: r2 (Cloudflare) or public (Hostinger local disk if R2 TLS fails on server).
+    'attendance_disk' => env('ATTENDANCE_IMAGES_DISK', 'r2'),
 
     /*
     |--------------------------------------------------------------------------
@@ -70,9 +70,13 @@ return [
             'bucket' => env('R2_BUCKET'),
             'url' => env('R2_PUBLIC_URL'),
             'endpoint' => env('R2_ENDPOINT'),
-            'use_path_style_endpoint' => env('R2_USE_PATH_STYLE_ENDPOINT', false),
+            // Cloudflare R2: path-style (bucket in path). Virtual-hosted causes SSL errors on some hosts.
+            'use_path_style_endpoint' => filter_var(env('R2_USE_PATH_STYLE_ENDPOINT', true), FILTER_VALIDATE_BOOLEAN),
+            'http' => [
+                'verify' => filter_var(env('R2_HTTP_VERIFY', true), FILTER_VALIDATE_BOOLEAN),
+            ],
             'throw' => true,
-            'visibility' => 'private',
+            'visibility' => 'public',
         ],
 
     ],
