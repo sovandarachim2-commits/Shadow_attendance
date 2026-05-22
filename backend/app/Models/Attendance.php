@@ -3,7 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
+use App\Services\ImageUploadService;
 
 class Attendance extends Model
 {
@@ -26,14 +26,14 @@ class Attendance extends Model
         'synced_at' => 'datetime',
     ];
 
-    /** Public R2 URL for check-in selfie (used by admin edit modal). */
+    /** Public URL for check-in selfie (used by admin edit modal). */
     public function getPhotoUrlAttribute(): ?string
     {
         if (! $this->check_in_photo_path) {
             return null;
         }
 
-        return Storage::disk('r2')->url($this->check_in_photo_path);
+        return app(ImageUploadService::class)->url($this->check_in_photo_path);
     }
 
     public function employee() { return $this->belongsTo(Employee::class); }

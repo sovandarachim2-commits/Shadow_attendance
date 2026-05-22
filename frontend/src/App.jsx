@@ -63,11 +63,10 @@ const attendanceSubItems = [
   { label: 'All Attendance', target: 'Attendance History', activeTargets: ['Attendance History'], permissions: ['attendance.view_all'] },
   { label: 'Attendance Reports', target: 'Admin Attendance Reports', activeTargets: ['Admin Attendance Reports'], permissions: ['reports.attendance.view_all', 'attendance.view_all'] },
   { label: 'My Attendance Reports', target: 'My Attendance Reports', activeTargets: ['My Attendance Reports'], permissions: ['reports.attendance.view_own', 'attendance.view_own'] },
-  { label: 'My Attendance', target: 'My Attendance', activeTargets: ['My Attendance', 'Check In / Out'], permissions: ['attendance.view_own', 'attendance.view_all'] },
   { label: 'Attendance Requests', target: 'Permission Requests', activeTargets: ['Permission Requests'], permissions: ['requests.view_all', 'requests.view_own', 'requests.create', 'requests.approve'] },
 ]
 
-const ATTENDANCE_TARGETS = new Set(['My Attendance', 'Check In / Out', 'Attendance History', 'Admin Attendance Reports', 'My Attendance Reports', 'Permission Requests'])
+const ATTENDANCE_TARGETS = new Set(['Check In / Out', 'Attendance History', 'Admin Attendance Reports', 'My Attendance Reports', 'Permission Requests'])
 
 const rolePermissionSubItems = [
   { label: 'Set Permissions', target: 'Roles & Permissions', activeTargets: ['Roles & Permissions', 'Users & Roles'], permissions: ['roles.manage', 'permissions.manage'] },
@@ -150,7 +149,7 @@ function AppShell({ isLoaded }) {
       .then((account) => {
         if (!mounted) return
         setUser(account)
-        loadRealData()
+        loadRealData(account)
       })
       .catch(() => localStorage.removeItem('attendance_token'))
       .finally(() => {
@@ -194,7 +193,7 @@ function AppShell({ isLoaded }) {
 
   const handleLogin = (account) => {
     setUser(account)
-    loadRealData()
+    loadRealData(account)
   }
 
   const refreshUser = useCallback(async () => {
@@ -243,7 +242,6 @@ function AppShell({ isLoaded }) {
   const pages = {
     Dashboard: <DashboardPage {...props} />,
     'Check In / Out': <AttendancePage {...props} />,
-    'My Attendance': <AttendancePage {...props} />,
     'Customer Visits': <OutdoorSalesPage {...props} />,
     'Daily Reports': <ReportsPage {...props} />,
     'My Reports': <ReportsPage {...props} />,
@@ -278,7 +276,6 @@ function AppShell({ isLoaded }) {
 
   const employee = user.employee
   const displayName = userDisplayName(user)
-  const username = user.name || displayName
   const roleName = employee?.position?.name || user.role?.name || 'Employee'
   const pageTitle = active === 'Outdoor Sales' ? 'Outdoor Sales Tracking' : active
   const unreadCount = data.notifications.filter((item) => !item.read_at).length
@@ -314,17 +311,6 @@ function AppShell({ isLoaded }) {
             <button className="rounded-lg p-2 text-slate-300 lg:hidden" onClick={() => setSidebarOpen(false)}>
               <X size={20} />
             </button>
-          </div>
-
-          <div className="px-5 pb-5 pt-6">
-            <div className="flex items-center gap-4">
-              <UserAvatar name={displayName} photo={employee?.photo_url} size="lg" />
-              <div>
-                <p className="font-bold">{displayName}</p>
-                <p className="mt-1 text-sm text-slate-300">{roleName}</p>
-                <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-emerald-300"><span className="h-2 w-2 rounded-full bg-emerald-400" /> Online</p>
-              </div>
-            </div>
           </div>
 
           <nav className="flex-1 space-y-2 px-4 pb-5">
@@ -432,9 +418,6 @@ function AppShell({ isLoaded }) {
                 </button>
                 <div className="min-w-0">
                   <h2 className="truncate text-xl font-bold text-slate-950 dark:text-white">{pageTitle}</h2>
-                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                    Dashboard <span className="mx-2 text-slate-300">›</span> {pageTitle}
-                  </p>
                 </div>
               </div>
 
@@ -567,7 +550,7 @@ function App() {
 }
 
 function SidebarButton({ item, active, unreadCount = 0, withChevron = false, onClick }) {
-  const isActive = active === item.target || (item.target === 'My Attendance' && active === 'Check In / Out')
+  const isActive = active === item.target
 
   return (
     <button

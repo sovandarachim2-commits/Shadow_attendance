@@ -10,6 +10,7 @@ import {
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import clsx from 'clsx'
+import AttendanceCircleButton from '../components/attendance/AttendanceCircleButton'
 import { DashboardSummaryCard } from '../components/attendance/reports/attendanceReportShared'
 import { EmptyState, StatusPill } from '../components/shared/UI'
 import { canAccess, formatDate, formatTime, normaliseChart, titleCase } from '../utils/format'
@@ -63,9 +64,8 @@ function AdminDashboard({ appData, isLoaded, onAttendanceAction, setActive, setM
         columns={5}
       />
 
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="grid gap-6">
         <AttendanceControlPanel attendance={appData.todayAttendance} onAttendanceAction={onAttendanceAction} />
-        <CustomerVisitsPanel visits={appData.visits} setActive={setActive} />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1fr_1.6fr]">
@@ -108,9 +108,8 @@ function EmployeeDashboard({ appData, isLoaded, onAttendanceAction, setActive })
         columns={5}
       />
 
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="grid gap-6">
         <AttendanceControlPanel attendance={today} onAttendanceAction={onAttendanceAction} />
-        <CustomerVisitsPanel visits={appData.visits} setActive={setActive} />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr_1fr]">
@@ -193,6 +192,7 @@ function LiveClock() {
 function AttendanceControlPanel({ attendance, onAttendanceAction }) {
   const checkedIn = Boolean(attendance?.check_in_at)
   const completed = Boolean(attendance?.check_out_at)
+
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <div className="mb-3 flex items-center justify-between">
@@ -208,6 +208,17 @@ function AttendanceControlPanel({ attendance, onAttendanceAction }) {
           <p className="text-xs text-slate-500 dark:text-slate-400">GPS Verified</p>
         </div>
         <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400">42m from office</p>
+      </div>
+      <div className="mt-5 flex flex-col items-center gap-2">
+        <AttendanceCircleButton
+          checkedIn={checkedIn}
+          completed={completed}
+          onClick={() => {
+            if (!completed) onAttendanceAction?.(checkedIn ? 'check-out' : 'check-in')
+          }}
+          size="md"
+        />
+        {completed && <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Attendance completed</p>}
       </div>
       {attendance?.check_in_at && (
         <div className="mt-3 space-y-1.5 border-t border-slate-100 pt-3 text-sm dark:border-slate-800">

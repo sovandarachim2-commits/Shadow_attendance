@@ -4,10 +4,15 @@ namespace App\Services;
 
 use App\Models\LateDeductionRule;
 use App\Models\LateRule;
+use App\Models\WorkSchedule;
 use Illuminate\Support\Carbon;
 
 class LateRuleService
 {
+    public function __construct(
+        private WorkScheduleService $workSchedules,
+    ) {}
+
     public function settings(): LateRule
     {
         return LateRule::query()->firstOrCreate([]);
@@ -26,10 +31,11 @@ class LateRuleService
      *   deduction_reason: ?string,
      * }
      */
-    public function evaluate(Carbon $checkInAt): array
+    public function evaluate(Carbon $checkInAt, ?int $employeeId = null): array
     {
         $settings = $this->settings();
-        $workStart = $this->workStartForCheckIn($settings, $checkInAt);
+        $schedule = $employeeId ? $this->workSchedules->scheduleForEmployee($employeeId) : null;
+        $workStart = $this->workStartForCheckIn($settings, $checkInAt, $schedule);
         $grace = (int) ($settings->grace_minutes ?? 0);
 
         $rawSeconds  = $checkInAt->greaterThan($workStart)
@@ -40,7 +46,7 @@ class LateRuleService
         $lateMinutes = max(0, $rawLate - $grace);
         $isLate = (bool) $settings->auto_mark_late && $lateMinutes > 0;
 
-        $appliedRule = $isLate ? $this->findMatchingRule($lateMinutes) : null;
+        $appliedRule = $isLate ? $this->findMatchingRule($lateMinutes, $schedule?->id) : null;
         $deduction = $this->resolveDeduction($appliedRule, $settings);
 
         return [
@@ -116,8 +122,20 @@ class LateRuleService
         };
     }
 
-    private function workStartForCheckIn(LateRule $settings, Carbon $checkInAt): Carbon
+    private function workStartForCheckIn(LateRule $settings, Carbon $checkInAt, ?WorkSchedule $schedule = null): Carbon
     {
+        // Use the employee's assigned schedule start time for today if available
+        if ($schedule) {
+            $dayKey = strtolower($checkInAt->format('l'));
+            $startTime = $schedule->{"{$dayKey}_start"};
+            if ($startTime !== null && $startTime !== '') {
+                return $checkInAt->copy()->startOfDay()->setTimeFromTimeString(
+                    substr((string) $startTime, 0, 8)
+                );
+            }
+        }
+
+        // Fall back to global work_start_time setting
         $time = $settings->work_start_time;
         if ($time instanceof Carbon) {
             $time = $time->format('H:i:s');
@@ -128,17 +146,28 @@ class LateRuleService
         );
     }
 
-    private function findMatchingRule(int $lateMinutes): ?LateDeductionRule
+    private function findMatchingRule(int $lateMinutes, ?int $scheduleId = null): ?LateDeductionRule
     {
-        return LateDeductionRule::query()
+        $activeRules = LateDeductionRule::query()
             ->where('status', true)
             ->orderBy('from_minutes')
-            ->get()
-            ->first(function (LateDeductionRule $rule) use ($lateMinutes) {
-                $to = $rule->to_minutes === null ? PHP_INT_MAX : (int) $rule->to_minutes;
+            ->get();
 
-                return $lateMinutes >= (int) $rule->from_minutes && $lateMinutes <= $to;
-            });
+        $matcher = function (LateDeductionRule $rule) use ($lateMinutes) {
+            $to = $rule->to_minutes === null ? PHP_INT_MAX : (int) $rule->to_minutes;
+            return $lateMinutes >= (int) $rule->from_minutes && $lateMinutes <= $to;
+        };
+
+        // First: try schedule-specific rules
+        if ($scheduleId !== null) {
+            $scheduleRule = $activeRules->where('schedule_id', $scheduleId)->first($matcher);
+            if ($scheduleRule) {
+                return $scheduleRule;
+            }
+        }
+
+        // Fall back: global rules (schedule_id is null)
+        return $activeRules->whereNull('schedule_id')->first($matcher);
     }
 
     /**

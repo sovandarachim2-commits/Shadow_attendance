@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Globe2, Image, Save, Upload } from 'lucide-react'
 import { api } from '../services/api'
+import { apiError } from '../utils/format'
 
 export default function BrandingPage({ appData, refresh }) {
   const settings = appData.appSettings || {}
@@ -12,9 +13,11 @@ export default function BrandingPage({ appData, refresh }) {
   })
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState('')
-  const [notice, setNotice] = useState('')
+  const [notice, setNotice] = useState({ type: '', text: '' })
 
   useEffect(() => {
+    // Keep the form in sync when fresh settings are loaded after save/upload.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setForm({
       company_name: settings.company_name || 'SalesTrack',
       site_title: settings.site_title || settings.company_name || 'SalesTrack',
@@ -26,13 +29,13 @@ export default function BrandingPage({ appData, refresh }) {
   const previewTitle = useMemo(() => form.site_title.trim() || form.company_name.trim() || 'SalesTrack', [form.company_name, form.site_title])
 
   const set = (key, value) => {
-    setNotice('')
+    setNotice({ type: '', text: '' })
     setForm((current) => ({ ...current, [key]: value }))
   }
 
   const saveText = async () => {
     setSaving(true)
-    setNotice('')
+    setNotice({ type: '', text: '' })
     try {
       await api.put('/settings', {
         settings: {
@@ -40,8 +43,10 @@ export default function BrandingPage({ appData, refresh }) {
           site_title: form.site_title.trim(),
         },
       })
-      setNotice('Brand title saved.')
+      setNotice({ type: 'success', text: 'Brand title saved.' })
       await refresh?.()
+    } catch (error) {
+      setNotice({ type: 'error', text: apiError(error) })
     } finally {
       setSaving(false)
     }
@@ -53,15 +58,19 @@ export default function BrandingPage({ appData, refresh }) {
     if (!file) return
 
     setUploading(type)
-    setNotice('')
+    setNotice({ type: '', text: '' })
     try {
       const body = new FormData()
       body.append(type, file)
-      const response = await api.post(`/settings/${type}`, body)
+      const response = await api.post(`/settings/${type}`, body, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
       const key = type === 'logo' ? 'company_logo_url' : 'company_icon_url'
       set(key, response.data[`${type}_url`] || '')
-      setNotice(type === 'logo' ? 'Logo uploaded.' : 'Website icon uploaded.')
+      setNotice({ type: 'success', text: type === 'logo' ? 'Logo uploaded.' : 'Website icon uploaded.' })
       await refresh?.()
+    } catch (error) {
+      setNotice({ type: 'error', text: apiError(error) })
     } finally {
       setUploading('')
     }
@@ -90,7 +99,14 @@ export default function BrandingPage({ appData, refresh }) {
         </button>
       </div>
 
-      {notice && <p className="rounded-lg bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">{notice}</p>}
+      {notice.text && (
+        <p className={notice.type === 'error'
+          ? 'rounded-lg bg-rose-50 px-4 py-3 text-sm font-semibold text-rose-700 dark:bg-rose-950/30 dark:text-rose-300'
+          : 'rounded-lg bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'}
+        >
+          {notice.text}
+        </p>
+      )}
 
       <div className="grid gap-5 xl:grid-cols-[1fr_340px]">
         <div className="space-y-5">

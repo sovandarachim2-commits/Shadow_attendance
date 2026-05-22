@@ -166,12 +166,12 @@ export default function LoginPage({ dark, onToggleDark, onLogin }) {
         </section>
 
         {/* ── Right form panel — switches with dark/light ── */}
-        <section className="relative flex min-h-screen flex-col items-center justify-center bg-slate-100 p-6 dark:bg-[#071827] sm:p-10">
+        <section className="relative flex min-h-screen flex-col items-center justify-center bg-slate-100 px-4 py-5 dark:bg-[#071827] sm:p-10">
 
           {/* Theme toggle */}
           <button
             type="button"
-            className="absolute right-5 top-5 grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10"
+            className="absolute right-4 top-4 grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10 sm:right-5 sm:top-5"
             onClick={onToggleDark}
             aria-label="Toggle theme"
           >
@@ -179,25 +179,25 @@ export default function LoginPage({ dark, onToggleDark, onLogin }) {
           </button>
 
           {/* Login card */}
-          <div className="w-full max-w-[420px] rounded-2xl border border-slate-200 bg-white p-8 shadow-xl shadow-slate-200/60 dark:border-white/10 dark:bg-[#0d2235] dark:shadow-black/40">
+          <div className="w-full max-w-[420px] rounded-2xl border border-slate-200 bg-white p-5 shadow-xl shadow-slate-200/60 dark:border-white/10 dark:bg-[#0d2235] dark:shadow-black/40 sm:p-8">
 
             {/* Card header */}
-            <div className="mb-7 flex flex-col items-center text-center">
-              <div className="mb-5 grid h-14 w-14 place-items-center rounded-2xl bg-emerald-500 shadow-lg shadow-emerald-500/30 dark:shadow-emerald-950/60">
-                <Activity size={28} className="text-white" />
+            <div className="mb-6 flex flex-col items-center text-center sm:mb-7">
+              <div className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-emerald-500 shadow-lg shadow-emerald-500/30 dark:shadow-emerald-950/60 sm:mb-5 sm:h-14 sm:w-14">
+                <Activity size={26} className="text-white sm:h-7 sm:w-7" />
               </div>
               <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white">Welcome back</h2>
               <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">Sign in to your account to continue</p>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
 
               {/* Username */}
               <div>
                 <label className="mb-2 block text-sm font-semibold text-slate-700 dark:text-slate-200">
                   Username
                 </label>
-                <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 transition focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/10 dark:border-white/10 dark:bg-white/5 dark:focus-within:border-emerald-500/50">
+                <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 transition focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/10 dark:border-white/10 dark:bg-white/5 dark:focus-within:border-emerald-500/50 sm:px-4">
                   <UserRound className="shrink-0 text-slate-400 dark:text-slate-500" size={17} />
                   <input
                     className="h-12 min-w-0 flex-1 bg-transparent text-sm font-medium text-slate-900 outline-none placeholder:font-normal placeholder:text-slate-400 dark:text-white dark:placeholder:text-slate-500"
@@ -216,7 +216,7 @@ export default function LoginPage({ dark, onToggleDark, onLogin }) {
                 <label className="mb-2 block text-sm font-semibold text-slate-700 dark:text-slate-200">
                   Password
                 </label>
-                <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 transition focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/10 dark:border-white/10 dark:bg-white/5 dark:focus-within:border-emerald-500/50">
+                <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 transition focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/10 dark:border-white/10 dark:bg-white/5 dark:focus-within:border-emerald-500/50 sm:px-4">
                   <Lock className="shrink-0 text-slate-400 dark:text-slate-500" size={17} />
                   <input
                     className="h-12 min-w-0 flex-1 bg-transparent text-sm font-medium text-slate-900 outline-none placeholder:font-normal placeholder:text-slate-400 dark:text-white dark:placeholder:text-slate-500"
@@ -239,7 +239,7 @@ export default function LoginPage({ dark, onToggleDark, onLogin }) {
               </div>
 
               {/* Remember + Forgot */}
-              <div className="flex items-center justify-between text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
                 <label className="flex cursor-pointer items-center gap-2 font-medium text-slate-600 dark:text-slate-300">
                   <input type="checkbox" className="h-4 w-4 rounded accent-emerald-500" defaultChecked />
                   Remember me
@@ -268,7 +268,7 @@ export default function LoginPage({ dark, onToggleDark, onLogin }) {
             </form>
 
             {/* Divider */}
-            <div className="my-5 flex items-center gap-3">
+            <div className="my-4 flex items-center gap-3 sm:my-5">
               <div className="flex-1 border-t border-slate-200 dark:border-white/10" />
               <span className="text-xs text-slate-400 dark:text-slate-500">or</span>
               <div className="flex-1 border-t border-slate-200 dark:border-white/10" />
@@ -280,7 +280,7 @@ export default function LoginPage({ dark, onToggleDark, onLogin }) {
           </div>
 
           {/* Mobile features — shown below card, hidden on desktop */}
-          <div className="mt-8 grid grid-cols-3 gap-4 lg:hidden">
+          <div className="mt-6 grid w-full max-w-[420px] grid-cols-3 gap-2 sm:mt-8 sm:gap-4 lg:hidden">
             {FEATURES.map(([Icon, title, text]) => (
               <div key={title} className="flex flex-col items-center text-center">
                 <Icon className="mb-1.5 text-emerald-500" size={18} />

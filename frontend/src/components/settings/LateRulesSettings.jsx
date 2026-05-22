@@ -59,6 +59,7 @@ const EMPTY_RULE = {
   status: true,
   telegram_chat_id: '',
   telegram_topic_id: '',
+  schedule_id: null,
 }
 
 function parseTimeToMinutes(timeStr) {
@@ -99,6 +100,8 @@ function findAppliedRule(lateMinutes, rules) {
 export default function LateRulesSettings() {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS)
   const [deductionRules, setDeductionRules] = useState([])
+  const [workSchedules, setWorkSchedules] = useState([])
+  const [previewScheduleId, setPreviewScheduleId] = useState(null)
   const [stats, setStats] = useState({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -116,6 +119,7 @@ export default function LateRulesSettings() {
       const res = await api.get('/late-rules')
       setSettings({ ...DEFAULT_SETTINGS, ...res.data.settings })
       setDeductionRules(res.data.deduction_rules || [])
+      setWorkSchedules(res.data.work_schedules || [])
       setStats(res.data.stats || {})
     } catch {
       showNotice('Could not load late rules.', false)
@@ -129,12 +133,30 @@ export default function LateRulesSettings() {
   const set = (key, val) => setSettings((p) => ({ ...p, [key]: val }))
 
   const preview = useMemo(() => {
-    const start = parseTimeToMinutes(settings.work_start_time)
+    // Resolve start time: use selected schedule's first working day, else global setting
+    const selectedSchedule = previewScheduleId
+      ? workSchedules.find((s) => s.id === previewScheduleId)
+      : null
+
+    const DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+    const scheduleStart = selectedSchedule
+      ? DAYS.map((d) => selectedSchedule[`${d}_start`]).find((t) => t != null)
+      : null
+
+    const startStr = scheduleStart ?? settings.work_start_time
+    const start = parseTimeToMinutes(startStr)
     const checkIn = parseTimeToMinutes(settings.preview_check_in)
     const grace = Number(settings.grace_minutes) || 0
     const rawLate = Math.max(0, checkIn - start)
     const lateMinutes = Math.max(0, rawLate - grace)
-    const applied = findAppliedRule(lateMinutes, deductionRules)
+
+    // Schedule-aware rule matching: schedule-specific first, then global fallback
+    const scheduleRules = previewScheduleId
+      ? deductionRules.filter((r) => r.schedule_id === previewScheduleId)
+      : []
+    const globalRules = deductionRules.filter((r) => r.schedule_id == null)
+    const applied = findAppliedRule(lateMinutes, scheduleRules.length ? scheduleRules : globalRules)
+
     const lateAfterMin = start + grace
 
     return {
@@ -144,10 +166,11 @@ export default function LateRulesSettings() {
       lateAfter: formatMinutesToTime(lateAfterMin),
       lateMinutes,
       applied,
+      scheduleName: selectedSchedule?.schedule_name ?? 'Global',
       deduction: applied ? deductionLabel(applied.deduction_type, applied.deduction_amount) : '—',
       range: applied ? formatRange(applied.from_minutes, applied.to_minutes) : '—',
     }
-  }, [settings, deductionRules])
+  }, [settings, deductionRules, previewScheduleId, workSchedules])
 
   const saveAll = async () => {
     setSaving(true)
@@ -155,6 +178,7 @@ export default function LateRulesSettings() {
       const res = await api.put('/late-rules', settings)
       setSettings({ ...DEFAULT_SETTINGS, ...res.data.settings })
       setDeductionRules(res.data.deduction_rules || [])
+      setWorkSchedules(res.data.work_schedules || [])
       setStats(res.data.stats || {})
       showNotice('Late rules saved successfully.')
     } catch (ex) {
@@ -176,6 +200,7 @@ export default function LateRulesSettings() {
       status: Boolean(form.status),
       telegram_chat_id: form.telegram_chat_id?.trim() || null,
       telegram_topic_id: form.telegram_topic_id !== '' && form.telegram_topic_id != null ? Number(form.telegram_topic_id) : null,
+      schedule_id: form.schedule_id ? Number(form.schedule_id) : null,
     }
     try {
       if (id) {
@@ -294,7 +319,7 @@ export default function LateRulesSettings() {
           action={(
             <button
               type="button"
-              onClick={() => setRuleModal({ mode: 'add', form: { ...EMPTY_RULE } })}
+              onClick={() => setRuleModal({ mode: 'add', form: { ...EMPTY_RULE }, schedules: workSchedules })}
               className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-700"
             >
               <Plus size={15} />
@@ -306,7 +331,7 @@ export default function LateRulesSettings() {
             <table className="w-full min-w-[640px] text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-100 bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:border-slate-800 dark:bg-slate-950/60">
-                  {['#', 'Late Minutes Range', 'Deduction Type', 'Deduction Amount', 'Status', 'Action'].map((h) => (
+                  {['#', 'Schedule', 'Late Minutes Range', 'Deduction Type', 'Deduction Amount', 'Status', 'Action'].map((h) => (
                     <th key={h} className="whitespace-nowrap px-4 py-3">{h}</th>
                   ))}
                 </tr>
@@ -314,18 +339,21 @@ export default function LateRulesSettings() {
               <tbody className="divide-y divide-slate-100 bg-white dark:divide-slate-800 dark:bg-slate-900">
                 {deductionRules.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-400">No rules yet. Click Add Rule.</td>
+                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-400">No rules yet. Click Add Rule.</td>
                   </tr>
                 ) : deductionRules.map((row, i) => (
                   <tr key={row.id} className="transition-colors hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
                     <td className="px-4 py-4 font-medium text-slate-400">{i + 1}</td>
+                    <td className="px-4 py-4">
+                      <ScheduleBadge scheduleId={row.schedule_id} scheduleName={row.schedule?.schedule_name} />
+                    </td>
                     <td className="px-4 py-4 font-semibold text-slate-800 dark:text-slate-100">{formatRange(row.from_minutes, row.to_minutes)}</td>
                     <td className="px-4 py-4"><TypeBadge type={row.deduction_type} /></td>
                     <td className="px-4 py-4 font-semibold tabular-nums text-slate-700 dark:text-slate-200">{deductionLabel(row.deduction_type, row.deduction_amount)}</td>
                     <td className="px-4 py-4"><StatusBadge active={row.status} /></td>
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-4">
-                        <button type="button" onClick={() => setRuleModal({ mode: 'edit', id: row.id, form: { ...row, deduction_amount: row.deduction_amount ?? '' } })} className="text-sm font-bold text-emerald-600 hover:underline dark:text-emerald-400">Edit</button>
+                        <button type="button" onClick={() => setRuleModal({ mode: 'edit', id: row.id, form: { ...row, deduction_amount: row.deduction_amount ?? '', schedule_id: row.schedule_id ?? null } })} className="text-sm font-bold text-emerald-600 hover:underline dark:text-emerald-400">Edit</button>
                         <button type="button" onClick={() => removeRule(row)} className="text-sm font-bold text-rose-600 hover:underline dark:text-rose-400">Delete</button>
                       </div>
                     </td>
@@ -339,12 +367,15 @@ export default function LateRulesSettings() {
             {deductionRules.map((row, i) => (
               <div key={row.id} className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
                 <div className="flex items-start justify-between">
-                  <p className="font-bold text-slate-900 dark:text-white">#{i + 1} {formatRange(row.from_minutes, row.to_minutes)}</p>
+                  <div>
+                    <p className="font-bold text-slate-900 dark:text-white">#{i + 1} {formatRange(row.from_minutes, row.to_minutes)}</p>
+                    <ScheduleBadge scheduleId={row.schedule_id} scheduleName={row.schedule?.schedule_name} />
+                  </div>
                   <TypeBadge type={row.deduction_type} />
                 </div>
                 <p className="mt-2 text-sm font-semibold">{deductionLabel(row.deduction_type, row.deduction_amount)}</p>
                 <div className="mt-3 flex gap-3">
-                  <button type="button" className="text-xs font-bold text-emerald-600" onClick={() => setRuleModal({ mode: 'edit', id: row.id, form: { ...row, deduction_amount: row.deduction_amount ?? '' } })}>Edit</button>
+                  <button type="button" className="text-xs font-bold text-emerald-600" onClick={() => setRuleModal({ mode: 'edit', id: row.id, form: { ...row, deduction_amount: row.deduction_amount ?? '', schedule_id: row.schedule_id ?? null } })}>Edit</button>
                   <button type="button" className="text-xs font-bold text-rose-600" onClick={() => removeRule(row)}>Delete</button>
                 </div>
               </div>
@@ -356,8 +387,23 @@ export default function LateRulesSettings() {
 
         {/* 3. Calculation Preview — bottom left */}
         <SectionCard number={3} title="Calculation Preview" icon={Calculator}>
+          {/* Schedule selector */}
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-semibold text-slate-500">Preview as Schedule</span>
+            <select
+              className={inputCls}
+              value={previewScheduleId ?? ''}
+              onChange={(e) => setPreviewScheduleId(e.target.value === '' ? null : Number(e.target.value))}
+            >
+              <option value="">Global (default work start time)</option>
+              {workSchedules.map((s) => (
+                <option key={s.id} value={s.id}>{s.schedule_name}</option>
+              ))}
+            </select>
+          </label>
+
           <div className="grid gap-3 rounded-xl border border-slate-100 bg-slate-50/80 p-4 dark:border-slate-800 dark:bg-slate-950/40 sm:grid-cols-3">
-            <PreviewStat label="Work Start Time" value={preview.workStart} />
+            <PreviewStat label={`Work Start (${preview.scheduleName})`} value={preview.workStart} />
             <PreviewStat label="Grace Period" value={`${preview.grace} min`} />
             <label className="block">
               <span className="text-xs font-semibold text-slate-500">Employee Check In</span>
@@ -411,7 +457,7 @@ export default function LateRulesSettings() {
       {/* Mobile FAB */}
       <button
         type="button"
-        onClick={() => setRuleModal({ mode: 'add', form: { ...EMPTY_RULE } })}
+        onClick={() => setRuleModal({ mode: 'add', form: { ...EMPTY_RULE }, schedules: workSchedules })}
         className="fixed bottom-24 right-4 z-20 grid h-14 w-14 place-items-center rounded-full bg-emerald-600 text-white shadow-xl lg:hidden"
         aria-label="Add rule"
       >
@@ -419,7 +465,7 @@ export default function LateRulesSettings() {
       </button>
 
       {ruleModal && (
-        <RuleModal modal={ruleModal} onClose={() => setRuleModal(null)} onSave={saveRule} />
+        <RuleModal modal={ruleModal} onClose={() => setRuleModal(null)} onSave={saveRule} workSchedules={workSchedules} />
       )}
     </div>
   )
@@ -513,6 +559,21 @@ function InfoBar({ children, variant }) {
   )
 }
 
+function ScheduleBadge({ scheduleId, scheduleName }) {
+  if (!scheduleId) {
+    return (
+      <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+        All Schedules
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex rounded-full bg-violet-100 px-3 py-1 text-xs font-bold text-violet-700 dark:bg-violet-950/50 dark:text-violet-300">
+      {scheduleName || `Schedule #${scheduleId}`}
+    </span>
+  )
+}
+
 function TypeBadge({ type }) {
   const config = {
     none: { cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300', label: 'No Deduction' },
@@ -566,7 +627,7 @@ function Toggle({ label, description, checked, onChange }) {
   )
 }
 
-function RuleModal({ modal, onClose, onSave }) {
+function RuleModal({ modal, onClose, onSave, workSchedules = [] }) {
   const [form, setForm] = useState(modal.form)
   const [testingChat, setTestingChat] = useState(false)
   const [chatNotice, setChatNotice] = useState(null)
@@ -601,6 +662,22 @@ function RuleModal({ modal, onClose, onSave }) {
           <button type="button" onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100"><X size={20} /></button>
         </div>
         <div className="space-y-3">
+          <label className="block">
+            <span className="mb-1 text-sm font-semibold">Applies to Schedule</span>
+            <select
+              className={inputCls}
+              value={form.schedule_id ?? ''}
+              onChange={(e) => set('schedule_id', e.target.value === '' ? null : Number(e.target.value))}
+            >
+              <option value="">All Schedules (Global)</option>
+              {workSchedules.map((s) => (
+                <option key={s.id} value={s.id}>{s.schedule_name}</option>
+              ))}
+            </select>
+            <p className="mt-1 text-xs text-slate-400">
+              "All Schedules" is the fallback — used when no schedule-specific rule matches.
+            </p>
+          </label>
           <ModalField label="Rule name" value={form.rule_name} onChange={(v) => set('rule_name', v)} placeholder="Late 16-30 min" />
           <div className="grid grid-cols-2 gap-3">
             <ModalField label="From (min)" type="number" value={form.from_minutes} onChange={(v) => set('from_minutes', v)} />

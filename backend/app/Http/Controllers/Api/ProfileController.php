@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Services\ImageUploadService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 
 class ProfileController extends Controller
 {
@@ -42,8 +43,13 @@ class ProfileController extends Controller
             $data['last_name']  = $parts[1] ?? null;
         }
 
+        $profileFields = ['first_name', 'last_name', 'phone', 'address'];
+        if (Schema::hasColumn('employees', 'telegram_chat_id')) {
+            $profileFields[] = 'telegram_chat_id';
+        }
+
         $emp = [];
-        foreach (['first_name', 'last_name', 'phone', 'telegram_chat_id', 'address'] as $field) {
+        foreach ($profileFields as $field) {
             if (array_key_exists($field, $data)) {
                 $emp[$field] = $data[$field];
             }

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\SystemSetting;
 use App\Services\ImageUploadService;
 use Illuminate\Http\Request;
+
 class SettingsController extends Controller
 {
     public function index()
@@ -45,10 +46,10 @@ class SettingsController extends Controller
     private function uploadImageSetting(Request $request, ImageUploadService $images, string $field, string $folder, string $settingKey, string $responseKey)
     {
         $request->validate([
-            $field => ['required', 'image', 'max:2048'],
+            $field => ['required', 'image', 'max:4096'],
         ]);
 
-        $path = $images->store($request->file($field), $folder);
+        $path = $images->store($request->file($field), "branding/{$folder}");
         $url  = $images->url($path);
 
         SystemSetting::updateOrCreate(

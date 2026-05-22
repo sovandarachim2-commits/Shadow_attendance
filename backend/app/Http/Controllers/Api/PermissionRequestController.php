@@ -14,6 +14,8 @@ use Illuminate\Validation\ValidationException;
 class PermissionRequestController extends Controller
 {
     private const TYPES = [
+        'Leave Request',
+        'Sick Leave',
         'Early Leave',
         'Attendance Edit',
         'Manual Check In',
@@ -21,6 +23,7 @@ class PermissionRequestController extends Controller
         'Day Off',
         'Outdoor Work',
         'Request Permission',
+        'Custom Request',
     ];
 
     private const EVENT_KEY = 'permission_request';
@@ -28,7 +31,7 @@ class PermissionRequestController extends Controller
     public function index(Request $request)
     {
         $query = PermissionRequest::query()
-            ->with(['employee', 'reviewer'])
+            ->with(['employee.department', 'reviewer'])
             ->when(
                 ! $request->user()->hasPermission('requests.view_all'),
                 fn ($q) => $q->where('employee_id', $request->user()->employee_id)
@@ -57,6 +60,8 @@ class PermissionRequestController extends Controller
             'is_emergency' => ['nullable', 'boolean'],
             'gps_location' => ['nullable', 'string', 'max:500'],
         ]);
+
+        $this->assertNoDuplicateActiveRequest($employee->id, $data);
 
         $record = PermissionRequest::create([
             'employee_id' => $employee->id,
@@ -132,6 +137,15 @@ class PermissionRequestController extends Controller
         if (isset($data['request_date'], $data['request_date_end']) && $data['request_date_end'] < $data['request_date']) {
             throw ValidationException::withMessages(['request_date_end' => 'End date must be on or after start date.']);
         }
+
+        $merged = array_merge($permissionRequest->only([
+            'type',
+            'request_date',
+            'request_date_end',
+            'request_time',
+        ]), $data);
+
+        $this->assertNoDuplicateActiveRequest($permissionRequest->employee_id, $merged, $permissionRequest->id);
 
         $permissionRequest->update($data);
 
@@ -277,6 +291,29 @@ class PermissionRequestController extends Controller
 
         if (! $canManageAll && $permissionRequest->employee_id !== $request->user()->employee_id) {
             abort(403, 'You can only modify your own permission requests.');
+        }
+    }
+
+    private function assertNoDuplicateActiveRequest(int $employeeId, array $data, ?int $ignoreId = null): void
+    {
+        $duplicate = PermissionRequest::query()
+            ->where('employee_id', $employeeId)
+            ->where('type', $data['type'])
+            ->whereDate('request_date', $data['request_date'])
+            ->whereDate('request_date_end', $data['request_date_end'])
+            ->when(
+                array_key_exists('request_time', $data) && $data['request_time'],
+                fn ($query) => $query->where('request_time', $data['request_time']),
+                fn ($query) => $query->whereNull('request_time')
+            )
+            ->whereIn('status', ['pending', 'approved'])
+            ->when($ignoreId, fn ($query) => $query->whereKeyNot($ignoreId))
+            ->exists();
+
+        if ($duplicate) {
+            throw ValidationException::withMessages([
+                'request_date' => 'You already have this permission request for the selected date and time.',
+            ]);
         }
     }
 }

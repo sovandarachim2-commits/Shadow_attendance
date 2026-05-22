@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Attendance;
 use App\Models\LateDeductionRule;
 use App\Models\LateRule;
+use App\Models\WorkSchedule;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -14,7 +15,12 @@ class LateRuleController extends Controller
     public function index()
     {
         $settings = LateRule::query()->firstOrCreate([]);
-        $rules = LateDeductionRule::orderBy('from_minutes')->get();
+        $rules = LateDeductionRule::with('schedule')->orderBy('from_minutes')->get();
+        $workSchedules = WorkSchedule::orderBy('schedule_name')->get([
+            'id', 'schedule_name',
+            'monday_start', 'tuesday_start', 'wednesday_start',
+            'thursday_start', 'friday_start', 'saturday_start', 'sunday_start',
+        ]);
 
         $today = Carbon::today();
         $todayAttendances = Attendance::whereDate('attendance_date', $today)->get();
@@ -25,6 +31,7 @@ class LateRuleController extends Controller
         return response()->json([
             'settings' => $settings,
             'deduction_rules' => $rules,
+            'work_schedules' => $workSchedules,
             'stats' => [
                 'work_start_time'      => $workStart->format('h:i A'),
                 'grace_minutes'        => (int) $settings->grace_minutes,

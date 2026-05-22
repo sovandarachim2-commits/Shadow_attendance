@@ -3,7 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
+use App\Services\ImageUploadService;
 
 class Employee extends Model
 {
@@ -21,7 +21,7 @@ class Employee extends Model
             return null;
         }
 
-        return Storage::disk('r2')->url($this->photo_path);
+        return app(ImageUploadService::class)->url($this->photo_path);
     }
 
     public function getFullNameAttribute(): string

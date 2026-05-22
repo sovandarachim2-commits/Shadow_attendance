@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  Calendar, Check, Clock, Download,
-  LogIn, LogOut,
+  ArrowLeft, BriefcaseBusiness, Calendar, Check, ChevronDown, ChevronRight, Clock,
+  ClipboardList, Download, Filter, MapPin, RotateCcw, Search, Timer, UserMinus, Users,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { api } from '../services/api'
@@ -9,18 +9,11 @@ import { EmptyState, FloatingSpinner } from '../components/shared/UI'
 import AttendanceDetailModal from '../components/attendance/reports/AttendanceDetailModal'
 import MyAttendanceReportsDesktop from '../components/attendance/reports/MyAttendanceReportsDesktop'
 import {
-  DashboardSummaryCard, StatusBadge, formatHoursCompact, formatLateShort,
-  formatMobileDate, formatMonthLabel, formatWeekday, formatWorkHours,
+  StatusBadge, formatHoursCompact,
+  formatMobileDate, formatMonthLabel, formatPeriodLabel, formatWorkHours,
+  TypeBadge,
 } from '../components/attendance/reports/attendanceReportShared'
 import { canAccess } from '../utils/format'
-
-const TIMELINE_ICONS = {
-  check_in: LogIn,
-  check_out: LogOut,
-  missing_out: LogOut,
-  lunch_out: Clock,
-  lunch_in: Clock,
-}
 
 export default function MyAttendanceReportsPage({ user, openPermissionRequest }) {
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7))
@@ -32,6 +25,10 @@ export default function MyAttendanceReportsPage({ user, openPermissionRequest })
   const [exporting, setExporting] = useState(false)
   const [data, setData] = useState({ employee: null, summary: {}, records: [] })
   const [detail, setDetail] = useState(null)
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
+  const [mobileShowAll, setMobileShowAll] = useState(false)
+  const [mobileSearch, setMobileSearch] = useState('')
+  const [mobileTab, setMobileTab] = useState('history')
 
   const canExport = canAccess(user, ['reports.attendance.export', 'reports.attendance.view_own', 'attendance.view_own'])
 
@@ -48,16 +45,59 @@ export default function MyAttendanceReportsPage({ user, openPermissionRequest })
     } finally {
       setLoading(false)
     }
-  }, [month, status, type, branch])
+  }, [month, status, type])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    // Reload report data whenever the selected report filters change.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    load()
+  }, [load])
 
   const summary = data.summary || {}
   const records = useMemo(() => {
     const list = data.records || []
     if (!branch) return list
-    return list.filter((r) => r.branch === branch)
+    return list.filter((record) => record.branch === branch)
   }, [data.records, branch])
+  const monthRange = useMemo(() => getMonthRange(month), [month])
+  const mobileFilteredRecords = useMemo(() => {
+    const query = mobileSearch.trim().toLowerCase()
+    if (!query) return records
+
+    return records.filter((record) => [
+      formatMobileDate(record.attendance_date),
+      formatDayShort(record.attendance_date),
+      record.display_status || record.status,
+      record.type,
+      record.branch,
+      record.location,
+      timeRange(record),
+    ].filter(Boolean).some((value) => String(value).toLowerCase().includes(query)))
+  }, [records, mobileSearch])
+  const mobileRecords = mobileShowAll ? mobileFilteredRecords : mobileFilteredRecords.slice(0, 3)
+
+  useEffect(() => {
+    setMobileShowAll(false)
+    setMobileTab('history')
+  }, [month, status, type, branch, mobileSearch])
+
+  const applyMobileFilters = () => {
+    setMonth(draft.month ?? month)
+    setStatus(draft.status ?? '')
+    setType(draft.type ?? '')
+    setBranch(draft.branch ?? '')
+    setDraft({})
+    setMobileFiltersOpen(false)
+  }
+
+  const resetMobileFilters = () => {
+    setDraft({})
+    setMonth(new Date().toISOString().slice(0, 7))
+    setStatus('')
+    setType('')
+    setBranch('')
+    setMobileFiltersOpen(false)
+  }
 
   const exportCsv = async () => {
     setExporting(true)
@@ -67,10 +107,10 @@ export default function MyAttendanceReportsPage({ user, openPermissionRequest })
       if (type) params.type = type
       const res = await api.get('/attendance/reports/export', { params, responseType: 'blob' })
       const url = URL.createObjectURL(new Blob([res.data], { type: 'text/csv' }))
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `my-attendance-${month}.csv`
-      a.click()
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `my-attendance-${month}.csv`
+      link.click()
       URL.revokeObjectURL(url)
     } catch {
       window.alert('Export failed.')
@@ -81,41 +121,102 @@ export default function MyAttendanceReportsPage({ user, openPermissionRequest })
 
   return (
     <>
-      {/* ── Mobile layout ───────────────────────────────────────────── */}
-      <div className="space-y-4 lg:hidden">
-        <MonthlySummaryCard
-            month={month}
-            onMonthChange={setMonth}
+      <div className="mx-auto max-w-md space-y-5 pb-24 lg:hidden">
+        {detail ? (
+          <MobileAttendanceDetail
+            record={detail}
             summary={summary}
-            loading={loading}
+            month={month}
+            records={records}
+            activeTab={mobileTab}
+            setActiveTab={setMobileTab}
+            onBack={() => setDetail(null)}
+            onMonthChange={setMonth}
+            onSelectDate={(row) => row && setDetail(row)}
           />
+        ) : (
+          <>
+            <MobilePeriodPicker month={month} monthRange={monthRange} onMonthChange={setMonth} />
 
-          {loading ? (
-            <div className="py-16"><FloatingSpinner /></div>
-          ) : records.length === 0 ? (
-            <EmptyState title="No attendance records" description="No data for this period." />
-          ) : (
-            <div className="space-y-3 pb-4">
-              {records.map((row) => (
-                <MobileDayCard key={row.id} row={row} onTap={() => setDetail(row)} />
-              ))}
-            </div>
-          )}
+            <MobileReportActions
+              canExport={canExport}
+              exporting={exporting}
+              onExport={exportCsv}
+              onCorrection={() => openPermissionRequest?.('Attendance Edit')}
+            />
 
-        {canExport && (
-          <button
-            type="button"
-            onClick={exportCsv}
-            disabled={exporting}
-            className="fixed bottom-24 right-4 z-30 grid h-14 w-14 place-items-center rounded-full bg-emerald-600 text-white shadow-lg"
-            aria-label="Download report"
-          >
-            <Download size={22} />
-          </button>
+            <section>
+              <h3 className="mb-3 text-xl font-bold text-slate-950 dark:text-white">Overview</h3>
+              <MobileStatsGrid summary={summary} loading={loading} />
+            </section>
+
+            <MobileFilters
+              open={mobileFiltersOpen}
+              setOpen={setMobileFiltersOpen}
+              month={month}
+              draft={draft}
+              setDraft={setDraft}
+              allRecords={data.records || []}
+              onApply={applyMobileFilters}
+              onReset={resetMobileFilters}
+            />
+
+            <section>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Calendar size={20} className="text-emerald-500" />
+                  <h3 className="text-xl font-bold text-slate-950 dark:text-white">Attendance History</h3>
+                </div>
+                <button
+                  type="button"
+                  className="flex items-center gap-1 text-sm font-bold text-emerald-600 dark:text-emerald-400"
+                  onClick={() => setMobileShowAll(true)}
+                >
+                  View All <ChevronRight size={16} />
+                </button>
+              </div>
+
+              <input
+                className="mb-3 h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-800 dark:bg-slate-900 dark:text-white"
+                value={mobileSearch}
+                onChange={(event) => setMobileSearch(event.target.value)}
+                placeholder="Search date, status, type, location..."
+              />
+
+              {loading ? (
+                <div className="py-16"><FloatingSpinner /></div>
+              ) : mobileFilteredRecords.length === 0 ? (
+                <EmptyState title="No attendance records" description="No data for this period." />
+              ) : (
+                <div className="space-y-3">
+                  {mobileRecords.map((row) => (
+                    <MobileDayCard key={row.id} row={row} onTap={() => { setMobileTab('history'); setDetail(row) }} />
+                  ))}
+                  {mobileFilteredRecords.length > 3 && (
+                    <button
+                      type="button"
+                      className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white text-sm font-extrabold text-emerald-600 shadow-sm transition active:scale-[0.99] dark:border-slate-800 dark:bg-slate-900"
+                      onClick={() => setMobileShowAll((current) => !current)}
+                    >
+                      {mobileShowAll ? 'Show Less' : `View All (${mobileFilteredRecords.length} entries)`}
+                      <ChevronRight size={18} className={clsx('transition', mobileShowAll && 'rotate-90')} />
+                    </button>
+                  )}
+                </div>
+              )}
+            </section>
+
+            <MobileCalendar
+              month={month}
+              records={records}
+              selectedDate=""
+              onMonthChange={setMonth}
+              onSelectDate={(row) => row && setDetail(row)}
+            />
+          </>
         )}
       </div>
 
-      {/* ── Desktop layout ──────────────────────────────────────────── */}
       <div className="hidden lg:block">
         <MyAttendanceReportsDesktop
           summary={summary}
@@ -149,99 +250,544 @@ export default function MyAttendanceReportsPage({ user, openPermissionRequest })
       </div>
 
       {detail && (
+        <div className="hidden lg:block">
         <AttendanceDetailModal record={detail} onClose={() => setDetail(null)} canEdit={false} />
+        </div>
       )}
     </>
   )
 }
 
-function MonthlySummaryCard({ month, onMonthChange, summary, loading }) {
+function MobilePeriodPicker({ month, monthRange, onMonthChange }) {
   return (
-    <DashboardSummaryCard
-      title={formatMonthLabel(month)}
-      subtitle="Monthly Summary"
-      headerRight={<MonthSelectButton month={month} onMonthChange={onMonthChange} />}
-      stats={[
-        { label: 'Present', value: loading ? '—' : (summary.present ?? 0), tone: 'emerald' },
-        { label: 'Late', value: loading ? '—' : (summary.late ?? 0), tone: 'amber' },
-        { label: 'Absent', value: loading ? '—' : (summary.absent ?? 0), tone: 'rose' },
-        { label: 'Hours', value: loading ? '—' : formatHoursCompact(summary.total_work_minutes), tone: 'sky' },
-      ]}
-      columns={4}
-    />
+    <label className="flex h-14 cursor-pointer items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-800 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100">
+      <span>{formatPeriodLabel(monthRange.from, monthRange.to)}</span>
+      <span className="grid h-9 w-9 place-items-center rounded-xl text-slate-700 dark:text-slate-200">
+        <Calendar size={20} />
+      </span>
+      <input type="month" className="sr-only" value={month} onChange={(event) => onMonthChange(event.target.value)} />
+    </label>
   )
 }
 
-function MonthSelectButton({ month, onMonthChange }) {
+function MobileReportActions({ canExport, exporting, onExport, onCorrection }) {
   return (
-    <label
-      className="relative grid h-11 w-11 shrink-0 cursor-pointer place-items-center rounded-2xl bg-emerald-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] transition hover:bg-emerald-200 active:scale-95"
-      aria-label="Select month"
-    >
-      <Calendar size={20} className="text-white" strokeWidth={2.25} />
-      <input
-        type="month"
-        className="absolute inset-0 cursor-pointer opacity-0"
-        value={month}
-        onChange={(e) => onMonthChange(e.target.value)}
-      />
+    <section className="grid grid-cols-2 gap-3">
+      {canExport && (
+        <button
+          type="button"
+          onClick={onExport}
+          disabled={exporting}
+          className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-3 text-sm font-extrabold text-white shadow-lg shadow-emerald-600/20 transition active:scale-[0.99] disabled:opacity-60"
+        >
+          <Download size={17} />
+          {exporting ? 'Downloading...' : 'Download Report'}
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={onCorrection}
+        className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 text-sm font-extrabold text-slate-900 shadow-sm transition active:scale-[0.99] dark:border-slate-800 dark:bg-slate-900 dark:text-white"
+      >
+        <ClipboardList size={17} />
+        Request Correction
+      </button>
+    </section>
+  )
+}
+
+function MobileStatsGrid({ summary, loading }) {
+  const stats = [
+    { label: 'Present Days', value: loading ? '-' : (summary.present ?? 0), help: 'from this month', icon: Users, tone: 'emerald' },
+    { label: 'Late Days', value: loading ? '-' : (summary.late ?? 0), help: 'from this month', icon: Clock, tone: 'amber', down: true },
+    { label: 'Absent Days', value: loading ? '-' : (summary.absent ?? 0), help: 'from this month', icon: UserMinus, tone: 'rose', down: true },
+    { label: 'Total Working Hours', value: loading ? '-' : formatHoursCompact(summary.total_work_minutes), help: 'from this month', icon: Timer, tone: 'sky' },
+    { label: 'Overtime Hours', value: loading ? '-' : formatHoursCompact(summary.overtime_minutes), help: 'from this month', icon: Clock, tone: 'violet' },
+  ]
+
+  return (
+    <section className="grid grid-cols-2 gap-3">
+      {stats.map((item) => <MobileStatTile key={item.label} {...item} />)}
+    </section>
+  )
+}
+
+function MobileStatTile({ label, value, help, icon: Icon, tone, down }) {
+  const tones = {
+    emerald: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300',
+    amber: 'bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-300',
+    rose: 'bg-rose-100 text-rose-600 dark:bg-rose-950/50 dark:text-rose-300',
+    sky: 'bg-sky-100 text-sky-600 dark:bg-sky-950/50 dark:text-sky-300',
+    violet: 'bg-violet-100 text-violet-600 dark:bg-violet-950/50 dark:text-violet-300',
+  }
+
+  return (
+    <article className="min-h-[112px] rounded-2xl border border-slate-100 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex items-start gap-3">
+        <div className={clsx('grid h-12 w-12 shrink-0 place-items-center rounded-2xl', tones[tone])}>
+          <Icon size={24} />
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-slate-800 dark:text-slate-100">{label}</p>
+          <p className="mt-1 text-2xl font-extrabold text-slate-950 dark:text-white">{value}</p>
+        </div>
+      </div>
+      <p className={clsx('mt-3 text-xs font-bold', down ? 'text-rose-500' : 'text-emerald-600')}>{down ? 'Down' : 'Up'} {help}</p>
+    </article>
+  )
+}
+
+function MobileFilters({ open, setOpen, month, draft, setDraft, allRecords, onApply, onReset }) {
+  const locations = useMemo(() => [...new Set(allRecords.map((record) => record.branch).filter(Boolean))], [allRecords])
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left"
+        onClick={() => setOpen((current) => !current)}
+      >
+        <span className="flex items-center gap-3 text-base font-bold text-slate-900 dark:text-white">
+          <Filter size={19} />
+          Filters
+        </span>
+        <ChevronDown size={18} className={clsx('transition', open && 'rotate-180')} />
+      </button>
+      {open && (
+        <div className="grid grid-cols-2 gap-3 border-t border-slate-100 p-4 dark:border-slate-800">
+          <MobileFilterField label="Month">
+            <input
+              className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold dark:border-slate-700 dark:bg-slate-950"
+              type="month"
+              value={draft.month ?? month}
+              onChange={(event) => setDraft((current) => ({ ...current, month: event.target.value }))}
+            />
+          </MobileFilterField>
+          <MobileFilterField label="Status">
+            <select className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold dark:border-slate-700 dark:bg-slate-950" value={draft.status ?? ''} onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value }))}>
+              <option value="">All Status</option>
+              <option value="present">Present</option>
+              <option value="late">Late</option>
+              <option value="absent">Absent</option>
+              <option value="on_leave">Leave</option>
+            </select>
+          </MobileFilterField>
+          <MobileFilterField label="Type">
+            <select className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold dark:border-slate-700 dark:bg-slate-950" value={draft.type ?? ''} onChange={(event) => setDraft((current) => ({ ...current, type: event.target.value }))}>
+              <option value="">All Types</option>
+              <option value="office">Office</option>
+              <option value="outdoor">Outdoor</option>
+            </select>
+          </MobileFilterField>
+          <MobileFilterField label="Location">
+            <select className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold dark:border-slate-700 dark:bg-slate-950" value={draft.branch ?? ''} onChange={(event) => setDraft((current) => ({ ...current, branch: event.target.value }))}>
+              <option value="">All Locations</option>
+              {locations.map((location) => <option key={location} value={location}>{location}</option>)}
+            </select>
+          </MobileFilterField>
+          <button type="button" onClick={onApply} className="h-12 rounded-xl bg-emerald-600 text-sm font-extrabold text-white shadow-lg shadow-emerald-600/20">Apply Filter</button>
+          <button type="button" onClick={onReset} className="inline-flex h-12 items-center justify-center gap-2 rounded-xl border border-slate-200 text-sm font-extrabold dark:border-slate-700">
+            <RotateCcw size={16} />
+            Reset
+          </button>
+        </div>
+      )}
+    </section>
+  )
+}
+
+function MobileFilterField({ label, children }) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-sm font-semibold text-slate-600 dark:text-slate-300">{label}</span>
+      {children}
     </label>
   )
 }
 
 function MobileDayCard({ row, onTap }) {
-  const timeline = row.timeline || []
   const displayStatus = row.display_status || row.status
+  const statusTone = displayStatus === 'late' ? 'orange' : displayStatus === 'absent' ? 'red' : 'green'
 
   return (
     <article
-      className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900"
+      className="relative overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900"
       onClick={onTap}
-      onKeyDown={(e) => e.key === 'Enter' && onTap()}
+      onKeyDown={(event) => event.key === 'Enter' && onTap()}
       role="button"
       tabIndex={0}
     >
-      <div className="flex items-start justify-between gap-3 px-4 pt-4">
-        <div>
-          <p className="font-bold text-slate-900 dark:text-white">{formatMobileDate(row.attendance_date)}</p>
-          <p className="text-sm text-slate-500">{formatWeekday(row.attendance_date)}</p>
+      <span className={clsx('absolute inset-y-0 left-0 w-1.5', {
+        'bg-emerald-500': statusTone === 'green',
+        'bg-amber-500': statusTone === 'orange',
+        'bg-rose-500': statusTone === 'red',
+      })} />
+      <div className="flex items-center gap-4 px-4 py-3 pl-5">
+        <div className={clsx('grid h-20 w-20 shrink-0 place-items-center rounded-2xl text-center', {
+          'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40': statusTone === 'green',
+          'bg-amber-50 text-amber-700 dark:bg-amber-950/40': statusTone === 'orange',
+          'bg-rose-50 text-rose-700 dark:bg-rose-950/40': statusTone === 'red',
+        })}>
+          <div>
+            <p className="text-sm font-bold">{monthShort(row.attendance_date)}</p>
+            <p className="text-3xl font-extrabold leading-none">{dayNumber(row.attendance_date)}</p>
+            <p className="mt-1 text-xs font-bold">{formatDayShort(row.attendance_date)}</p>
+          </div>
         </div>
-        <StatusBadge status={displayStatus} />
-      </div>
 
-      <div className="relative mx-4 mt-4 mb-3 border-l-2 border-slate-100 pl-5 dark:border-slate-700">
-        {timeline.map((ev) => {
-          const Icon = TIMELINE_ICONS[ev.key] || Check
-          const isLate = ev.key === 'check_in' && row.late_minutes > 0
-          const iconTone = ev.tone === 'red' ? 'bg-rose-100 text-rose-600' : ev.tone === 'orange' ? 'bg-amber-100 text-amber-600' : ev.key.includes('lunch') ? 'bg-sky-100 text-sky-600' : 'bg-emerald-100 text-emerald-600'
-
-          return (
-            <div key={ev.key} className="relative pb-4 last:pb-0">
-              <span className={clsx('absolute -left-[1.6rem] grid h-7 w-7 place-items-center rounded-full', iconTone)}>
-                <Icon size={14} />
-              </span>
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{ev.label}</p>
-                  <p className="text-sm tabular-nums text-slate-500">{ev.time}</p>
-                </div>
-                {isLate && (
-                  <p className="text-xs font-bold text-rose-600">{formatLateShort(row.late_minutes)}</p>
-                )}
-                {ev.note && !isLate && (
-                  <p className="text-xs font-bold text-amber-600">{ev.note}</p>
-                )}
-              </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <p className="truncate text-base font-extrabold text-slate-950 dark:text-white">{timeRange(row)}</p>
+            <StatusBadge status={displayStatus} />
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <p className="text-xs font-semibold text-slate-500">Working Hours</p>
+              <p className="mt-0.5 font-extrabold text-slate-900 dark:text-white">{formatWorkHours(row.work_minutes)}</p>
             </div>
-          )
-        })}
-      </div>
-
-      <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3 dark:border-slate-800">
-        <span className="text-sm text-slate-500">Working Hours</span>
-        <span className="text-sm font-bold text-slate-900 dark:text-white">{formatWorkHours(row.work_minutes)}</span>
+            <div>
+              <p className="text-xs font-semibold text-slate-500">Late</p>
+              <p className={clsx('mt-0.5 font-extrabold', row.late_minutes > 0 ? 'text-rose-500' : 'text-slate-900 dark:text-white')}>
+                {row.late_minutes > 0 ? `${row.late_minutes}m` : '0m'}
+              </p>
+            </div>
+          </div>
+        </div>
+        <ChevronRight size={22} className="shrink-0 text-slate-800 dark:text-slate-200" />
       </div>
     </article>
   )
 }
 
+function MobileCalendar({ month, records, selectedDate, onMonthChange, onSelectDate }) {
+  const recordByDate = useMemo(() => {
+    const map = {}
+    records.forEach((record) => { map[record.attendance_date] = record })
+    return map
+  }, [records])
+  const cells = useMemo(() => buildCalendarCells(month), [month])
+
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Calendar size={20} className="text-emerald-500" />
+          <h3 className="text-xl font-extrabold text-slate-950 dark:text-white">Calendar</h3>
+        </div>
+        <div className="flex items-center gap-2">
+          <p className="mr-2 text-sm font-bold text-slate-800 dark:text-slate-100">{formatMonthLabel(month)}</p>
+          <button type="button" className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 dark:border-slate-700" onClick={() => shiftMonth(month, -1, onMonthChange)} aria-label="Previous month">
+            <ChevronRight size={18} className="rotate-180" />
+          </button>
+          <button type="button" className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 dark:border-slate-700" onClick={() => shiftMonth(month, 1, onMonthChange)} aria-label="Next month">
+            <ChevronRight size={18} />
+          </button>
+        </div>
+      </div>
+      <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-slate-500">
+        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => <span key={day}>{day}</span>)}
+      </div>
+      <div className="mt-3 grid grid-cols-7 gap-1 text-center">
+        {cells.map((date, index) => {
+          if (!date) return <span key={`blank-${index}`} className="h-9" />
+          const record = recordByDate[date]
+          const active = selectedDate === date
+          return (
+            <button
+              key={date}
+              type="button"
+              onClick={() => onSelectDate(record)}
+              className={clsx(
+                'relative grid h-9 place-items-center rounded-full text-sm font-bold',
+                active ? 'bg-emerald-600 text-white' : record ? 'text-slate-900 hover:bg-slate-100 dark:text-white dark:hover:bg-slate-800' : 'text-slate-400',
+              )}
+            >
+              {dayNumber(date)}
+              {record && <span className={clsx('absolute bottom-1 h-1 w-1 rounded-full', statusDotClass(record), active && 'bg-white')} />}
+            </button>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
+function MobileAttendanceDetail({
+  record, summary, month, records, activeTab, setActiveTab, onBack, onMonthChange, onSelectDate,
+}) {
+  const displayStatus = record.display_status || record.status
+  const timeline = record.timeline || []
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between gap-3">
+        <button
+          type="button"
+          className="grid h-12 w-12 place-items-center rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-white"
+          onClick={onBack}
+          aria-label="Back"
+        >
+          <ArrowLeft size={22} />
+        </button>
+        <div className="min-w-0 flex-1 text-center">
+          <h2 className="truncate text-xl font-extrabold text-slate-950 dark:text-white">Attendance History</h2>
+          <p className="mt-0.5 text-sm font-semibold text-slate-500">{formatMobileDate(record.attendance_date)} ({formatDayLong(record.attendance_date)})</p>
+        </div>
+        <span className="grid h-12 w-12 place-items-center rounded-2xl" />
+      </div>
+
+      <MobileDetailCard record={record} />
+
+      <div className="grid grid-cols-3 rounded-2xl border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        {['history', 'calendar', 'timeline'].map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => setActiveTab(tab)}
+            className={clsx(
+              'h-11 rounded-xl text-sm font-extrabold capitalize transition',
+              activeTab === tab ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20' : 'text-slate-700 dark:text-slate-200',
+            )}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'history' && (
+        <section className="space-y-3">
+          {records.slice(0, 5).map((row) => (
+            <MobileDayCard key={row.id} row={row} onTap={() => onSelectDate(row)} />
+          ))}
+        </section>
+      )}
+
+      {activeTab === 'calendar' && (
+        <>
+          <MobileCalendar
+            month={month}
+            records={records}
+            selectedDate={record.attendance_date}
+            onMonthChange={onMonthChange}
+            onSelectDate={onSelectDate}
+          />
+          <MobileAttendanceSummary summary={summary} />
+        </>
+      )}
+
+      {activeTab === 'timeline' && (
+        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className={clsx('mb-5 flex items-center gap-3 rounded-2xl p-4', displayStatus === 'late' ? 'bg-amber-50 text-amber-700' : displayStatus === 'absent' ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700')}>
+            <span className="grid h-12 w-12 place-items-center rounded-full bg-current text-white">
+              <Check size={24} className="text-white" />
+            </span>
+            <div>
+              <p className="text-lg font-extrabold capitalize">{displayStatus?.replace('_', ' ') || 'Present'}</p>
+              <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">{formatMobileDate(record.attendance_date)} ({formatDayLong(record.attendance_date)})</p>
+            </div>
+          </div>
+          <TimelineList record={record} timeline={timeline} />
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <SummaryBox icon={Clock} label="Working Hours" value={formatWorkHours(record.work_minutes)} tone="emerald" />
+            <SummaryBox icon={Timer} label="Overtime Hours" value={formatWorkHours(Math.max(0, record.overtime_minutes ?? ((record.work_minutes || 0) - 480)))} tone="violet" />
+            <SummaryBox icon={Clock} label="Late Minutes" value={`${record.late_minutes ?? 0}m`} tone="amber" />
+            <SummaryBox icon={BriefcaseBusiness} label="Attendance Type" value={<TypeBadge type={record.type} />} tone="sky" />
+          </div>
+        </section>
+      )}
+    </div>
+  )
+}
+
+function MobileDetailCard({ record }) {
+  const timeline = record.timeline || []
+  const displayStatus = record.display_status || record.status
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <div className={clsx('flex items-center justify-between px-5 py-4', displayStatus === 'late' ? 'bg-amber-50 dark:bg-amber-950/30' : displayStatus === 'absent' ? 'bg-rose-50 dark:bg-rose-950/30' : 'bg-emerald-50 dark:bg-emerald-950/30')}>
+        <span className="grid h-12 w-12 place-items-center rounded-full bg-emerald-600 text-white">
+          <Check size={24} />
+        </span>
+        <StatusBadge status={displayStatus} />
+      </div>
+      <div className="p-5">
+        <TimelineList record={record} timeline={timeline} compact />
+        <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-5 border-t border-slate-100 pt-5 dark:border-slate-800">
+          <DetailMetric label="Working Hours" value={formatWorkHours(record.work_minutes)} />
+          <DetailMetric label="Overtime Hours" value={formatWorkHours(Math.max(0, record.overtime_minutes ?? ((record.work_minutes || 0) - 480)))} />
+          <DetailMetric label="Late Minutes" value={`${record.late_minutes ?? 0}m`} />
+          <DetailMetric label="Attendance Type" value={record.type === 'outdoor' ? 'Outdoor' : 'Office'} />
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function TimelineList({ record, timeline, compact = false }) {
+  return (
+    <div className="relative border-l-2 border-slate-100 pl-6 dark:border-slate-800">
+      {timeline.map((event) => (
+        <div key={event.key} className={clsx('relative', compact ? 'pb-5 last:pb-0' : 'pb-7 last:pb-0')}>
+          <span className={clsx(
+            'absolute -left-[2.05rem] top-0 grid h-8 w-8 place-items-center rounded-full border-4 border-white text-white shadow-sm dark:border-slate-900',
+            event.tone === 'orange' ? 'bg-amber-500' : event.tone === 'blue' ? 'bg-blue-500' : event.tone === 'red' ? 'bg-rose-500' : 'bg-emerald-600',
+          )}>
+            <Clock size={14} />
+          </span>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="font-extrabold text-slate-950 dark:text-white">{event.label}</p>
+              {event.note && <p className="mt-0.5 text-sm font-medium text-slate-500">{event.note}</p>}
+              {(event.key === 'check_in' || event.key === 'check_out') && (record.branch || record.location) && (
+                <p className="mt-1 inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                  <MapPin size={12} />
+                  {record.branch || record.location}
+                </p>
+              )}
+            </div>
+            <p className="shrink-0 font-extrabold tabular-nums text-slate-950 dark:text-white">{event.time}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function DetailMetric({ label, value }) {
+  return (
+    <div>
+      <p className="text-sm font-semibold text-slate-500">{label}</p>
+      <p className="mt-1 text-lg font-extrabold text-slate-950 dark:text-white">{value}</p>
+    </div>
+  )
+}
+
+function MobileAttendanceSummary({ summary }) {
+  const rows = [
+    { label: 'Total Present Days', value: summary.present ?? 0, icon: Users, tone: 'emerald' },
+    { label: 'Total Late Days', value: summary.late ?? 0, icon: Clock, tone: 'amber' },
+    { label: 'Total Absent Days', value: summary.absent ?? 0, icon: UserMinus, tone: 'rose' },
+    { label: 'Total Leave Days', value: summary.leave ?? summary.on_leave ?? 0, icon: Calendar, tone: 'sky' },
+    { label: 'Total Working Hours', value: formatHoursCompact(summary.total_work_minutes), icon: Timer, tone: 'sky' },
+    { label: 'Overtime Hours', value: formatHoursCompact(summary.overtime_minutes), icon: Clock, tone: 'violet' },
+  ]
+
+  return (
+    <section className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <h3 className="border-b border-slate-100 px-5 py-4 text-xl font-extrabold text-slate-950 dark:border-slate-800 dark:text-white">Attendance Summary</h3>
+      <div className="divide-y divide-slate-100 px-5 dark:divide-slate-800">
+        {rows.map((row) => <SummaryRow key={row.label} {...row} />)}
+      </div>
+    </section>
+  )
+}
+
+function SummaryRow({ label, value, icon: Icon, tone }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-4">
+      <div className="flex items-center gap-3">
+        <SummaryIcon Icon={Icon} tone={tone} />
+        <span className="font-bold text-slate-800 dark:text-slate-100">{label}</span>
+      </div>
+      <span className="text-lg font-extrabold text-slate-950 dark:text-white">{value}</span>
+    </div>
+  )
+}
+
+function SummaryBox({ icon: Icon, label, value, tone }) {
+  return (
+    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
+      <SummaryIcon Icon={Icon} tone={tone} />
+      <p className="mt-3 text-xs font-semibold text-slate-500">{label}</p>
+      <div className="mt-1 text-base font-extrabold text-slate-950 dark:text-white">{value}</div>
+    </div>
+  )
+}
+
+function SummaryIcon({ Icon, tone }) {
+  const tones = {
+    emerald: 'bg-emerald-100 text-emerald-600',
+    amber: 'bg-amber-100 text-amber-600',
+    rose: 'bg-rose-100 text-rose-600',
+    sky: 'bg-sky-100 text-sky-600',
+    violet: 'bg-violet-100 text-violet-600',
+  }
+
+  return (
+    <span className={clsx('grid h-10 w-10 shrink-0 place-items-center rounded-xl', tones[tone] || tones.emerald)}>
+      <Icon size={20} />
+    </span>
+  )
+}
+
+function getMonthRange(monthStr) {
+  const [year, month] = monthStr.split('-').map(Number)
+  const lastDay = new Date(year, month, 0).getDate()
+  return {
+    from: `${monthStr}-01`,
+    to: `${monthStr}-${String(lastDay).padStart(2, '0')}`,
+  }
+}
+
+function buildCalendarCells(monthStr) {
+  const [year, month] = monthStr.split('-').map(Number)
+  const firstDow = new Date(year, month - 1, 1).getDay()
+  const days = new Date(year, month, 0).getDate()
+  const cells = Array(firstDow).fill(null)
+  for (let day = 1; day <= days; day += 1) {
+    cells.push(`${monthStr}-${String(day).padStart(2, '0')}`)
+  }
+  return cells
+}
+
+function dayNumber(dateStr) {
+  if (!dateStr) return ''
+  return Number(dateStr.split('-')[2])
+}
+
+function monthShort(dateStr) {
+  if (!dateStr) return ''
+  const date = new Date(`${dateStr}T12:00:00`)
+  return date.toLocaleDateString(undefined, { month: 'short' })
+}
+
+function formatDayShort(dateStr) {
+  if (!dateStr) return ''
+  const date = new Date(`${dateStr}T12:00:00`)
+  return date.toLocaleDateString(undefined, { weekday: 'short' })
+}
+
+function formatDayLong(dateStr) {
+  if (!dateStr) return ''
+  const date = new Date(`${dateStr}T12:00:00`)
+  return date.toLocaleDateString(undefined, { weekday: 'long' })
+}
+
+function timeRange(row) {
+  const checkIn = shortTime(row.check_in_at)
+  const checkOut = shortTime(row.check_out_at)
+  if (!checkIn && !checkOut) return '-'
+  return `${checkIn || '-'} - ${checkOut || '-'}`
+}
+
+function shortTime(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+}
+
+function statusDotClass(row) {
+  const status = row.display_status || row.status
+  if (status === 'late') return 'bg-amber-500'
+  if (status === 'absent') return 'bg-rose-500'
+  if (status === 'on_leave' || status === 'half_day' || status === 'leave') return 'bg-sky-500'
+  return 'bg-emerald-500'
+}
+
+function shiftMonth(monthStr, delta, onChange) {
+  const [year, month] = monthStr.split('-').map(Number)
+  const date = new Date(year, month - 1 + delta, 1)
+  onChange(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`)
+}

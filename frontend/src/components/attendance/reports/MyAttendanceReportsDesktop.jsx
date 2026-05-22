@@ -35,6 +35,8 @@ export default function MyAttendanceReportsDesktop({
   }, [records])
 
   useEffect(() => {
+    // Reset pagination and selected timeline when the report rows change.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(1)
     const first = records[0]?.attendance_date
     setSelectedDate((prev) => (prev && recordByDate[prev] ? prev : first))
@@ -53,18 +55,6 @@ export default function MyAttendanceReportsDesktop({
     { label: 'Total Working Hours', value: formatWorkHours(summary.total_work_minutes), pct: null, trend: `${summary.total_records ?? 0} days logged`, trendUp: true, icon: Timer, tone: 'sky' },
     { label: 'Overtime Hours', value: formatWorkHours(summary.overtime_minutes), pct: null, trend: 'In selected period', trendUp: true, icon: AlertCircle, tone: 'violet' },
   ]
-
-  const deductions = useMemo(() => {
-    const late = records.reduce((s, r) => s + (r.late_minutes > 0 ? Number(r.deduction_amount || 0) : 0), 0)
-    const missing = records.reduce((s, r) => s + (r.display_status === 'missing_checkout' ? Number(r.deduction_amount || 0) : 0), 0)
-    return { late, missing, total: Number(summary.total_deduction || 0) || late + missing }
-  }, [records, summary.total_deduction])
-
-  const bonuses = useMemo(() => {
-    const attendance = summary.bonus_eligible ? 2 : 0
-    const performance = summary.bonus_eligible && (summary.present ?? 0) >= 15 ? 3 : 0
-    return { attendance, performance, total: attendance + performance }
-  }, [summary])
 
   const calendarCells = useMemo(() => buildCalendarCells(month), [month])
 
@@ -147,6 +137,9 @@ export default function MyAttendanceReportsDesktop({
       <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
         <div className="min-w-0 space-y-6">
           <div className="overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+              <h3 className="text-lg font-bold text-slate-950 dark:text-white">Attendance History</h3>
+            </div>
             {loading ? <FloatingSpinner /> : records.length === 0 ? (
               <EmptyState title="No attendance records" description="No data for this period." />
             ) : (
@@ -199,28 +192,6 @@ export default function MyAttendanceReportsDesktop({
                 <TablePagination page={page} totalPages={totalPages} total={records.length} onPage={setPage} />
               </>
             )}
-          </div>
-
-          {/* Deduction & bonus */}
-          <div className="grid gap-4 md:grid-cols-2">
-            <SummaryListCard
-              title={`Total Deduction (${formatMonthLabel(month)})`}
-              total={`$${deductions.total.toFixed(2)}`}
-              tone="rose"
-              items={[
-                { label: 'Late Deduction', amount: deductions.late },
-                { label: 'Missing Checkout Deduction', amount: deductions.missing },
-              ]}
-            />
-            <SummaryListCard
-              title={`Total Bonus (${formatMonthLabel(month)})`}
-              total={`$${bonuses.total.toFixed(2)}`}
-              tone="emerald"
-              items={[
-                { label: 'Performance Bonus', amount: bonuses.performance },
-                { label: 'Attendance Bonus', amount: bonuses.attendance },
-              ]}
-            />
           </div>
         </div>
 
@@ -341,26 +312,6 @@ function ReportStatCard({ label, value, pct, trend, trendUp, icon: Icon, tone })
           {trend}
         </p>
       )}
-    </div>
-  )
-}
-
-function SummaryListCard({ title, total, tone, items }) {
-  const isRose = tone === 'rose'
-  return (
-    <div className={clsx('rounded-xl border p-5 shadow-sm', isRose ? 'border-rose-100 bg-rose-50/40 dark:border-rose-900/40 dark:bg-rose-950/20' : 'border-emerald-100 bg-emerald-50/40 dark:border-emerald-900/40 dark:bg-emerald-950/20')}>
-      <div className="flex items-center justify-between gap-2">
-        <p className={clsx('text-sm font-bold', isRose ? 'text-rose-800 dark:text-rose-300' : 'text-emerald-800 dark:text-emerald-300')}>{title}</p>
-        <p className={clsx('text-lg font-bold', isRose ? 'text-rose-600' : 'text-emerald-600')}>{total}</p>
-      </div>
-      <ul className="mt-4 space-y-2">
-        {items.map((item) => (
-          <li key={item.label} className="flex items-center justify-between text-sm">
-            <span className="text-slate-600 dark:text-slate-400">{item.label}</span>
-            <span className="font-semibold text-slate-900 dark:text-white">${Number(item.amount || 0).toFixed(2)}</span>
-          </li>
-        ))}
-      </ul>
     </div>
   )
 }

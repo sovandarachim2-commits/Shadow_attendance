@@ -130,7 +130,7 @@ class AttendanceService
         }
 
         $now = now();
-        $lateEval = $this->lateRules->evaluate($now);
+        $lateEval = $this->lateRules->evaluate($now, $employee->id);
 
         $attendance = Attendance::create([
             'employee_id' => $employee->id,

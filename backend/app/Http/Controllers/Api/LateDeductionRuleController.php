@@ -59,6 +59,7 @@ class LateDeductionRuleController extends Controller
             'status'             => ['nullable', 'boolean'],
             'telegram_chat_id'   => ['nullable', 'string', 'max:120'],
             'telegram_topic_id'  => ['nullable', 'integer', 'min:1'],
+            'schedule_id'        => ['nullable', 'integer', 'exists:work_schedules,id'],
         ]);
     }
 }

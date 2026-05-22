@@ -20,11 +20,11 @@ export default function MobileNav({ active, setActive, user, onAttendanceAction,
     ? 'text-amber-500'
     : 'text-emerald-600'
 
-  const isAttendanceActive = active === 'My Attendance' || active === 'Check In / Out'
+  const isAttendanceActive = active === 'My Attendance Reports'
 
   const leftItems = [
     { label: 'Home',       target: 'Dashboard',          icon: Home,          isActive: active === 'Dashboard',          permissions: ['dashboard.admin', 'dashboard.employee'] },
-    { label: 'Attendance', target: 'My Attendance',       icon: CalendarCheck, isActive: isAttendanceActive,             permissions: ['attendance.view_own', 'attendance.view_all', 'attendance.check_in'] },
+    { label: 'Attendance', target: 'My Attendance Reports', icon: CalendarCheck, isActive: isAttendanceActive,             permissions: ['reports.attendance.view_own', 'attendance.view_own'] },
   ].filter((item) => canAccess(user, item.permissions))
 
   const rightItems = [

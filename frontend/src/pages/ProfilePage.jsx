@@ -3,13 +3,13 @@ import {
   Activity, BriefcaseBusiness, Building2, CalendarCheck, Camera,
   CheckCircle2, ChevronLeft, Clock, Copy, Download, Eye, EyeOff, FileText, KeyRound,
   Bell, LocateFixed, LogOut, Mail, MapPinned, Pencil, Phone,
-  ShieldCheck, UserMinus, UserRound, Users, X,
+  UserMinus, UserRound, Users,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { api } from '../services/api'
-import { EmptyState, ErrorText, PanelHeader, StatusPill } from '../components/shared/UI'
+import { EmptyState, PanelHeader, StatusPill } from '../components/shared/UI'
 import {
-  apiError, attendanceLocationMapUrl, canUpdateOwnProfile, employeeFullName, formatAttendanceLocation, formatDate, formatRelativeTime, formatTime,
+  apiError, attendanceLocationMapUrl, canUpdateAllProfiles, canUpdateOwnProfile, employeeFullName, formatAttendanceLocation, formatDate, formatRelativeTime, formatTime,
   initials, titleCase, userDisplayName,
 } from '../utils/format'
 
@@ -25,7 +25,6 @@ export default function ProfilePage({ user, appData, setActive, onLogout, onProf
   const fullName = userDisplayName(user)
   const roleName     = user.role?.name || '-'
   const attendanceRows = appData.attendance.slice(0, 5)
-  const ownVisits    = appData.visits.filter((v) => !employee || v.employee_id === employee.id).slice(0, 4)
   const ownReports   = appData.reports.filter((r) => !employee || r.employee_id === employee.id).slice(0, 4)
   const presentCount = appData.attendance.filter((a) => a.status === 'present').length
   const lateCount    = appData.attendance.filter((a) => a.status === 'late').length
@@ -35,8 +34,7 @@ export default function ProfilePage({ user, appData, setActive, onLogout, onProf
   const latestLoc    = appData.dashboard?.live_locations?.[0]
 
   const [showEdit, setShowEdit] = useState(false)
-  const protectedProfile = ['super_admin', 'admin'].includes(user.role?.slug)
-  const canEdit = canUpdateOwnProfile(user) && Boolean(employee) && !protectedProfile
+  const canEdit = (canUpdateOwnProfile(user) || canUpdateAllProfiles(user)) && Boolean(employee)
 
   const copyCode = () => {
     if (employee?.employee_code) navigator.clipboard?.writeText(employee.employee_code).catch(() => {})
@@ -248,17 +246,13 @@ export default function ProfilePage({ user, appData, setActive, onLogout, onProf
         />
       )}
 
-      <div className="hidden flex-wrap items-center justify-between gap-3 sm:flex">
-        <div>
-          <h3 className="text-2xl font-bold">Employee Profile</h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400">View and manage employee information.</p>
-        </div>
+      <div className="hidden flex-wrap items-center justify-end gap-3 sm:flex">
         <div className="flex flex-wrap gap-2">
           <button className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold shadow-sm dark:border-slate-800 dark:bg-slate-900" onClick={() => window.print()}>
             <Download size={16} /> Print Profile
           </button>
           {canEdit && (
-            <button className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white" onClick={() => setActive('Employees')}>Edit Profile</button>
+            <button className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white" onClick={() => setShowEdit(true)}>Edit Profile</button>
           )}
         </div>
       </div>
@@ -363,7 +357,7 @@ export default function ProfilePage({ user, appData, setActive, onLogout, onProf
       {/* Attendance history table */}
       <div className="hidden gap-6 sm:grid xl:grid-cols-[1.35fr_0.8fr]">
         <div className="rounded-lg border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <PanelHeader title="Attendance History" subtitle="Recent attendance records." actionLabel="View All" onAction={() => setActive('My Attendance')} />
+          <PanelHeader title="Attendance History" subtitle="Recent attendance records." actionLabel="View All" onAction={() => setActive('My Attendance Reports')} />
           {attendanceRows.length === 0 ? <EmptyState text="No attendance history found." /> : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[920px] text-left text-sm">

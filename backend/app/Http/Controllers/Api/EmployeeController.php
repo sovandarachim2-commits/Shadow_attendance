@@ -14,6 +14,7 @@ use App\Services\ImageUploadService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\Rule;
 
 class EmployeeController extends Controller
@@ -74,6 +75,7 @@ class EmployeeController extends Controller
         $loginPassword = $data['login_password'] ?? null;
         $roleId = $data['role_id'] ?? null;
         unset($data['photo'], $data['create_login'], $data['login_username'], $data['login_email'], $data['login_password'], $data['role_id']);
+        $this->dropMissingTelegramChatId($data);
         $data['last_name'] = $data['last_name'] ?? null;
 
         return DB::transaction(function () use ($data, $request, $createLogin, $loginUsername, $loginEmail, $loginPassword, $roleId) {
@@ -138,6 +140,7 @@ class EmployeeController extends Controller
         $loginPassword = $data['login_password'] ?? null;
         $roleId = $data['role_id'] ?? null;
         unset($data['login_username'], $data['login_email'], $data['login_password'], $data['role_id']);
+        $this->dropMissingTelegramChatId($data);
         $data['last_name'] = $data['last_name'] ?? null;
 
         if ($request->hasFile('photo')) {
@@ -205,5 +208,12 @@ class EmployeeController extends Controller
         });
 
         return response()->noContent();
+    }
+
+    private function dropMissingTelegramChatId(array &$data): void
+    {
+        if (! Schema::hasColumn('employees', 'telegram_chat_id')) {
+            unset($data['telegram_chat_id']);
+        }
     }
 }
