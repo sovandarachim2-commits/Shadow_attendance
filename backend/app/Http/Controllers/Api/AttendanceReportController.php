@@ -39,6 +39,10 @@ class AttendanceReportController extends Controller
     {
         $this->authorizeReport($request, false);
 
+        if (! $request->user()->employee_id) {
+            abort(422, 'Your user account is not linked to an employee profile.');
+        }
+
         $data = $this->validatedFilters($request);
         $filters = $this->buildFilters($request, $data, false);
         $records = $this->attendance->listForReport($filters);

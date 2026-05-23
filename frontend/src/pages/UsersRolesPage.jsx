@@ -157,7 +157,6 @@ const PERMISSION_MODULES = [
     Icon: Clock, color: 'text-emerald-600', iconBg: 'bg-emerald-100 dark:bg-emerald-950/50',
     rows: [
       { label: 'View All Attendance', desc: 'View attendance for all employees', view:   'attendance.view_all' },
-      { label: 'View Own Attendance', desc: 'View personal attendance records',  view:   'attendance.view_own' },
       { label: 'Check In',            desc: 'Check in (office or outdoor)',       create: 'attendance.check_in' },
       { label: 'Check Out',           desc: 'Check out (office or outdoor)',      update: 'attendance.check_out' },
       { label: 'Edit Attendance',     desc: 'Edit existing attendance records',   update: 'attendance.edit' },
@@ -168,10 +167,8 @@ const PERMISSION_MODULES = [
     label: 'Attendance Reports', desc: 'View and export attendance report pages',
     Icon: CalendarCheck, color: 'text-cyan-600', iconBg: 'bg-cyan-100 dark:bg-cyan-950/50',
     rows: [
-      { label: 'My Attendance Reports',  desc: 'Show personal attendance report page',          view:   'reports.attendance.view_own' },
+      { label: 'My Attendance Reports',  desc: 'Show personal attendance report page',          view:   ['reports.attendance.view_own', 'attendance.view_own'] },
       { label: 'All Attendance Reports', desc: 'Show attendance reports for all employees',     view:   'reports.attendance.view_all' },
-      { label: 'Edit Attendance Reports', desc: 'Allow attendance report edits where enabled',  update: 'reports.attendance.edit' },
-      { label: 'Export Attendance Reports', desc: 'Export attendance report data to file',      update: 'reports.attendance.export' },
     ],
   },
   {
@@ -553,9 +550,26 @@ export default function UsersRolesPage({ initialTab = 'assign' }) {
         const selectedPerms = rolePermMap[assignRoleId] || new Set()
 
         const slugToId = (slug) => permissionRows.find((p) => p.slug === slug)?.id
-        const isOn = (slug) => { const id = slugToId(slug); return id != null && selectedPerms.has(id) }
-        const toggleSlug = (slug) => { const id = slugToId(slug); if (id != null) toggleRolePermission(assignRoleId, id) }
-        const modSlugs = (mod, col) => mod.rows.map((r) => r[col]).filter(Boolean)
+        const slugsFor = (value) => Array.isArray(value) ? value : [value].filter(Boolean)
+        const isOn = (value) => slugsFor(value).some((slug) => {
+          const id = slugToId(slug)
+          return id != null && selectedPerms.has(id)
+        })
+        const toggleSlug = (value) => {
+          const slugs = slugsFor(value)
+          const shouldTurnOff = isOn(value)
+          setRolePermMap((prev) => {
+            const cur = new Set(prev[assignRoleId] || [])
+            slugs.forEach((slug) => {
+              const id = slugToId(slug)
+              if (id == null) return
+              if (shouldTurnOff) cur.delete(id)
+              else cur.add(id)
+            })
+            return { ...prev, [assignRoleId]: cur }
+          })
+        }
+        const modSlugs = (mod, col) => mod.rows.flatMap((r) => slugsFor(r[col]))
 
         const toggleModuleAll = (mod) => {
           const allSlugs = CRUD_COLS.flatMap((c) => modSlugs(mod, c.key))

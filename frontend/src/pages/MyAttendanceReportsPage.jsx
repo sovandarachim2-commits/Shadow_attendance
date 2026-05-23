@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ArrowLeft, BriefcaseBusiness, Calendar, Check, ChevronDown, ChevronRight, Clock,
-  ClipboardList, Download, Filter, MapPin, RotateCcw, Search, Timer, UserMinus, Users,
+  ClipboardList, Download, Filter, MapPin, RotateCcw, Timer, UserMinus, Users,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { api } from '../services/api'
@@ -13,7 +13,7 @@ import {
   formatMobileDate, formatMonthLabel, formatPeriodLabel, formatWorkHours,
   TypeBadge,
 } from '../components/attendance/reports/attendanceReportShared'
-import { canAccess } from '../utils/format'
+import { apiError, canAccess } from '../utils/format'
 
 export default function MyAttendanceReportsPage({ user, openPermissionRequest }) {
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7))
@@ -22,6 +22,7 @@ export default function MyAttendanceReportsPage({ user, openPermissionRequest })
   const [branch, setBranch] = useState('')
   const [draft, setDraft] = useState({})
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
   const [exporting, setExporting] = useState(false)
   const [data, setData] = useState({ employee: null, summary: {}, records: [] })
   const [detail, setDetail] = useState(null)
@@ -34,13 +35,15 @@ export default function MyAttendanceReportsPage({ user, openPermissionRequest })
 
   const load = useCallback(async () => {
     setLoading(true)
+    setError('')
     try {
       const params = { month }
       if (status) params.status = status
       if (type) params.type = type
       const res = await api.get('/attendance/reports/employee', { params })
       setData(res.data)
-    } catch {
+    } catch (ex) {
+      setError(apiError(ex))
       setData({ employee: null, summary: {}, records: [] })
     } finally {
       setLoading(false)
@@ -77,6 +80,8 @@ export default function MyAttendanceReportsPage({ user, openPermissionRequest })
   const mobileRecords = mobileShowAll ? mobileFilteredRecords : mobileFilteredRecords.slice(0, 3)
 
   useEffect(() => {
+    // Reset the compact mobile list when report filters change.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMobileShowAll(false)
     setMobileTab('history')
   }, [month, status, type, branch, mobileSearch])
@@ -117,6 +122,14 @@ export default function MyAttendanceReportsPage({ user, openPermissionRequest })
     } finally {
       setExporting(false)
     }
+  }
+
+  if (!loading && error) {
+    return (
+      <div className="mx-auto max-w-2xl py-16">
+        <EmptyState title="Cannot load attendance reports" description={error} />
+      </div>
+    )
   }
 
   return (
