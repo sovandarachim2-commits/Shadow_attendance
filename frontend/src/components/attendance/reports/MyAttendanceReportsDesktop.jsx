@@ -7,7 +7,7 @@ import clsx from 'clsx'
 import { EmptyState, FloatingSpinner } from '../../shared/UI'
 import {
   StatusBadge, TIMELINE_TONE, TypeBadge, formatMobileDate, formatMonthLabel,
-  formatPeriodLabel, formatWorkHours, inputCls,
+  formatBranchName, formatPeriodLabel, formatWorkHours, inputCls,
 } from './attendanceReportShared'
 import { formatTime } from '../../../utils/format'
 
@@ -43,6 +43,7 @@ export default function MyAttendanceReportsDesktop({
   }, [records, month]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const selected = selectedDate ? recordByDate[selectedDate] : null
+  const selectedBranchName = formatBranchName(selected?.branch)
   const totalPages = Math.max(1, Math.ceil(records.length / PAGE_SIZE))
   const paged = records.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
@@ -121,7 +122,7 @@ export default function MyAttendanceReportsDesktop({
           <FilterSelect label="Work Location">
             <select className={inputCls} value={draft.branch ?? ''} onChange={(e) => setDraft((d) => ({ ...d, branch: e.target.value }))}>
               <option value="">All Locations</option>
-              {[...new Set(allRecords.map((r) => r.branch).filter(Boolean))].map((b) => (
+              {[...new Set(allRecords.map((r) => formatBranchName(r.branch)).filter(Boolean))].map((b) => (
                 <option key={b} value={b}>{b}</option>
               ))}
             </select>
@@ -262,9 +263,9 @@ export default function MyAttendanceReportsDesktop({
                       <div className={clsx('rounded-lg border-l-4 p-2.5', TIMELINE_TONE[ev.tone] || TIMELINE_TONE.green)}>
                         <p className="text-sm font-bold">{ev.label}</p>
                         <p className="text-sm tabular-nums text-slate-600">{ev.time}</p>
-                        {selected.location && ev.key === 'check_in' && (
+                        {(selectedBranchName || selected.location) && ev.key === 'check_in' && (
                           <p className="mt-1 flex items-center gap-1 text-xs text-slate-500">
-                            <MapPin size={12} /> {selected.branch || selected.location}
+                            <MapPin size={12} /> {selectedBranchName || selected.location}
                           </p>
                         )}
                       </div>

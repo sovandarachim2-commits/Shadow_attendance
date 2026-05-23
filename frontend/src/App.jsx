@@ -122,18 +122,19 @@ function AppShell({ isLoaded }) {
     loading: false,
   })
 
-  const loadRealData = useCallback(async () => {
+  const loadRealData = useCallback(async (account) => {
     setData((current) => ({ ...current, loading: true }))
 
+    const canLoad = (permissions) => canAccess(account, permissions)
     const [dashboard, todayAttendance, attendance, employees, visits, reports, notifications, appSettings] = await Promise.all([
-      dashboardService.overview().catch(() => null),
-      attendanceService.today().catch(() => null),
-      api.get('/attendance').then((response) => response.data.data || []).catch(() => []),
-      api.get('/employees').then((response) => response.data.data || []).catch(() => []),
-      api.get('/customer-visits').then((response) => response.data.data || []).catch(() => []),
-      api.get('/reports').then((response) => response.data.data || []).catch(() => []),
-      api.get('/notifications').then((response) => response.data.data || []).catch(() => []),
-      api.get('/settings').then((response) => response.data || {}).catch(() => ({})),
+      canLoad(['dashboard.admin', 'dashboard.employee']) ? dashboardService.overview().catch(() => null) : Promise.resolve(null),
+      canLoad(['attendance.view_own', 'attendance.view_all']) ? attendanceService.today().catch(() => null) : Promise.resolve(null),
+      canLoad(['attendance.view_all', 'attendance.view_own']) ? api.get('/attendance').then((response) => response.data.data || []).catch(() => []) : Promise.resolve([]),
+      canLoad(['employees.view', 'employees.create', 'employees.update']) ? api.get('/employees').then((response) => response.data.data || []).catch(() => []) : Promise.resolve([]),
+      canLoad(['visits.view', 'visits.create', 'visits.manage']) ? api.get('/customer-visits').then((response) => response.data.data || []).catch(() => []) : Promise.resolve([]),
+      canLoad(['reports.view_all', 'reports.view_own']) ? api.get('/reports').then((response) => response.data.data || []).catch(() => []) : Promise.resolve([]),
+      canLoad(['notifications.view', 'notifications.manage']) ? api.get('/notifications').then((response) => response.data.data || []).catch(() => []) : Promise.resolve([]),
+      canLoad(['settings.view', 'settings.security', 'settings.api', 'settings.manage', 'settings.schedules', 'roles.manage', 'dashboard.admin', 'dashboard.employee']) ? api.get('/settings').then((response) => response.data || {}).catch(() => ({})) : Promise.resolve({}),
     ])
 
     setData({ dashboard, todayAttendance, attendance, employees, visits, reports, notifications, appSettings, loading: false })
@@ -223,7 +224,7 @@ function AppShell({ isLoaded }) {
   const props = {
     appData: data,
     isLoaded,
-    refresh: loadRealData,
+    refresh: () => loadRealData(user),
     user,
     onAttendanceAction: openAttendanceAction,
     openPermissionRequest,
@@ -252,8 +253,8 @@ function AppShell({ isLoaded }) {
     Notifications: <NotificationsPage {...props} />,
     Profile: <ProfilePage {...props} />,
     'Website Branding': <BrandingPage {...props} />,
-    Settings: <SecurityPage refresh={loadRealData} />,
-    'Help & Support': <SecurityPage refresh={loadRealData} />,
+    Settings: <SecurityPage refresh={() => loadRealData(user)} />,
+    'Help & Support': <SecurityPage refresh={() => loadRealData(user)} />,
     'Attendance History': <AttendanceHistoryPage {...props} viewMode="all" />,
     'Admin Attendance Reports': <AdminAttendanceReportsPage {...props} />,
     'My Attendance Reports': <MyAttendanceReportsPage {...props} />,
@@ -268,7 +269,7 @@ function AppShell({ isLoaded }) {
     'IP Access': <UsersRolesPage initialTab="ip" />,
     'Outdoor Sales': <OutdoorSalesPage {...props} />,
     Reports: <ReportsPage {...props} />,
-    Security: <SecurityPage refresh={loadRealData} />,
+    Security: <SecurityPage refresh={() => loadRealData(user)} />,
   }
 
   if (authLoading) return <LoadingScreen />
@@ -517,12 +518,12 @@ function AppShell({ isLoaded }) {
               setModal(null)
               setEditingEmployee(null)
             }
-            loadRealData()
+            loadRealData(user)
           }}
         />
       )}
-      {modal === 'visit' && <VisitModal onClose={() => setModal(null)} onSaved={() => { setModal(null); loadRealData() }} />}
-      {modal === 'report' && <ReportModal onClose={() => setModal(null)} onSaved={() => { setModal(null); loadRealData() }} />}
+      {modal === 'visit' && <VisitModal onClose={() => setModal(null)} onSaved={() => { setModal(null); loadRealData(user) }} />}
+      {modal === 'report' && <ReportModal onClose={() => setModal(null)} onSaved={() => { setModal(null); loadRealData(user) }} />}
       {attendanceAction && (
         <AttendanceActionModal
           action={attendanceAction}
@@ -531,7 +532,7 @@ function AppShell({ isLoaded }) {
           openPermissionRequest={openPermissionRequest}
           onSaved={() => {
             setAttendanceAction(null)
-            loadRealData()
+            loadRealData(user)
           }}
         />
       )}

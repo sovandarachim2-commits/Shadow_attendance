@@ -377,7 +377,7 @@ function AttendanceDonutChart({ data, total }) {
         <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-500 dark:border-slate-700">This Week</span>
       </div>
       <div className="flex items-center gap-6">
-        <div className="relative h-36 w-36 shrink-0">
+        <div className="relative h-36 min-h-36 w-36 min-w-36 shrink-0">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie data={safeData} cx="50%" cy="50%" innerRadius={42} outerRadius={65} dataKey="value" strokeWidth={2} stroke="#fff">
@@ -450,7 +450,7 @@ function MyAttendanceBarChart({ data }) {
         <h3 className="text-base font-bold">My Attendance Overview</h3>
         <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-500 dark:border-slate-700">This Week</span>
       </div>
-      <div className="h-48">
+      <div className="h-48 min-h-48 min-w-0">
         <ResponsiveContainer width="100%" height="100%" debounce={50}>
           <BarChart data={data} margin={{ left: -20 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
@@ -511,7 +511,7 @@ export function ReportsPanel({ chartData, notifications }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
       <h3 className="text-lg font-bold">Reports & Alerts</h3>
-      <div className="mt-5 h-52">
+      <div className="mt-5 h-52 min-h-52 min-w-0">
         {grouped.length === 0 ? <EmptyState text="No attendance chart data yet." /> : (
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={grouped}>

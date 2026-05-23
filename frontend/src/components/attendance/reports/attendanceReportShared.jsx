@@ -94,6 +94,12 @@ export function formatPeriodLabel(from, to) {
   return `${fmt(from)} – ${fmt(to)}`
 }
 
+export function formatBranchName(branch) {
+  if (!branch) return ''
+  if (typeof branch === 'string') return branch
+  return branch.name || branch.code || branch.address || ''
+}
+
 export function todayStr() {
   return new Date().toISOString().split('T')[0]
 }
@@ -201,4 +207,3 @@ export function SummaryCard({ label, value, pct, trend, icon: Icon, tone = 'emer
     </div>
   )
 }
-

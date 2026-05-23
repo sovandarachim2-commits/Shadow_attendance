@@ -10,6 +10,7 @@ import AttendanceDetailModal from '../components/attendance/reports/AttendanceDe
 import MyAttendanceReportsDesktop from '../components/attendance/reports/MyAttendanceReportsDesktop'
 import {
   StatusBadge, formatHoursCompact,
+  formatBranchName,
   formatMobileDate, formatMonthLabel, formatPeriodLabel, formatWorkHours,
   TypeBadge,
 } from '../components/attendance/reports/attendanceReportShared'
@@ -60,7 +61,7 @@ export default function MyAttendanceReportsPage({ user, openPermissionRequest })
   const records = useMemo(() => {
     const list = data.records || []
     if (!branch) return list
-    return list.filter((record) => record.branch === branch)
+    return list.filter((record) => formatBranchName(record.branch) === branch)
   }, [data.records, branch])
   const monthRange = useMemo(() => getMonthRange(month), [month])
   const mobileFilteredRecords = useMemo(() => {
@@ -72,7 +73,7 @@ export default function MyAttendanceReportsPage({ user, openPermissionRequest })
       formatDayShort(record.attendance_date),
       record.display_status || record.status,
       record.type,
-      record.branch,
+      formatBranchName(record.branch),
       record.location,
       timeRange(record),
     ].filter(Boolean).some((value) => String(value).toLowerCase().includes(query)))
@@ -351,7 +352,7 @@ function MobileStatTile({ label, value, help, icon: Icon, tone, down }) {
 }
 
 function MobileFilters({ open, setOpen, month, draft, setDraft, allRecords, onApply, onReset }) {
-  const locations = useMemo(() => [...new Set(allRecords.map((record) => record.branch).filter(Boolean))], [allRecords])
+  const locations = useMemo(() => [...new Set(allRecords.map((record) => formatBranchName(record.branch)).filter(Boolean))], [allRecords])
 
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -638,6 +639,8 @@ function MobileDetailCard({ record }) {
 }
 
 function TimelineList({ record, timeline, compact = false }) {
+  const branchName = formatBranchName(record.branch)
+
   return (
     <div className="relative border-l-2 border-slate-100 pl-6 dark:border-slate-800">
       {timeline.map((event) => (
@@ -652,10 +655,10 @@ function TimelineList({ record, timeline, compact = false }) {
             <div>
               <p className="font-extrabold text-slate-950 dark:text-white">{event.label}</p>
               {event.note && <p className="mt-0.5 text-sm font-medium text-slate-500">{event.note}</p>}
-              {(event.key === 'check_in' || event.key === 'check_out') && (record.branch || record.location) && (
+              {(event.key === 'check_in' || event.key === 'check_out') && (branchName || record.location) && (
                 <p className="mt-1 inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                   <MapPin size={12} />
-                  {record.branch || record.location}
+                  {branchName || record.location}
                 </p>
               )}
             </div>
