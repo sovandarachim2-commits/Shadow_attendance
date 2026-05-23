@@ -164,6 +164,17 @@ const PERMISSION_MODULES = [
     ],
   },
   {
+    key: 'attendance_reports',
+    label: 'Attendance Reports', desc: 'View and export attendance report pages',
+    Icon: CalendarCheck, color: 'text-cyan-600', iconBg: 'bg-cyan-100 dark:bg-cyan-950/50',
+    rows: [
+      { label: 'My Attendance Reports',  desc: 'Show personal attendance report page',          view:   'reports.attendance.view_own' },
+      { label: 'All Attendance Reports', desc: 'Show attendance reports for all employees',     view:   'reports.attendance.view_all' },
+      { label: 'Edit Attendance Reports', desc: 'Allow attendance report edits where enabled',  update: 'reports.attendance.edit' },
+      { label: 'Export Attendance Reports', desc: 'Export attendance report data to file',      update: 'reports.attendance.export' },
+    ],
+  },
+  {
     key: 'visits',
     label: 'Customer Visits', desc: 'Record and track customer visits',
     Icon: ShoppingBag, color: 'text-rose-600', iconBg: 'bg-rose-100 dark:bg-rose-950/50',
