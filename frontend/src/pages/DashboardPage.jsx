@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { GoogleMap, MarkerF, PolylineF } from '@react-google-maps/api'
 import {
   AlertCircle, Bell, CalendarCheck, CheckCircle2, Clock,
-  MapPinned, ShoppingBag, Users,
+  MapPinned, Plus, ShoppingBag, Users,
 } from 'lucide-react'
 import {
   Bar, BarChart, CartesianGrid, Cell, Pie, PieChart,
@@ -18,9 +18,24 @@ import { canAccess, formatDate, formatTime, normaliseChart, titleCase } from '..
 // ── Entry point — shows Admin or Employee dashboard based on role ──────────────
 export default function DashboardPage({ appData, isLoaded, onAttendanceAction, user, setActive, setModal }) {
   const isAdmin = canAccess(user, ['attendance.view_all'])
-  return isAdmin
-    ? <AdminDashboard appData={appData} isLoaded={isLoaded} onAttendanceAction={onAttendanceAction} setActive={setActive} setModal={setModal} />
-    : <EmployeeDashboard appData={appData} isLoaded={isLoaded} onAttendanceAction={onAttendanceAction} setActive={setActive} />
+  const canVisit = canAccess(user, ['visits.create', 'visits.manage'])
+  return (
+    <>
+      {isAdmin
+        ? <AdminDashboard appData={appData} isLoaded={isLoaded} onAttendanceAction={onAttendanceAction} setActive={setActive} setModal={setModal} />
+        : <EmployeeDashboard appData={appData} isLoaded={isLoaded} onAttendanceAction={onAttendanceAction} setActive={setActive} user={user} setModal={setModal} />}
+
+      {canVisit && (
+        <button
+          onClick={() => setModal('visit')}
+          title="New Customer Visit"
+          className="fixed bottom-24 right-4 z-20 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-xl shadow-emerald-600/40 transition hover:bg-emerald-700 active:scale-95 lg:hidden"
+        >
+          <Plus size={26} strokeWidth={2.2} />
+        </button>
+      )}
+    </>
+  )
 }
 
 // ── Admin Dashboard ───────────────────────────────────────────────────────────
@@ -79,7 +94,7 @@ function AdminDashboard({ appData, isLoaded, onAttendanceAction, setActive, setM
 }
 
 // ── Employee Dashboard ────────────────────────────────────────────────────────
-function EmployeeDashboard({ appData, isLoaded, onAttendanceAction, setActive }) {
+function EmployeeDashboard({ appData, isLoaded, onAttendanceAction, setActive, user, setModal }) {
   const today = appData.todayAttendance
   const workMins = today?.work_minutes ?? 0
   const h = Math.floor(workMins / 60)

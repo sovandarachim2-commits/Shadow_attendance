@@ -199,10 +199,10 @@ export default function EmployeesPage({ appData, refresh, setModal, setEditingEm
 
         {filteredEmployees.length === 0 ? <EmptyState text="No employees match these filters." /> : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1180px] text-left text-sm">
+            <table className="w-full min-w-[1320px] text-left text-sm">
               <thead className="bg-slate-50/80 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-950 dark:text-slate-400">
                 <tr>
-                  {['Code', 'Employee', 'Department', 'Position', 'Branch', 'Email', 'Phone', 'Status', 'Actions'].map((head) => (
+                  {['Code', 'Employee', 'Department', 'Position', 'Branch', 'Email', 'Phone', 'Attendance Type', 'Status', 'Actions'].map((head) => (
                     <th key={head} className="px-5 py-4 font-bold">{head}</th>
                   ))}
                 </tr>
@@ -234,6 +234,13 @@ export default function EmployeesPage({ appData, refresh, setModal, setEditingEm
                       <td className="px-5 py-5 text-slate-700 dark:text-slate-200">{employee.branch?.name || '-'}</td>
                       <td className="px-5 py-5 text-slate-700 dark:text-slate-200">{email}</td>
                       <td className="px-5 py-5 text-slate-700 dark:text-slate-200">{employee.phone || '-'}</td>
+                      <td className="px-5 py-5">
+                        {employee.employment_type === 'outdoor_sales' ? (
+                          <span className="inline-flex items-center rounded-full bg-orange-100 px-2.5 py-1 text-xs font-semibold text-orange-700 dark:bg-orange-950/40 dark:text-orange-400">Outdoor Sales</span>
+                        ) : (
+                          <span className="inline-flex items-center rounded-full bg-sky-100 px-2.5 py-1 text-xs font-semibold text-sky-700 dark:bg-sky-950/40 dark:text-sky-400">Office Staff</span>
+                        )}
+                      </td>
                       <td className="px-5 py-5"><StatusPill status={titleCase(employee.status)} /></td>
                       <td className="px-5 py-5">
                         <div className="flex items-center gap-2">

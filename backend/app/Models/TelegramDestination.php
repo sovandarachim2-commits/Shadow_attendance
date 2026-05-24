@@ -12,10 +12,12 @@ class TelegramDestination extends Model
         'chat_id',
         'message_thread_id',
         'enabled',
+        'send_photo',
     ];
 
     protected $casts = [
         'enabled' => 'boolean',
+        'send_photo' => 'boolean',
         'message_thread_id' => 'integer',
     ];
 }

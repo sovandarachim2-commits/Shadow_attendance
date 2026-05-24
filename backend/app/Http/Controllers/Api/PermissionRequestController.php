@@ -103,7 +103,7 @@ class PermissionRequestController extends Controller
             '<b>រយៈពេល:</b> '.$this->formatDateRange($record)."\n".
             "<b>មូលហេតុ:</b> {$record->reason}\n".
             "<b>ស្ថានភាព:</b> រង់ចាំអនុម័ត",
-            self::EVENT_KEY,
+            $this->eventKeyForEmployee($employee),
         );
 
         $this->sendPrivateAdminTelegram(
@@ -194,7 +194,7 @@ class PermissionRequestController extends Controller
             "<b>ស្ថានភាព:</b> {$statusKhmer}\n".
             "<b>ពិនិត្យដោយ:</b> {$adminName}";
 
-        $telegram->send($statusMessage, self::EVENT_KEY);
+        $telegram->send($statusMessage, $this->eventKeyForEmployee($updated->employee));
 
         $telegram->sendToEmployee(
             $updated->employee,
@@ -223,6 +223,13 @@ class PermissionRequestController extends Controller
             ->whereHas('employee', fn ($query) => $query->whereNotNull('telegram_chat_id')->where('telegram_chat_id', '!=', ''))
             ->get()
             ->each(fn (User $user) => $telegram->sendToEmployee($user->employee, $message, 'permission_request_admin_private'));
+    }
+
+    private function eventKeyForEmployee($employee): string
+    {
+        return $employee?->employment_type === 'outdoor_sales'
+            ? 'outdoor_permission_request'
+            : 'office_permission_request';
     }
 
     private function buildAdminRequestPrivateMessage(PermissionRequest $record): string

@@ -29,6 +29,14 @@ class AttendanceService
             return;
         }
 
+        $employmentType = $user->relationLoaded('employee')
+            ? $user->employee?->employment_type
+            : $user->employee()->value('employment_type');
+
+        if ($user->role?->slug === 'outdoor_sales' || $employmentType === 'outdoor_sales') {
+            return;
+        }
+
         $allowed = $user->role?->load('ipAddresses')->ipAddresses ?? collect();
 
         if ($allowed->isEmpty()) {
@@ -93,20 +101,39 @@ class AttendanceService
         return '<a href="'.$this->gpsMapLink($latitude, $longitude).'">Open</a>';
     }
 
+    private function storeAttendancePhoto(User $user, ?\Illuminate\Http\UploadedFile $photo, string $folder, ?string $attendanceType = null): ?string
+    {
+        if (! $photo) {
+            return null;
+        }
+
+        if (! $this->attendanceRules->requirementsFor($user, $attendanceType)['save_selfie']) {
+            return null;
+        }
+
+        return $this->images->store($photo, $folder);
+    }
+
     public function checkIn(User $user, array $data): Attendance
     {
         $this->assertIpAllowed($user);
         $this->workSchedules->assertCanCheckInToday($user);
 
         $employee = $user->employee()->with(['branch', 'position', 'department'])->firstOrFail();
+        $attendanceType = $employee->employment_type === 'outdoor_sales' ? 'outdoor' : ($data['type'] ?? 'office');
         $existing = $this->attendanceRepository->todayForEmployee($employee->id);
 
         if ($existing && $existing->check_in_at) {
             throw ValidationException::withMessages(['attendance' => 'Employee already checked in today.']);
         }
 
+        $hasLocation = isset($data['latitude'], $data['longitude'])
+            && $data['latitude'] !== null
+            && $data['longitude'] !== null;
+
         if (
-            ($data['type'] ?? 'office') === 'office'
+            $hasLocation
+            && $attendanceType === 'office'
             && config('attendance.validate_office_gps_radius', false)
         ) {
             $branch = $employee->branch;
@@ -136,13 +163,13 @@ class AttendanceService
             'employee_id' => $employee->id,
             'branch_id' => $employee->branch_id,
             'attendance_date' => Carbon::today(),
-            'type' => $data['type'] ?? 'office',
+            'type' => $attendanceType,
             'status' => $lateEval['status'],
             'check_in_at' => $now,
             'check_in_latitude' => $data['latitude'],
             'check_in_longitude' => $data['longitude'],
             'check_in_address' => $data['address'] ?? null,
-            'check_in_photo_path' => $this->images->store($data['photo'] ?? null, 'attendance/selfies'),
+            'check_in_photo_path' => $this->storeAttendancePhoto($user, $data['photo'] ?? null, 'attendance/selfies', $attendanceType),
             'qr_code' => $data['qr_code'] ?? null,
             'late_minutes' => $lateEval['late_minutes'],
             'deduction_amount' => $lateEval['deduction_amount'],
@@ -152,41 +179,58 @@ class AttendanceService
             'synced_at' => now(),
         ]);
 
-        GpsLocation::create([
-            'employee_id' => $employee->id,
-            'attendance_id' => $attendance->id,
-            'latitude' => $data['latitude'],
-            'longitude' => $data['longitude'],
-            'accuracy' => $data['accuracy'] ?? null,
-            'speed' => $data['speed'] ?? null,
-            'recorded_at' => $now,
-            'source' => 'check_in',
-        ]);
+        if ($hasLocation) {
+            GpsLocation::create([
+                'employee_id' => $employee->id,
+                'attendance_id' => $attendance->id,
+                'latitude' => $data['latitude'],
+                'longitude' => $data['longitude'],
+                'accuracy' => $data['accuracy'] ?? null,
+                'speed' => $data['speed'] ?? null,
+                'recorded_at' => $now,
+                'source' => 'check_in',
+            ]);
+        }
 
         $employeeName = trim("{$employee->first_name} {$employee->last_name}");
         $position     = $employee->position?->name ?? 'N/A';
         $address      = $data['address'] ?? 'N/A';
-        $gpsLink      = $this->gpsOpenLink($data['latitude'], $data['longitude']);
+        $gpsLink      = $hasLocation ? $this->gpsOpenLink($data['latitude'], $data['longitude']) : 'N/A';
+        $gpsUrl       = $hasLocation ? $this->gpsMapLink($data['latitude'], $data['longitude']) : null;
         $checkInFmt   = $now->format('h:i A');
         $dateFmt      = $now->format('d M Y');
-        $statusLabel = $lateEval['is_late'] ? 'មកយឺត' : 'វត្តមាន';
+        $statusLabel  = $lateEval['is_late'] ? 'មកយឺត' : 'វត្តមាន';
+        $attendanceEventKey = $attendanceType === 'outdoor' ? 'outdoor_attendance' : 'office_attendance';
 
-        $this->sendTelegramSafely(function () use ($employeeName, $employee, $position, $checkInFmt, $dateFmt, $address, $gpsLink, $statusLabel, $lateEval) {
-            if (! $this->telegram->alertEnabled('telegram_alert_check_in')) {
+        $this->sendTelegramSafely(function () use ($employeeName, $employee, $position, $checkInFmt, $dateFmt, $address, $gpsLink, $gpsUrl, $statusLabel, $lateEval, $attendanceType, $attendanceEventKey, $attendance) {
+            $toggleKey = $attendanceType === 'outdoor' ? 'telegram_alert_outdoor_check_in' : 'telegram_alert_check_in_success';
+            if (! $this->telegram->alertEnabled($toggleKey)) {
                 return false;
             }
 
-            $checkInMessage = "✅ <b>បានចូលធ្វើការ</b>\n\n"
-                . "👤 បុគ្គលិក: {$employeeName}\n"
-                . "🆔 លេខសម្គាល់: {$employee->employee_code}\n"
-                . "💼 តួនាទី: {$position}\n\n"
-                . "🕘 ម៉ោងចូល: {$checkInFmt}\n"
-                . "📅 កាលបរិច្ឆេទ: {$dateFmt}\n\n"
-                . "📍 ទីតាំង: {$address}\n"
-                . "🗺️ តំណ GPS: {$gpsLink}\n\n"
-                . "✅ ស្ថានភាព: {$statusLabel}";
+            $photoUrl   = $this->images->url($attendance->check_in_photo_path);
+            $gpsLine    = $gpsUrl
+                ? '🛰 GPS: <a href="'.htmlspecialchars($gpsUrl, ENT_QUOTES).'">Open</a>'
+                : '🛰 GPS: N/A';
+            $faceLine   = $photoUrl
+                ? '📸 Face: <a href="'.htmlspecialchars($photoUrl, ENT_QUOTES).'">Verified ✅</a>'
+                : '📸 Face: —';
 
-            $this->telegram->send($checkInMessage, 'daily_attendance');
+            $statusLine = $lateEval['is_late']
+                ? '⚠️ ស្ថានភាព៖ <b>មកយឺត</b>'
+                : '✅ ស្ថានភាព៖ <b>វត្តមាន</b>';
+
+            $caption = "✅ <b>បានចូលធ្វើការ</b>\n\n"
+                . "👤 បុគ្គលិក៖ {$employeeName}\n"
+                . "🆔 លេខសម្គាល់៖ {$employee->employee_code}\n"
+                . "💼 តួនាទី៖ {$position}\n\n"
+                . "🕒 ម៉ោងចូល៖ {$checkInFmt}\n"
+                . "📅 កាលបរិច្ឆេទ៖ {$dateFmt}\n\n"
+                . "📍 ទីតាំង៖ {$address}\n"
+                . "{$gpsLine}\n"
+                . "{$faceLine}\n\n"
+                . "{$statusLine}";
+            $this->telegram->sendAttendancePhoto($photoUrl, $caption, $attendanceEventKey);
 
             $privateMsg = "✅ <b>អ្នកបានចូលធ្វើការ</b>\n\n"
                 . "🕘 ម៉ោង: {$checkInFmt}\n"
@@ -210,6 +254,7 @@ class AttendanceService
             $rule        = $lateEval['applied_rule'];
             $deduction   = $this->lateRules->formatDeductionAmount($lateEval['deduction_amount'], $rule);
             $lateFmt     = $this->lateRules->formatLateDuration($lateEval['late_seconds']);
+            $lateEventKey = $attendanceType === 'outdoor' ? 'outdoor_late_attendance' : 'office_late_attendance';
 
             $lateMessage = "⚠️ <b>ជូនដំណឹងមកយឺត</b>\n\n"
                 . "👤 បុគ្គលិក: {$employeeName}\n"
@@ -235,9 +280,8 @@ class AttendanceService
                 . "💰 កាត់ប្រាក់: {$deduction}\n\n"
                 . "ស្ថានភាព: មកយឺត";
 
-            $this->sendTelegramSafely(function () use ($employee, $lateMessage, $ruleMessage, $rule, $photoUrl) {
-                // Always send to the global late attendance group
-                $this->telegram->send($lateMessage, 'late_attendance');
+            $this->sendTelegramSafely(function () use ($employee, $lateMessage, $ruleMessage, $rule, $photoUrl, $lateEventKey) {
+                $this->telegram->send($lateMessage, $lateEventKey);
 
                 // Send richer profile message + photo to the rule's own group if configured
                 $ruleChatId = trim((string) ($rule->telegram_chat_id ?? ''));
@@ -287,26 +331,32 @@ class AttendanceService
         $now = now();
         $this->attendanceRules->assertCanCheckOut($user, $attendance, $now);
 
+        $hasLocation = isset($data['latitude'], $data['longitude'])
+            && $data['latitude'] !== null
+            && $data['longitude'] !== null;
+
         $attendance->update([
             'check_out_at' => $now,
-            'check_out_latitude' => $data['latitude'],
-            'check_out_longitude' => $data['longitude'],
+            'check_out_latitude' => $data['latitude'] ?? null,
+            'check_out_longitude' => $data['longitude'] ?? null,
             'check_out_address' => $data['address'] ?? null,
-            'check_out_photo_path' => $this->images->store($data['photo'] ?? null, 'attendance/checkouts'),
+            'check_out_photo_path' => $this->storeAttendancePhoto($user, $data['photo'] ?? null, 'attendance/checkouts', $attendance->type),
             'work_minutes' => $attendance->check_in_at->diffInMinutes($now),
             'notes' => trim(($attendance->notes ? $attendance->notes."\n" : '').($data['notes'] ?? '')),
         ]);
 
-        GpsLocation::create([
-            'employee_id' => $employee->id,
-            'attendance_id' => $attendance->id,
-            'latitude' => $data['latitude'],
-            'longitude' => $data['longitude'],
-            'accuracy' => $data['accuracy'] ?? null,
-            'speed' => $data['speed'] ?? null,
-            'recorded_at' => $now,
-            'source' => 'check_out',
-        ]);
+        if ($hasLocation) {
+            GpsLocation::create([
+                'employee_id' => $employee->id,
+                'attendance_id' => $attendance->id,
+                'latitude' => $data['latitude'],
+                'longitude' => $data['longitude'],
+                'accuracy' => $data['accuracy'] ?? null,
+                'speed' => $data['speed'] ?? null,
+                'recorded_at' => $now,
+                'source' => 'check_out',
+            ]);
+        }
 
         $attendance = $attendance->fresh(['employee', 'branch']);
         $workMinutes  = $attendance->check_in_at->diffInMinutes($now);
@@ -314,25 +364,37 @@ class AttendanceService
         $employeeName = trim("{$employee->first_name} {$employee->last_name}");
         $position     = $employee->position?->name ?? 'N/A';
         $address      = $data['address'] ?? 'N/A';
-        $gpsLink      = $this->gpsOpenLink($data['latitude'], $data['longitude']);
+        $gpsUrl       = $hasLocation ? $this->gpsMapLink($data['latitude'], $data['longitude']) : null;
 
-        $telegramSent = $this->sendTelegramSafely(function () use ($employeeName, $employee, $position, $now, $workFmt, $address, $gpsLink, $attendance) {
-            if (! $this->telegram->alertEnabled('telegram_alert_check_out')) {
+        $attendanceEventKey = $attendance->type === 'outdoor' ? 'outdoor_attendance' : 'office_attendance';
+
+        $telegramSent = $this->sendTelegramSafely(function () use ($employeeName, $employee, $position, $now, $workFmt, $address, $gpsUrl, $attendance, $attendanceEventKey) {
+            if (! $this->telegram->alertEnabled('telegram_alert_check_out_success')) {
                 return false;
             }
 
-            $checkOutMessage = "🔔 <b>បានចេញពីធ្វើការ</b>\n\n"
-                . "👤 បុគ្គលិក: {$employeeName}\n"
-                . "🆔 លេខសម្គាល់: {$employee->employee_code}\n"
-                . "💼 តួនាទី: {$position}\n\n"
-                . "🕔 ម៉ោងចេញ: {$now->format('h:i A')}\n"
-                . "📅 កាលបរិច្ឆេទ: {$now->format('d M Y')}\n\n"
-                . "⏱ ម៉ោងធ្វើការ: {$workFmt}\n"
-                . "📍 ទីតាំង: {$address}\n"
-                . "🗺️ តំណ GPS: {$gpsLink}\n\n"
-                . "✅ វត្តមានបានបញ្ចប់";
+            $checkOutPhotoUrl = $this->images->url($attendance->check_out_photo_path);
+            $gpsLine  = $gpsUrl
+                ? '🛰 GPS៖ <a href="'.htmlspecialchars($gpsUrl, ENT_QUOTES).'">បើក</a>'
+                : '🛰 GPS៖ N/A';
+            $faceLine = $checkOutPhotoUrl
+                ? '📸 មុខ៖ <a href="'.htmlspecialchars($checkOutPhotoUrl, ENT_QUOTES).'">បានផ្ទៀងផ្ទាត់ ✅</a>'
+                : '📸 មុខ៖ —';
 
-            $this->telegram->send($checkOutMessage, 'daily_attendance');
+            $caption = "🔔 <b>បានចេញពីធ្វើការ</b>\n\n"
+                . "👤 បុគ្គលិក៖ {$employeeName}\n"
+                . "🆔 លេខសម្គាល់៖ {$employee->employee_code}\n"
+                . "💼 តួនាទី៖ {$position}\n\n"
+                . "🕒 ម៉ោងចូល៖ {$attendance->check_in_at->format('h:i A')}\n"
+                . "🕔 ម៉ោងចេញ៖ {$now->format('h:i A')}\n"
+                . "📅 កាលបរិច្ឆេទ៖ {$now->format('d M Y')}\n\n"
+                . "⏱ ម៉ោងធ្វើការ៖ {$workFmt}\n"
+                . "📍 ទីតាំង៖ {$address}\n"
+                . "{$gpsLine}\n"
+                . "{$faceLine}\n\n"
+                . "✅ ស្ថានភាព៖ <b>បានបញ្ចប់ការងារ</b>";
+
+            $this->telegram->sendAttendancePhoto($checkOutPhotoUrl, $caption, $attendanceEventKey);
 
             $this->notifyEmployeePrivate(
                 $employee,

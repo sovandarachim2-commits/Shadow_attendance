@@ -1,66 +1,82 @@
-﻿Hostinger backend deploy (after uploading the zip)
-==================================================
+﻿Hostinger backend deploy
+========================
 
-1. Upload & extract
-   - hPanel -> File Manager -> domains/YOUR-SITE.hostingersite.com/public_html
-   - Upload backend-hostinger-*.zip and extract
-   - You must see: public_html/.env, public_html/backend/, public_html/deploy/
-   - WRONG: files named backend/app with backslashes in names - delete all, use latest zip
+A) BUILD ZIP ON YOUR PC (Windows)
+---------------------------------
+  Double-click:  Upload to Hostinger.bat
+  Or PowerShell:
+    cd C:\xampp\htdocs\Attadance
+    .\deploy-hostinger.ps1 -OpenFolder
 
-   CRITICAL - Document root (hPanel -> Websites -> Manage -> Advanced):
-   Set to: public_html/backend/public
-   Full path example:
-   /home/u623004828/domains/lightgoldenrodyellow-mantis-338653.hostingersite.com/public_html/backend/public
-   Test in browser: https://YOUR-SITE.hostingersite.com/up  (must NOT be Hostinger "Page Does Not Exist")
+  Output: deploy\backend-hostinger-YYYYMMDD-HHMM.zip
 
-   If hPanel will NOT let you change document root, use workaround (SSH):
-   cd ~/domains/YOUR-SITE.hostingersite.com/public_html
-   mv index.html index.html.bak 2>/dev/null || true
-   mv default.php default.php.bak 2>/dev/null || true
-   cp deploy/public_html.index.php index.php
-   cp deploy/public_html.htaccess .htaccess
-   Then test /up again.
+B) UPLOAD (hPanel)
+------------------
+  File Manager -> domains/lightgoldenrodyellow-mantis-338653.hostingersite.com/public_html
+  Upload zip -> Extract
+  Must see: .env  backend/  deploy/
 
-2. .env on server
-   - Copy deploy/.env.hostinger to public_html/.env (one folder ABOVE backend/)
-   - Edit APP_URL (main domain, not api. subdomain unless SSL is fixed)
-   - Images use Cloudflare R2 (R2_* vars in .env.hostinger)
+  Keep existing .env if it already works — merge new lines from deploy/.env.hostinger
 
-3. SSH (inside backend folder):
-   cd ~/domains/YOUR-SITE.hostingersite.com/public_html/backend
-   composer install --no-dev --optimize-autoloader
-   php artisan storage:link
-   php artisan migrate --force
-   php artisan config:clear
-   php artisan config:cache
-   php artisan route:cache
+C) WEB ENTRY (pick one)
+-----------------------
+  Option 1 — hPanel Document root:
+    public_html/backend/public
 
-4. Permissions (if 500 errors):
-   chmod -R 775 storage bootstrap/cache
+  Option 2 — SSH (if document root cannot change):
+    cd ~/domains/lightgoldenrodyellow-mantis-338653.hostingersite.com/public_html
+    mv index.html index.html.bak 2>/dev/null || true
+    cp deploy/public_html.index.php index.php
+    cp deploy/public_html.htaccess .htaccess
 
-5. Vercel frontend env (main domain, not api. until SSL is fixed):
-   VITE_API_URL=https://YOUR-SITE.hostingersite.com/api
-   Then redeploy Vercel.
+D) SSH — copy all commands
+----------------------------
+  ssh -p 65002 u623004828@151.106.116.77
 
-6. Login (seeded users in DB):
-   superadmin@shadow.com / SuperAdmin@123
-   admin@shadow.com / Admin@123
+  cd ~/domains/lightgoldenrodyellow-mantis-338653.hostingersite.com/public_html
 
-8. Per-employee private Telegram (after migrate):
-   Each employee: open company bot -> Start -> paste Chat ID in Profile -> Save
-   php artisan migrate --force  (adds employees.telegram_chat_id)
+  # .env one level above backend/ (edit R2, DB, APP_KEY)
+  cp deploy/.env.hostinger .env
+  nano .env
 
-7. Test API (SSH):
-   curl -sS -w "\nHTTP:%{http_code}\n" "https://YOUR-SITE.hostingersite.com/up"
-   curl -sS -X POST "https://YOUR-SITE.hostingersite.com/api/auth/login" \
-     -H "Content-Type: application/json" -H "Accept: application/json" \
-     -d '{"username":"superadmin@shadow.com","password":"SuperAdmin@123"}'
+  cd backend
+  composer install --no-dev --optimize-autoloader
+  php artisan storage:link
 
-Updates later
--------------
-- Change code locally -> git push (Vercel auto-updates frontend)
-- Run .\deploy-hostinger.ps1 again -> upload new zip -> SSH:
-    composer install --no-dev
-    php artisan migrate --force
+  # Safe migrate (do NOT full migrate if DB already exists)
+  php artisan migrate --path=database/migrations/2026_05_20_000001_add_telegram_chat_id_to_employees_table.php --forceeeeeee
+  php artisan config:clear
+  php artisan config:cache
+  php artisan route:cache
+
+  chmod -R 775 storage bootstrap/cache
+
+E) IMAGES (R2 TLS fails on Hostinger — use server disk)
+------------------------------------------------------
+  In public_html/.env set:
+    ATTENDANCE_IMAGES_DISK=public
+
+  Then:
+    php artisan config:clear
+    php artisan storage:link
     php artisan config:cache
-    php artisan route:cache
+
+  Images URL: https://lightgoldenrodyellow-mantis-338653.hostingersite.com/storage/...
+
+  When Hostinger fixes TLS to Cloudflare, set ATTENDANCE_IMAGES_DISK=r2 and test:
+    php artisan r2:test --image
+
+F) VERCEL
+-----------
+  VITE_API_URL=https://lightgoldenrodyellow-mantis-338653.hostingersite.com/api
+  Redeploy after changing env.
+
+G) TEST
+-------
+  curl -sS -w "\nHTTP:%{http_code}\n" "https://lightgoldenrodyellow-mantis-338653.hostingersite.com/up"
+
+  curl -sS -X POST "https://lightgoldenrodyellow-mantis-338653.hostingersite.com/api/auth/login" \
+    -H "Content-Type: application/json" -H "Accept: application/json" \
+    -d '{"username":"superadmin@shadow.com","password":"SuperAdmin@123"}'
+
+  Login: superadmin@shadow.com / SuperAdmin@123

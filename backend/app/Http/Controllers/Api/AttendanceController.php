@@ -7,6 +7,7 @@ use App\Models\Attendance;
 use App\Models\AttendanceLog;
 use App\Models\Employee;
 use App\Repositories\AttendanceRepository;
+use App\Services\AttendanceRuleService;
 use App\Services\AttendanceService;
 use App\Services\WorkScheduleService;
 use Carbon\Carbon;
@@ -14,7 +15,11 @@ use Illuminate\Http\Request;
 
 class AttendanceController extends Controller
 {
-    public function __construct(private AttendanceRepository $attendance, private AttendanceService $service) {}
+    public function __construct(
+        private AttendanceRepository $attendance,
+        private AttendanceService $service,
+        private AttendanceRuleService $attendanceRules,
+    ) {}
 
     public function index(Request $request)
     {
@@ -145,52 +150,47 @@ class AttendanceController extends Controller
             $payload['schedule_today'] = $scheduleToday;
         }
 
+        $payload['requirements'] = $this->attendanceRules->requirementsFor($user->loadMissing('employee'));
+
         return $payload;
     }
 
     public function checkIn(Request $request)
     {
-        $photoRules = config('attendance.face_verification_enabled', false)
-            ? ['required', 'image', 'max:4096']
-            : ['nullable', 'image', 'max:4096'];
+        $user = $request->user()->loadMissing('employee');
+        $type = $request->input('type') ?: $this->attendanceRules->attendanceTypeFor($user->employee);
 
-        $data = $request->validate([
+        $data = $request->validate(array_merge([
             'type' => ['required', 'in:office,outdoor'],
-            'latitude' => ['required', 'numeric', 'between:-90,90'],
-            'longitude' => ['required', 'numeric', 'between:-180,180'],
             'accuracy' => ['nullable', 'numeric'],
             'speed' => ['nullable', 'numeric'],
-            'photo' => $photoRules,
             'qr_code' => ['nullable', 'string', 'max:120'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'address' => ['nullable', 'string', 'max:2000'],
             'offline_sync_uuid' => ['nullable', 'uuid'],
-        ]);
+        ], $this->attendanceRules->locationValidationRules($user, $type), $this->attendanceRules->photoValidationRules($user, $type)));
 
         $data['photo'] = $request->file('photo');
 
-        return $this->service->checkIn($request->user(), $data);
+        return $this->service->checkIn($user, $data);
     }
 
     public function checkOut(Request $request)
     {
-        $photoRules = config('attendance.face_verification_enabled', false)
-            ? ['required', 'image', 'max:4096']
-            : ['nullable', 'image', 'max:4096'];
+        $user = $request->user()->loadMissing('employee');
+        $attendance = $this->attendance->todayForEmployee($user->employee_id);
+        $type = $attendance?->type ?? $this->attendanceRules->attendanceTypeFor($user->employee);
 
-        $data = $request->validate([
-            'latitude' => ['required', 'numeric', 'between:-90,90'],
-            'longitude' => ['required', 'numeric', 'between:-180,180'],
+        $data = $request->validate(array_merge([
             'accuracy' => ['nullable', 'numeric'],
             'speed' => ['nullable', 'numeric'],
-            'photo' => $photoRules,
             'notes' => ['nullable', 'string', 'max:2000'],
             'address' => ['nullable', 'string', 'max:2000'],
-        ]);
+        ], $this->attendanceRules->locationValidationRules($user, $type), $this->attendanceRules->photoValidationRules($user, $type)));
 
         $data['photo'] = $request->file('photo');
 
-        return $this->service->checkOut($request->user(), $data);
+        return $this->service->checkOut($user, $data);
     }
 
     public function edit(Request $request, Attendance $attendance)

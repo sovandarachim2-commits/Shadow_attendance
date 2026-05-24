@@ -112,6 +112,7 @@ New-Item -ItemType Directory -Path $deployInZip -Force | Out-Null
 $deployFiles = @(
     ".env.hostinger",
     "HOSTINGER-STEPS.txt",
+    "hostinger-ssh.sh",
     "public_html.index.php",
     "public_html.htaccess"
 )

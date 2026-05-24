@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   CalendarCheck, ChevronLeft, ChevronRight, Clock,
-  Download, Eye, LogOut, MapPin, Pencil, RefreshCw,
-  Search, UserMinus, Users,
+  Download, Eye, Image, LogOut, MapPin, Pencil, RefreshCw,
+  Search, UserMinus, Users, X,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { api } from '../services/api'
@@ -44,6 +44,7 @@ export default function AttendanceHistoryPage({ appData, isLoaded, viewMode = 'a
   const [page, setPage]                   = useState(1)
   const [perPage, setPerPage]             = useState(10)
   const [editingAttendance, setEditing]   = useState(null)
+  const [photoPreview, setPhotoPreview]   = useState(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -288,7 +289,7 @@ export default function AttendanceHistoryPage({ appData, isLoaded, viewMode = 'a
             <table className="w-full min-w-[1380px] text-left text-sm">
               <thead className="border-b border-slate-100 bg-slate-50/80 text-xs font-bold uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400">
                 <tr>
-                  {['#', 'Employee', 'Department', 'Check In', 'Check Out', 'Working Hours', 'Status', 'Type', 'Check In Location', 'Check Out Location', 'Action'].map((col) => (
+                  {['#', 'Employee', 'Department', 'Check In', 'Check Out', 'Working Hours', 'Status', 'Type', 'Check In Location', 'Check Out Location', 'Photo', 'Action'].map((col) => (
                     <th key={col} className="px-4 py-4">{col}</th>
                   ))}
                 </tr>
@@ -374,6 +375,11 @@ export default function AttendanceHistoryPage({ appData, isLoaded, viewMode = 'a
                         <LocationCell item={item} type="check_out" />
                       </td>
 
+                      {/* Photo */}
+                      <td className="px-4 py-4">
+                        <PhotoButton item={item} onView={setPhotoPreview} />
+                      </td>
+
                       {/* Action */}
                       <td className="px-4 py-4">
                         <div className="flex items-center gap-1.5">
@@ -428,6 +434,10 @@ export default function AttendanceHistoryPage({ appData, isLoaded, viewMode = 'a
           onClose={() => setEditing(null)}
           onSaved={() => { setEditing(null); load() }}
         />
+      )}
+
+      {photoPreview && (
+        <PhotoPreviewModal preview={photoPreview} onClose={() => setPhotoPreview(null)} />
       )}
     </div>
   )
@@ -516,6 +526,95 @@ function ActionBtn({ icon: Icon, label, tone, onClick }) {
     >
       <Icon size={14} />
     </button>
+  )
+}
+
+function attendancePhotoItems(item) {
+  return [
+    { label: 'Check In', url: item.check_in_photo_url || item.photo_url },
+    { label: 'Check Out', url: item.check_out_photo_url },
+  ].filter((photo) => photo.url)
+}
+
+function PhotoButton({ item, onView }) {
+  const photos = attendancePhotoItems(item)
+
+  if (photos.length === 0) {
+    return <span className="text-slate-400">-</span>
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => onView({ item, photos })}
+      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-emerald-200 px-2.5 text-xs font-bold text-emerald-700 transition hover:bg-emerald-50 dark:border-emerald-900/60 dark:text-emerald-400 dark:hover:bg-emerald-950/30"
+      title="View photo"
+    >
+      <Image size={14} />
+      View
+    </button>
+  )
+}
+
+function PhotoPreviewModal({ preview, onClose }) {
+  const [activeUrl, setActiveUrl] = useState(preview.photos[0]?.url || null)
+  const activePhoto = preview.photos.find((photo) => photo.url === activeUrl) || preview.photos[0]
+  const employeeName = employeeFullName(preview.item.employee)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4" role="dialog" aria-modal="true">
+      <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-slate-900">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600">Attendance Photo</p>
+            <h3 className="mt-1 text-lg font-bold text-slate-950 dark:text-white">{employeeName || '-'}</h3>
+            <p className="text-sm text-slate-500">{preview.item.employee?.employee_code || '-'}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-slate-500 transition hover:bg-slate-100 dark:hover:bg-slate-800"
+            aria-label="Close photo preview"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        {preview.photos.length > 1 && (
+          <div className="flex gap-2 px-5 pt-4">
+            {preview.photos.map((photo) => (
+              <button
+                key={photo.label}
+                type="button"
+                onClick={() => setActiveUrl(photo.url)}
+                className={clsx(
+                  'h-9 rounded-lg px-3 text-xs font-bold transition',
+                  activePhoto?.url === photo.url
+                    ? 'bg-emerald-600 text-white'
+                    : 'border border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800',
+                )}
+              >
+                {photo.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="p-5">
+          {activePhoto?.url ? (
+            <img
+              src={activePhoto.url}
+              alt={`${activePhoto.label} attendance photo for ${employeeName}`}
+              className="max-h-[70vh] w-full rounded-xl border border-slate-100 object-contain dark:border-slate-800"
+            />
+          ) : (
+            <div className="grid h-64 place-items-center rounded-xl border border-dashed border-slate-200 text-sm text-slate-400 dark:border-slate-700">
+              No photo available.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
 

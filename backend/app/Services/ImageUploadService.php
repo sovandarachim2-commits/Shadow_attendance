@@ -8,9 +8,15 @@ use Throwable;
 
 class ImageUploadService
 {
-    private const CLOUD_DISK = 'r2';
     private const FALLBACK_DISK = 'public';
     private const FALLBACK_PREFIX = 'local:';
+
+    private function cloudDisk(): string
+    {
+        $disk = (string) config('filesystems.attendance_disk', 'r2');
+
+        return in_array($disk, ['r2', 'public'], true) ? $disk : 'r2';
+    }
 
     public function store(?UploadedFile $file, string $folder): ?string
     {
@@ -18,10 +24,16 @@ class ImageUploadService
             return null;
         }
 
+        $disk = $this->cloudDisk();
+
+        if ($disk === self::FALLBACK_DISK) {
+            return self::FALLBACK_PREFIX.$file->storePublicly($folder, self::FALLBACK_DISK);
+        }
+
         try {
-            return $file->store($folder, self::CLOUD_DISK);
+            return $file->storePublicly($folder, $disk);
         } catch (Throwable) {
-            return self::FALLBACK_PREFIX.$file->store($folder, self::FALLBACK_DISK);
+            return self::FALLBACK_PREFIX.$file->storePublicly($folder, self::FALLBACK_DISK);
         }
     }
 
@@ -35,6 +47,6 @@ class ImageUploadService
             return Storage::disk(self::FALLBACK_DISK)->url(substr($path, strlen(self::FALLBACK_PREFIX)));
         }
 
-        return Storage::disk(self::CLOUD_DISK)->url($path);
+        return Storage::disk($this->cloudDisk())->url($path);
     }
 }

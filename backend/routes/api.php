@@ -95,10 +95,16 @@ Route::middleware('auth:sanctum')->group(function () {
         ->except(['show'])->middleware('permission:permissions.manage');
 
     // Customer Visits
+    Route::get('/customer-visits/provinces', [CustomerVisitController::class, 'provinces'])
+        ->middleware('permission:visits.view,visits.manage,visits.create');
+    Route::get('/customer-visits/summary', [CustomerVisitController::class, 'summary'])
+        ->middleware('permission:visits.view,visits.manage,visits.create');
     Route::get('/customer-visits', [CustomerVisitController::class, 'index'])
         ->middleware('permission:visits.view,visits.manage,visits.create');
     Route::post('/customer-visits', [CustomerVisitController::class, 'store'])
         ->middleware('permission:visits.create,visits.manage');
+    Route::patch('/customer-visits/{customerVisit}', [CustomerVisitController::class, 'update'])
+        ->middleware('permission:visits.update,visits.manage,visits.create');
     Route::patch('/customer-visits/{customerVisit}/checkout', [CustomerVisitController::class, 'checkout'])
         ->middleware('permission:visits.update,visits.manage');
 

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertCircle, Calendar, CheckCircle2, ChevronLeft, ChevronRight,
-  Clock, Eye, FileSpreadsheet, FileText, LogOut, MapPinned, Pencil,
-  Users,
+  Clock, Eye, FileSpreadsheet, FileText, Image, LogOut, MapPinned, Pencil,
+  Users, X,
 } from 'lucide-react'
 import {
   CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart,
@@ -50,6 +50,7 @@ export default function AdminAttendanceReportsPage({ user, appData, isLoaded }) 
   const [data, setData] = useState({ summary: {}, records: [] })
   const [detail, setDetail] = useState(null)
   const [editing, setEditing] = useState(null)
+  const [photoPreview, setPhotoPreview] = useState(null)
 
   const canEdit = canAccess(user, ['reports.attendance.edit', 'attendance.edit'])
   const canExport = canAccess(user, ['reports.attendance.export', 'reports.attendance.view_all', 'attendance.view_all'])
@@ -284,7 +285,7 @@ export default function AdminAttendanceReportsPage({ user, appData, isLoaded }) 
                 <table className="w-full min-w-[1000px] text-left text-sm">
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:border-slate-800 dark:bg-slate-950/50">
-                      {['Employee', 'Employee ID', 'Department', 'Date', 'Check In', 'Check Out', 'Working Hours', 'Late', 'Status', 'Type', 'GPS', 'Action'].map((h) => (
+                      {['Employee', 'Employee ID', 'Department', 'Date', 'Check In', 'Check Out', 'Working Hours', 'Late', 'Status', 'Type', 'GPS', 'Photo', 'Action'].map((h) => (
                         <th key={h} className="whitespace-nowrap px-4 py-3.5">{h}</th>
                       ))}
                     </tr>
@@ -334,6 +335,9 @@ export default function AdminAttendanceReportsPage({ user, appData, isLoaded }) 
                           ) : (
                             <GpsBadge status={row.gps_status} />
                           )}
+                        </td>
+                        <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
+                          <PhotoButton row={row} onView={setPhotoPreview} />
                         </td>
                         <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
                           <div className="flex gap-1">
@@ -395,6 +399,92 @@ export default function AdminAttendanceReportsPage({ user, appData, isLoaded }) 
           onSaved={() => { setEditing(null); fetchReport() }}
         />
       )}
+
+      {photoPreview && (
+        <PhotoPreviewModal preview={photoPreview} onClose={() => setPhotoPreview(null)} />
+      )}
+    </div>
+  )
+}
+
+function attendancePhotoItems(row) {
+  return [
+    { label: 'Check In', url: row.check_in_photo_url || row.photo_url },
+    { label: 'Check Out', url: row.check_out_photo_url },
+  ].filter((item) => item.url)
+}
+
+function PhotoButton({ row, onView }) {
+  const photos = attendancePhotoItems(row)
+  if (photos.length === 0) {
+    return <span className="text-slate-300">-</span>
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => onView({ row, photos })}
+      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-emerald-100 bg-emerald-50 px-2.5 text-xs font-bold text-emerald-700 hover:bg-emerald-100 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-300"
+      title="View attendance photo"
+    >
+      <Image size={14} />
+      View
+    </button>
+  )
+}
+
+function PhotoPreviewModal({ preview, onClose }) {
+  const [activeUrl, setActiveUrl] = useState(preview.photos[0]?.url || null)
+  const activePhoto = preview.photos.find((item) => item.url === activeUrl) || preview.photos[0]
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 print:hidden" role="dialog" aria-modal="true">
+      <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-slate-900">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-600">Attendance Photo</p>
+            <h3 className="mt-1 text-lg font-bold text-slate-950 dark:text-white">{preview.row.employee_name}</h3>
+            <p className="text-sm text-slate-500">{formatDateWithDay(preview.row.attendance_date)}</p>
+          </div>
+          <button type="button" onClick={onClose} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Close photo preview">
+            <X size={18} />
+          </button>
+        </div>
+
+        {preview.photos.length > 1 && (
+          <div className="flex gap-2 px-5 pt-4">
+            {preview.photos.map((photo) => (
+              <button
+                key={photo.label}
+                type="button"
+                onClick={() => setActiveUrl(photo.url)}
+                className={clsx(
+                  'h-9 rounded-lg px-3 text-xs font-bold',
+                  activePhoto?.url === photo.url
+                    ? 'bg-emerald-600 text-white'
+                    : 'border border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800',
+                )}
+              >
+                {photo.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="p-5">
+          {activePhoto?.url ? (
+            <img
+              src={activePhoto.url}
+              alt={`${activePhoto.label} attendance photo for ${preview.row.employee_name}`}
+              className="max-h-[70vh] w-full rounded-xl border border-slate-100 object-contain dark:border-slate-800"
+            />
+          ) : (
+            <div className="grid h-64 place-items-center rounded-xl border border-dashed border-slate-200 text-sm text-slate-400 dark:border-slate-700">
+              No photo available.
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

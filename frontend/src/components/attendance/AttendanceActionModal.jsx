@@ -1,23 +1,67 @@
 import { useEffect, useRef, useState } from 'react'
-import { CheckCircle2, Clock, Loader2, LogOut, MapPin, Navigation, X, XCircle } from 'lucide-react'
+import { Camera, CheckCircle2, Clock, Loader2, LogOut, MapPin, Navigation, X, XCircle } from 'lucide-react'
 import clsx from 'clsx'
 import { attendanceService } from '../../services/api'
 import { reverseGeocode } from '../../utils/geocode'
 import { coordsFromPosition, geolocationErrorMessage, isGeolocationSupported, isSecureGeolocationContext, requestCurrentPosition } from '../../utils/geolocation'
+import { DEFAULT_ATTENDANCE_REQUIREMENTS, mergeRequirements } from '../../utils/attendanceRequirements'
+import { detectFaceInPhoto } from '../../utils/faceDetection'
+import { unmirrorFrontCameraImage } from '../../utils/imageCapture'
+import CameraCaptureModal from '../shared/CameraCaptureModal'
 import NoticeAlertCard from '../shared/NoticeAlertCard'
 
-export default function AttendanceActionModal({ action, onClose, onSaved }) {
+export default function AttendanceActionModal({ action, user, onClose, onSaved }) {
   const locationAlertShownRef = useRef(false)
+  const [requirements, setRequirements] = useState(() => mergeRequirements(null, user?.employee))
+  const [requirementsLoading, setRequirementsLoading] = useState(true)
   const [gpsStatus, setGpsStatus] = useState('idle')
   const [coords, setCoords] = useState(null)
   const [address, setAddress] = useState('')
   const [addressLoading, setAddressLoading] = useState(false)
+  const [selfieFile, setSelfieFile] = useState(null)
+  const [selfiePreview, setSelfiePreview] = useState('')
+  const [faceStatus, setFaceStatus] = useState('idle')
+  const [cameraOpen, setCameraOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState(null)
 
   const isCheckIn = action === 'check-in'
-  const canSubmit = gpsStatus === 'granted' && !submitting && !notice
+  const attendanceType = requirements.attendance_type || DEFAULT_ATTENDANCE_REQUIREMENTS.attendance_type
+  const requireGps = requirements.require_gps
+  const requirePhoto = requirements.require_photo
+  const gpsOk = !requireGps || gpsStatus === 'granted'
+  const photoOk = !requirePhoto || (Boolean(selfieFile) && faceStatus === 'verified')
+  const canSubmit = gpsOk && photoOk && !submitting && !notice && !requirementsLoading
+
+  useEffect(() => {
+    let cancelled = false
+
+    attendanceService.today()
+      .then((data) => {
+        if (cancelled) return
+        setRequirements(mergeRequirements(data.requirements, user?.employee))
+      })
+      .catch(() => {
+        if (!cancelled) setRequirements(mergeRequirements(null, user?.employee))
+      })
+      .finally(() => {
+        if (!cancelled) setRequirementsLoading(false)
+      })
+
+    return () => { cancelled = true }
+  }, [user?.employee])
+
+  useEffect(() => () => {
+    if (selfiePreview?.startsWith('blob:')) URL.revokeObjectURL(selfiePreview)
+  }, [selfiePreview])
+
+  useEffect(() => {
+    if (requirementsLoading) return
+    if (requireGps) requestGps()
+    else setGpsStatus('skipped')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [requirementsLoading, requireGps])
 
   const openNotice = (variant, title, message, onConfirm) => {
     setNotice({ variant, title, message, onConfirm })
@@ -73,10 +117,46 @@ export default function AttendanceActionModal({ action, onClose, onSaved }) {
       })
   }
 
-  useEffect(() => {
-    requestGps()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  const handleSelfie = async (file, shouldUnmirror = true) => {
+    if (selfiePreview?.startsWith('blob:')) URL.revokeObjectURL(selfiePreview)
+    if (!file) {
+      setSelfieFile(null)
+      setSelfiePreview('')
+      setFaceStatus('idle')
+      return
+    }
+
+    const nextFile = shouldUnmirror ? await unmirrorFrontCameraImage(file) : file
+    setCameraOpen(false)
+    setFaceStatus('checking')
+
+    let result
+    try {
+      result = await detectFaceInPhoto(nextFile)
+    } catch {
+      setSelfieFile(null)
+      setSelfiePreview('')
+      setFaceStatus('failed')
+      openNotice('warning', 'Cannot verify selfie', 'Face detection failed unexpectedly. Please retake your selfie.')
+      return
+    }
+
+    if (!result.detected) {
+      setSelfieFile(null)
+      setSelfiePreview('')
+      setFaceStatus('failed')
+      if (result.method === 'unavailable') {
+        openNotice('error', 'Face verification unavailable', 'Your device does not support face detection. Selfie cannot be accepted on this device.')
+      } else {
+        openNotice('warning', 'Face not detected', 'Please take a clear selfie with your face centered in the camera.')
+      }
+      return
+    }
+
+    setSelfieFile(nextFile)
+    setSelfiePreview(URL.createObjectURL(nextFile))
+    setFaceStatus('verified')
+  }
 
   const showNoticeError = (message, title) => {
     if (!message) return
@@ -86,8 +166,16 @@ export default function AttendanceActionModal({ action, onClose, onSaved }) {
   }
 
   const submitAttendance = async () => {
-    if (!coords) {
+    if (requireGps && !coords) {
       openNotice('warning', 'Location required', 'Location is required before submitting.')
+      return
+    }
+    if (requirePhoto && !selfieFile) {
+      openNotice('warning', 'Selfie required', 'Take a selfie photo before submitting.')
+      return
+    }
+    if (requirePhoto && faceStatus !== 'verified') {
+      openNotice('warning', 'Face not detected', 'Take a clear selfie with your face visible before submitting.')
       return
     }
 
@@ -95,15 +183,19 @@ export default function AttendanceActionModal({ action, onClose, onSaved }) {
     setError('')
 
     const fd = new FormData()
-    fd.append('latitude', coords.latitude)
-    fd.append('longitude', coords.longitude)
-    fd.append('accuracy', coords.accuracy || '')
-    fd.append('speed', coords.speed || 0)
-    fd.append('address', address || `${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)}`)
+    if (coords) {
+      fd.append('latitude', coords.latitude)
+      fd.append('longitude', coords.longitude)
+      fd.append('accuracy', coords.accuracy || '')
+      fd.append('speed', coords.speed || 0)
+      fd.append('address', address || `${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)}`)
+    }
+
+    if (selfieFile) fd.append('photo', selfieFile)
 
     if (isCheckIn) {
-      fd.append('type', 'office')
-      fd.append('notes', 'Submitted from web attendance.')
+      fd.append('type', attendanceType)
+      fd.append('notes', attendanceType === 'outdoor' ? 'Submitted from outdoor sales attendance.' : 'Submitted from web attendance.')
     }
 
     try {
@@ -128,6 +220,13 @@ export default function AttendanceActionModal({ action, onClose, onSaved }) {
     ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/25'
     : 'bg-amber-500 hover:bg-amber-600 shadow-amber-500/25'
 
+  const subtitle = requirementsLoading
+    ? 'Loading attendance requirements...'
+    : [
+        requireGps ? (attendanceType === 'outdoor' ? 'Outdoor location required' : 'Live location required') : null,
+        requirePhoto ? 'Selfie required' : null,
+      ].filter(Boolean).join(' · ') || 'Submit your attendance'
+
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/70 p-4 backdrop-blur-sm">
       <div className="relative w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-slate-900">
@@ -146,51 +245,95 @@ export default function AttendanceActionModal({ action, onClose, onSaved }) {
             </div>
             <div>
               <h3 className="font-bold text-slate-900 dark:text-slate-100">{isCheckIn ? 'Check In' : 'Check Out'}</h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Your live location is required</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{subtitle}</p>
             </div>
           </div>
           <button
             className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
             onClick={onClose}
+            type="button"
           >
             <X size={17} />
           </button>
         </div>
 
-        <div className="space-y-4 p-5">
-          <PermissionCard
-            icon={MapPin}
-            label="Current Location"
-            status={gpsStatus}
-            desc={
-              gpsStatus === 'granted' && addressLoading ? 'Getting address...'
-                : gpsStatus === 'granted' && address ? 'Address ready'
-                  : gpsStatus === 'granted' ? 'Location captured'
-                    : gpsStatus === 'denied' ? 'Tap to try again'
-                      : gpsStatus === 'requesting' ? 'Allow location when asked...'
-                        : 'Starting current location...'
-            }
-            onTap={gpsStatus !== 'granted' && gpsStatus !== 'requesting' ? requestGps : undefined}
-          />
+        <div className="max-h-[70vh] space-y-4 overflow-y-auto p-5">
+          {requireGps && (
+            <>
+              <PermissionCard
+                icon={MapPin}
+                label="Current Location"
+                status={gpsStatus}
+                desc={
+                  gpsStatus === 'granted' && addressLoading ? 'Getting address...'
+                    : gpsStatus === 'granted' && address ? 'Address ready'
+                      : gpsStatus === 'granted' ? 'Location captured'
+                        : gpsStatus === 'denied' ? 'Tap to try again'
+                          : gpsStatus === 'requesting' ? 'Allow location when asked...'
+                            : 'Starting current location...'
+                }
+                onTap={gpsStatus !== 'granted' && gpsStatus !== 'requesting' ? requestGps : undefined}
+              />
 
-          {gpsStatus === 'denied' && <LocationHelpCard error={error} onRetry={requestGps} />}
+              {gpsStatus === 'denied' && <LocationHelpCard error={error} onRetry={requestGps} />}
 
-          {coords && (
-            <div className="rounded-lg bg-emerald-50 px-3 py-3 text-xs dark:bg-emerald-950/20">
-              <div className="flex items-start gap-2">
-                <MapPin size={14} className="mt-0.5 shrink-0 text-emerald-600" />
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-emerald-800 dark:text-emerald-300">Current location</p>
-                  {addressLoading ? (
-                    <p className="mt-1 text-emerald-700 dark:text-emerald-400">Looking up your address...</p>
-                  ) : (
-                    <p className="mt-1 leading-relaxed text-emerald-700 dark:text-emerald-400">{address || 'Address unavailable'}</p>
-                  )}
-                  <p className="mt-2 font-mono text-[10px] text-emerald-600/80 dark:text-emerald-500">
-                    {coords.latitude.toFixed(6)}, {coords.longitude.toFixed(6)} - +/-{Math.round(coords.accuracy || 0)} m
-                  </p>
+              {coords && (
+                <div className="rounded-lg bg-emerald-50 px-3 py-3 text-xs dark:bg-emerald-950/20">
+                  <div className="flex items-start gap-2">
+                    <MapPin size={14} className="mt-0.5 shrink-0 text-emerald-600" />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-emerald-800 dark:text-emerald-300">Current location</p>
+                      {addressLoading ? (
+                        <p className="mt-1 text-emerald-700 dark:text-emerald-400">Looking up your address...</p>
+                      ) : (
+                        <p className="mt-1 leading-relaxed text-emerald-700 dark:text-emerald-400">{address || 'Address unavailable'}</p>
+                      )}
+                      <p className="mt-2 font-mono text-[10px] text-emerald-600/80 dark:text-emerald-500">
+                        {coords.latitude.toFixed(6)}, {coords.longitude.toFixed(6)} - +/-{Math.round(coords.accuracy || 0)} m
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
+            </>
+          )}
+
+          {requirePhoto && (
+            <div className="space-y-3">
+              <PermissionCard
+                icon={Camera}
+                label="Selfie Verification"
+                status={faceStatus === 'checking' ? 'requesting' : selfieFile && faceStatus === 'verified' ? 'granted' : faceStatus === 'failed' ? 'denied' : 'idle'}
+                desc={faceStatus === 'checking' ? 'Detecting face...'
+                  : selfieFile && faceStatus === 'verified' ? 'Face detected'
+                    : faceStatus === 'failed' ? 'Face not detected'
+                      : 'Tap to take a selfie'}
+                onTap={() => setCameraOpen(true)}
+              />
+              {selfiePreview && (
+                <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
+                  <img src={selfiePreview} alt="Attendance selfie preview" className="max-h-48 w-full object-cover" />
+                  <div className="border-t border-slate-100 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 dark:border-slate-800 dark:bg-emerald-950/20 dark:text-emerald-400">
+                    Face detected
+                  </div>
+                  <div className="flex justify-end gap-2 border-t border-slate-100 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950">
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-300"
+                      onClick={() => handleSelfie(null)}
+                    >
+                      Retake
+                    </button>
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 dark:text-emerald-400"
+                      onClick={() => setCameraOpen(true)}
+                    >
+                      Change photo
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -199,6 +342,7 @@ export default function AttendanceActionModal({ action, onClose, onSaved }) {
               onClick={submitAttendance}
               disabled={!canSubmit}
               title={isCheckIn ? 'Submit Check In' : 'Submit Check Out'}
+              type="button"
               className={clsx(
                 'grid h-16 w-16 place-items-center rounded-full text-white shadow-lg transition disabled:cursor-not-allowed disabled:opacity-50',
                 accentClass,
@@ -222,6 +366,14 @@ export default function AttendanceActionModal({ action, onClose, onSaved }) {
           )}
         </div>
       </div>
+      {cameraOpen && (
+        <CameraCaptureModal
+          title="Take Selfie"
+          facingMode="user"
+          onClose={() => setCameraOpen(false)}
+          onCapture={(file) => handleSelfie(file, false)}
+        />
+      )}
     </div>
   )
 }
@@ -292,11 +444,12 @@ function PermissionCard({ icon: Icon, label, desc, status, onTap }) {
     granted: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-400',
     denied: 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-400',
     requesting: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-400',
+    skipped: 'border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400',
     idle: 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300',
   }[status] || ''
 
   return (
-    <button type="button" onClick={onTap} disabled={!onTap} className={clsx('rounded-xl border p-4 text-left transition', style, onTap && 'hover:scale-[1.01]')}>
+    <button type="button" onClick={onTap} disabled={!onTap} className={clsx('w-full rounded-xl border p-4 text-left transition', style, onTap && 'hover:scale-[1.01]')}>
       <div className="flex items-center gap-3">
         <Icon size={18} />
         <div>

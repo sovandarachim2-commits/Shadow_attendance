@@ -15,6 +15,11 @@ class Employee extends Model
         'require_face_verification', 'require_gps',
     ];
 
+    protected $casts = [
+        'require_face_verification' => 'boolean',
+        'require_gps' => 'boolean',
+    ];
+
     public function getPhotoUrlAttribute(): ?string
     {
         if (! $this->photo_path) {

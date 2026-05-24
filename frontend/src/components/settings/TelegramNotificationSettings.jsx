@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   Bot,
+  Camera,
   CheckCircle2,
   Clock,
   ClipboardList,
@@ -112,25 +113,54 @@ const LATE_ITEMS = [
 
 const GROUP_DESTINATIONS = [
   {
-    event_key: 'daily_attendance',
-    name: 'Daily Attendance Group',
-    title: 'Daily Attendance',
-    description: 'Check-in and check-out messages for the attendance group.',
+    event_key: 'office_attendance',
+    name: 'Office Staff Attendance Group',
+    title: 'Office Staff Attendance',
+    description: 'Check-in and check-out messages only for Office Staff employees.',
     placeholder: '-1001111111111',
   },
   {
-    event_key: 'permission_request',
-    name: 'Permission Requests Group',
-    title: 'Permission Request',
-    description: 'New request and approval/rejection messages for the permission group.',
+    event_key: 'outdoor_attendance',
+    name: 'Outdoor Sales Attendance Group',
+    title: 'Outdoor Sales Attendance',
+    description: 'Check-in and check-out messages only for Outdoor Sales employees.',
     placeholder: '-1002222222222',
   },
   {
-    event_key: 'late_attendance',
-    name: 'Late Attendance Group',
-    title: 'Late Attendance',
-    description: 'Late check-in alerts for the late attendance group or topic.',
+    event_key: 'outdoor_visit',
+    name: 'Customer Visit Group',
+    title: 'Customer Visit Notifications',
+    description: 'Sent when an outdoor sales employee submits a customer visit. Includes seller info, customer details, GPS map link, and photo URLs.',
+    placeholder: '-1009999999999',
+    textOnly: true,
+  },
+  {
+    event_key: 'office_permission_request',
+    name: 'Office Staff Permission Request Group',
+    title: 'Office Staff Permission Request',
+    description: 'New request and approval/rejection messages only for Office Staff employees.',
     placeholder: '-1003333333333',
+  },
+  {
+    event_key: 'outdoor_permission_request',
+    name: 'Outdoor Sales Permission Request Group',
+    title: 'Outdoor Sales Permission Request',
+    description: 'New request and approval/rejection messages only for Outdoor Sales employees.',
+    placeholder: '-1004444444444',
+  },
+  {
+    event_key: 'office_late_attendance',
+    name: 'Office Staff Late Attendance Group',
+    title: 'Office Staff Late Attendance',
+    description: 'Late check-in alerts only for Office Staff employees.',
+    placeholder: '-1005555555555',
+  },
+  {
+    event_key: 'outdoor_late_attendance',
+    name: 'Outdoor Sales Late Attendance Group',
+    title: 'Outdoor Sales Late Attendance',
+    description: 'Late check-in alerts only for Outdoor Sales employees.',
+    placeholder: '-1006666666666',
   },
 ]
 
@@ -155,6 +185,7 @@ function mapDestinations(rows = []) {
       chat_id: row.chat_id || '',
       message_thread_id: row.message_thread_id || '',
       enabled: Boolean(row.id ? row.enabled : false),
+      send_photo: Boolean(row.send_photo),
     }
     return acc
   }, {})
@@ -252,6 +283,7 @@ export default function TelegramNotificationSettings({ notify }) {
           chat_id: destination.chat_id || '',
           message_thread_id: destination.message_thread_id || null,
           enabled: Boolean(destination.enabled && destination.chat_id),
+          send_photo: Boolean(destination.send_photo),
         }
 
         return destination.id
@@ -408,23 +440,56 @@ export default function TelegramNotificationSettings({ notify }) {
                 {GROUP_DESTINATIONS.map((item) => {
                   const destination = destinations[item.event_key] || item
                   const enabled = Boolean(destination.enabled)
+                  const isVisit = item.event_key === 'outdoor_visit'
 
                   return (
-                    <div key={item.event_key} className="rounded-lg border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-700 dark:bg-slate-950/50">
+                    <div key={item.event_key} className={clsx(
+                      'rounded-lg border p-4',
+                      isVisit
+                        ? 'border-blue-200 bg-blue-50/60 dark:border-blue-900 dark:bg-blue-950/20'
+                        : 'border-slate-200 bg-slate-50/70 dark:border-slate-700 dark:bg-slate-950/50',
+                    )}>
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div>
-                          <p className="text-sm font-bold text-slate-900 dark:text-white">{item.title}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-bold text-slate-900 dark:text-white">{item.title}</p>
+                            {item.textOnly && (
+                              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
+                                Text Only
+                              </span>
+                            )}
+                          </div>
                           <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">{item.description}</p>
                         </div>
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={enabled}
-                          onClick={() => setDestinationField(item.event_key, 'enabled', !enabled)}
-                          className={clsx('relative h-7 w-12 shrink-0 rounded-full transition-colors', enabled ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600')}
-                        >
-                          <span className={clsx('absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all', enabled ? 'left-6' : 'left-1')} />
-                        </button>
+                        <div className="flex shrink-0 items-center gap-3">
+                          {!item.textOnly && (
+                            <div className="flex items-center gap-2">
+                              <Camera size={14} className="text-slate-400" />
+                              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Send Photo</span>
+                              <button
+                                type="button"
+                                role="switch"
+                                aria-checked={Boolean(destination.send_photo)}
+                                onClick={() => setDestinationField(item.event_key, 'send_photo', !destination.send_photo)}
+                                className={clsx('relative h-7 w-12 rounded-full transition-colors', destination.send_photo ? 'bg-sky-500' : 'bg-slate-300 dark:bg-slate-600')}
+                              >
+                                <span className={clsx('absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all', destination.send_photo ? 'left-6' : 'left-1')} />
+                              </button>
+                            </div>
+                          )}
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">Enable</span>
+                            <button
+                              type="button"
+                              role="switch"
+                              aria-checked={enabled}
+                              onClick={() => setDestinationField(item.event_key, 'enabled', !enabled)}
+                              className={clsx('relative h-7 w-12 rounded-full transition-colors', enabled ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600')}
+                            >
+                              <span className={clsx('absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all', enabled ? 'left-6' : 'left-1')} />
+                            </button>
+                          </div>
+                        </div>
                       </div>
                       <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_150px_auto]">
                         <Field label="Group Chat ID">
@@ -446,7 +511,13 @@ export default function TelegramNotificationSettings({ notify }) {
                           />
                         </Field>
                         <div className="flex items-end">
-                          <SecondaryButton icon={Wifi} onClick={() => testDestination(item.event_key)} loading={testingDestination === item.event_key}>Test</SecondaryButton>
+                          <SecondaryButton
+                            icon={Wifi}
+                            onClick={() => testDestination(item.event_key)}
+                            loading={testingDestination === item.event_key}
+                          >
+                            {isVisit ? 'Test Visit' : 'Test'}
+                          </SecondaryButton>
                         </div>
                       </div>
                     </div>

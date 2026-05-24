@@ -2,8 +2,9 @@
 
 namespace App\Services;
 
-use App\Models\AttendanceRule;
 use App\Models\Attendance;
+use App\Models\AttendanceRule;
+use App\Models\Employee;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
@@ -13,6 +14,66 @@ class AttendanceRuleService
     public function rules(): AttendanceRule
     {
         return AttendanceRule::query()->firstOrCreate([]);
+    }
+
+    public function attendanceTypeFor(?Employee $employee): string
+    {
+        return $employee?->employment_type === 'outdoor_sales' ? 'outdoor' : 'office';
+    }
+
+    /**
+     * @return array{attendance_type: string, require_gps: bool, require_photo: bool, save_selfie: bool}
+     */
+    public function requirementsFor(User $user, ?string $attendanceType = null): array
+    {
+        $employee = $user->relationLoaded('employee')
+            ? $user->employee
+            : $user->employee()->first();
+
+        $rules = $this->rules();
+        $attendanceType ??= $this->attendanceTypeFor($employee);
+
+        $requirePhoto = config('attendance.face_verification_enabled', false)
+            || (bool) ($employee?->require_face_verification)
+            || $rules->require_selfie;
+
+        $requireGps = config('attendance.require_gps_on_checkin', true)
+            || (bool) ($employee?->require_gps)
+            || ($attendanceType === 'outdoor' && $rules->require_gps);
+
+        return [
+            'attendance_type' => $attendanceType,
+            'require_gps' => $requireGps,
+            'require_photo' => $requirePhoto,
+            'save_selfie' => (bool) $rules->save_selfie,
+        ];
+    }
+
+    /**
+     * @return array<string, array<int, string>>
+     */
+    public function locationValidationRules(User $user, ?string $attendanceType = null): array
+    {
+        $requirements = $this->requirementsFor($user, $attendanceType);
+        $presence = $requirements['require_gps'] ? 'required' : 'nullable';
+
+        return [
+            'latitude' => [$presence, 'numeric', 'between:-90,90'],
+            'longitude' => [$presence, 'numeric', 'between:-180,180'],
+        ];
+    }
+
+    /**
+     * @return array<string, array<int, string>>
+     */
+    public function photoValidationRules(User $user, ?string $attendanceType = null): array
+    {
+        $requirements = $this->requirementsFor($user, $attendanceType);
+        $presence = $requirements['require_photo'] ? 'required' : 'nullable';
+
+        return [
+            'photo' => [$presence, 'image', 'max:4096'],
+        ];
     }
 
     public function workEndToday(User $user, ?Carbon $date = null): ?Carbon

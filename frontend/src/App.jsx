@@ -32,6 +32,7 @@ import DepartmentsPage from './pages/DepartmentsPage'
 import PositionsPage from './pages/PositionsPage'
 import UsersRolesPage from './pages/UsersRolesPage'
 import OutdoorSalesPage from './pages/OutdoorSalesPage'
+import CustomerVisitsPage from './pages/CustomerVisitsPage'
 import ReportsPage from './pages/ReportsPage'
 import NotificationsPage from './pages/NotificationsPage'
 import ProfilePage from './pages/ProfilePage'
@@ -243,7 +244,7 @@ function AppShell({ isLoaded }) {
   const pages = {
     Dashboard: <DashboardPage {...props} />,
     'Check In / Out': <AttendancePage {...props} />,
-    'Customer Visits': <OutdoorSalesPage {...props} />,
+    'Customer Visits': <CustomerVisitsPage user={user} appData={data} setModal={setModal} />,
     'Daily Reports': <ReportsPage {...props} />,
     'My Reports': <ReportsPage {...props} />,
     'Permission Requests': <PermissionRequestsPage {...props} />,

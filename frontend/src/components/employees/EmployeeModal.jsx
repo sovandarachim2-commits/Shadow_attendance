@@ -66,6 +66,15 @@ export default function EmployeeModal({ employee, onClose, onSaved }) {
 
   const updateField = (key, value) => setForm((current) => ({ ...current, [key]: value }))
 
+  const updateAttendanceType = (type) => {
+    setForm((current) => {
+      const next = { ...current, employment_type: type }
+      const matchingRole = options.roles.find((role) => role.slug === (type === 'outdoor_sales' ? 'outdoor_sales' : 'office_staff'))
+      if (matchingRole) next.role_id = matchingRole.id
+      return next
+    })
+  }
+
   const handlePhoto = (file) => {
     setPhoto(file || null)
     if (photoPreview?.startsWith('blob:')) URL.revokeObjectURL(photoPreview)
@@ -190,10 +199,8 @@ export default function EmployeeModal({ employee, onClose, onSaved }) {
                   {options.branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
                 </EmployeeSelectField>
                 <EmployeeTextField icon={CalendarCheck} label="Join Date" type="date" value={form.hire_date} onChange={(value) => updateField('hire_date', value)} />
-                <EmployeeSelectField icon={BriefcaseBusiness} label="Employment Type" value={form.employment_type} onChange={(value) => updateField('employment_type', value)} required>
-                  <option value="full_time">Full Time</option>
-                  <option value="part_time">Part Time</option>
-                  <option value="contract">Contract</option>
+                <EmployeeSelectField icon={BriefcaseBusiness} label="Employment Type" value={form.employment_type} onChange={updateAttendanceType} required>
+                  <option value="full_time">Office Staff</option>
                   <option value="outdoor_sales">Outdoor Sales</option>
                 </EmployeeSelectField>
                 <EmployeeSelectField icon={UserRound} label="Reporting To" value="" onChange={() => {}}>
@@ -227,11 +234,11 @@ export default function EmployeeModal({ employee, onClose, onSaved }) {
                   <EmployeeLabel required>Attendance Type</EmployeeLabel>
                   <div className="mt-3 space-y-3 text-sm font-medium text-slate-700 dark:text-slate-200">
                     <label className="flex items-center gap-2">
-                      <input className="h-4 w-4 accent-emerald-600" type="radio" checked={form.employment_type !== 'outdoor_sales'} onChange={() => updateField('employment_type', 'full_time')} />
+                      <input className="h-4 w-4 accent-emerald-600" type="radio" checked={form.employment_type !== 'outdoor_sales'} onChange={() => updateAttendanceType('full_time')} />
                       Office Staff
                     </label>
                     <label className="flex items-center gap-2">
-                      <input className="h-4 w-4 accent-emerald-600" type="radio" checked={form.employment_type === 'outdoor_sales'} onChange={() => updateField('employment_type', 'outdoor_sales')} />
+                      <input className="h-4 w-4 accent-emerald-600" type="radio" checked={form.employment_type === 'outdoor_sales'} onChange={() => updateAttendanceType('outdoor_sales')} />
                       Outdoor Sales
                     </label>
                   </div>

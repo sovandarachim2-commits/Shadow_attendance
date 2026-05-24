@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Attendance;
+use App\Services\ImageUploadService;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
@@ -86,6 +87,9 @@ class AttendanceReportService
     {
         $employee = $row->employee;
         $displayStatus = $this->displayStatus($row);
+        $imageService = app(ImageUploadService::class);
+        $checkInPhotoUrl = $row->check_in_photo_path ? $imageService->url($row->check_in_photo_path) : null;
+        $checkOutPhotoUrl = $row->check_out_photo_path ? $imageService->url($row->check_out_photo_path) : null;
 
         return [
             'id' => $row->id,
@@ -111,6 +115,9 @@ class AttendanceReportService
             'location' => $this->locationLabel($row),
             'check_in_address' => $row->check_in_address,
             'check_out_address' => $row->check_out_address,
+            'photo_url' => $checkInPhotoUrl,
+            'check_in_photo_url' => $checkInPhotoUrl,
+            'check_out_photo_url' => $checkOutPhotoUrl,
             'check_in_latitude' => $row->check_in_latitude,
             'check_in_longitude' => $row->check_in_longitude,
             'check_out_latitude' => $row->check_out_latitude,

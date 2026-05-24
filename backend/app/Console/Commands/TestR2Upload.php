@@ -16,22 +16,24 @@ class TestR2Upload extends Command
 
     public function handle(ImageUploadService $images): int
     {
-        $missing = collect([
-            'R2_ACCESS_KEY_ID',
-            'R2_SECRET_ACCESS_KEY',
-            'R2_BUCKET',
-            'R2_ENDPOINT',
-        ])->filter(fn (string $key) => ! trim((string) env($key)));
+        $disk = config('filesystems.disks.r2', []);
+        $checks = [
+            'R2_ACCESS_KEY_ID' => $disk['key'] ?? null,
+            'R2_SECRET_ACCESS_KEY' => $disk['secret'] ?? null,
+            'R2_BUCKET' => $disk['bucket'] ?? null,
+            'R2_ENDPOINT' => $disk['endpoint'] ?? null,
+        ];
+        $missing = collect($checks)->filter(fn ($value) => ! trim((string) $value))->keys();
 
         if ($missing->isNotEmpty()) {
-            $this->error('Missing in .env (project root): '.$missing->implode(', '));
+            $this->error('Missing R2 config (add to public_html/.env, then config:clear): '.$missing->implode(', '));
 
             return self::FAILURE;
         }
 
-        $this->info('Bucket: '.trim(env('R2_BUCKET')));
-        $this->info('Endpoint: '.env('R2_ENDPOINT'));
-        $this->info('Public URL base: '.(env('R2_PUBLIC_URL') ?: '(not set)'));
+        $this->info('Bucket: '.trim((string) $disk['bucket']));
+        $this->info('Endpoint: '.($disk['endpoint'] ?? ''));
+        $this->info('Public URL base: '.($disk['url'] ?: '(not set)'));
 
         try {
             if ($this->option('image')) {
@@ -49,7 +51,14 @@ class TestR2Upload extends Command
         $url = $images->url($path);
 
         $this->newLine();
-        $this->info('Upload succeeded.');
+        if (str_starts_with($path, 'local:')) {
+            $this->warn('Upload used LOCAL fallback — R2 upload failed. Images are NOT on Cloudflare yet.');
+            $this->line('Direct R2 error: '.$this->directR2Error());
+
+            return self::FAILURE;
+        }
+
+        $this->info('Upload succeeded (Cloudflare R2).');
         $this->line('Path: '.$path);
         $this->line('URL:  '.($url ?? '(none)'));
 
@@ -76,5 +85,16 @@ class TestR2Upload extends Command
         }
 
         return $path;
+    }
+
+    private function directR2Error(): string
+    {
+        try {
+            Storage::disk('r2')->put('tests/r2-probe-'.time().'.txt', 'probe');
+
+            return 'none (direct put worked — check ImageUploadService)';
+        } catch (\Throwable $e) {
+            return $e->getMessage();
+        }
     }
 }

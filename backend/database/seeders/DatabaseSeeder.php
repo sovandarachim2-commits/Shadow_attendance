@@ -69,8 +69,14 @@ class DatabaseSeeder extends Seeder
 
         foreach ([
             ['event_key' => 'daily_attendance', 'name' => 'Daily Attendance Group'],
+            ['event_key' => 'office_attendance', 'name' => 'Office Staff Attendance Group'],
+            ['event_key' => 'outdoor_attendance', 'name' => 'Outdoor Sales Attendance Group'],
             ['event_key' => 'permission_request', 'name' => 'Permission Requests Group'],
+            ['event_key' => 'office_permission_request', 'name' => 'Office Staff Permission Request Group'],
+            ['event_key' => 'outdoor_permission_request', 'name' => 'Outdoor Sales Permission Request Group'],
             ['event_key' => 'late_attendance', 'name' => 'Late Attendance Topic'],
+            ['event_key' => 'office_late_attendance', 'name' => 'Office Staff Late Attendance Group'],
+            ['event_key' => 'outdoor_late_attendance', 'name' => 'Outdoor Sales Late Attendance Group'],
             ['event_key' => 'outdoor_visit', 'name' => 'Outdoor Visit Topic'],
         ] as $destination) {
             TelegramDestination::updateOrCreate(
