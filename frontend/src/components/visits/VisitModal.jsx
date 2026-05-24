@@ -6,6 +6,7 @@ import {
 import clsx from 'clsx'
 import { api } from '../../services/api'
 import { apiError } from '../../utils/format'
+import { compressImageForUpload } from '../../utils/imageCapture'
 
 const inputCls =
   'w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-800 dark:text-white'
@@ -19,6 +20,7 @@ export default function VisitModal({ onClose, onSaved }) {
   const [storePhoto, setStorePhoto] = useState(null)
   const [storePreview, setStorePreview] = useState('')
   const [photoAction, setPhotoAction] = useState(null) // null | 'selfie' | 'store'
+  const [processingPhoto, setProcessingPhoto] = useState(null) // null | 'selfie' | 'store'
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -66,19 +68,32 @@ export default function VisitModal({ onClose, onSaved }) {
   const resetLocation = () => { setLocation(null); setGpsStatus('idle') }
 
   // ── Photo handlers ───────────────────────────────────────────────────────────
-  const applyFile = (type, file) => {
+  const applyFile = async (type, file, { unmirror = false } = {}) => {
     if (!file) return
-    const url = URL.createObjectURL(file)
-    if (type === 'selfie') {
-      if (selfiePreview?.startsWith('blob:')) URL.revokeObjectURL(selfiePreview)
-      setSelfie(file)
-      setSelfiePreview(url)
-    } else {
-      if (storePreview?.startsWith('blob:')) URL.revokeObjectURL(storePreview)
-      setStorePhoto(file)
-      setStorePreview(url)
-    }
     setPhotoAction(null)
+    setProcessingPhoto(type)
+    setError('')
+
+    try {
+      const prepared = await compressImageForUpload(file, {
+        unmirror,
+        fileName: type === 'selfie' ? 'visit-selfie' : 'visit-store',
+      })
+      const url = URL.createObjectURL(prepared)
+      if (type === 'selfie') {
+        if (selfiePreview?.startsWith('blob:')) URL.revokeObjectURL(selfiePreview)
+        setSelfie(prepared)
+        setSelfiePreview(url)
+      } else {
+        if (storePreview?.startsWith('blob:')) URL.revokeObjectURL(storePreview)
+        setStorePhoto(prepared)
+        setStorePreview(url)
+      }
+    } catch {
+      setError('Could not process the photo. Please try again.')
+    } finally {
+      setProcessingPhoto(null)
+    }
   }
 
   const clearSelfie = () => {
@@ -267,6 +282,7 @@ export default function VisitModal({ onClose, onSaved }) {
                   required
                   hint="Front camera"
                   preview={selfiePreview}
+                  processing={processingPhoto === 'selfie'}
                   onTake={() => setPhotoAction('selfie')}
                   onRemove={clearSelfie}
                 />
@@ -277,6 +293,7 @@ export default function VisitModal({ onClose, onSaved }) {
                   required
                   hint="Rear camera"
                   preview={storePreview}
+                  processing={processingPhoto === 'store'}
                   onTake={() => setPhotoAction('store')}
                   onRemove={clearStore}
                 />
@@ -299,7 +316,7 @@ export default function VisitModal({ onClose, onSaved }) {
             {/* Submit */}
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || Boolean(processingPhoto)}
               className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-base font-bold text-white shadow-lg shadow-emerald-600/25 transition hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-60"
             >
               {saving ? <><Loader2 size={18} className="animate-spin" /> Saving…</> : 'Submit'}
@@ -310,7 +327,7 @@ export default function VisitModal({ onClose, onSaved }) {
 
       {/* ── Hidden native file inputs ── */}
       <input ref={selfieCamRef} type="file" accept="image/*" capture="user"
-        className="hidden" onChange={(e) => applyFile('selfie', e.target.files?.[0])} />
+        className="hidden" onChange={(e) => applyFile('selfie', e.target.files?.[0], { unmirror: true })} />
       <input ref={selfieGalRef} type="file" accept="image/*"
         className="hidden" onChange={(e) => applyFile('selfie', e.target.files?.[0])} />
       <input ref={storeCamRef}  type="file" accept="image/*" capture="environment"
@@ -401,13 +418,18 @@ export default function VisitModal({ onClose, onSaved }) {
 
 // ── Small reusable pieces ─────────────────────────────────────────────────────
 
-function PhotoSlot({ label, required, hint, preview, onTake, onRemove }) {
+function PhotoSlot({ label, required, hint, preview, processing, onTake, onRemove }) {
   return (
     <div>
       <p className="mb-2 text-xs font-bold text-slate-600 dark:text-slate-300">
         {label} {required && <span className="text-rose-500">*</span>}
       </p>
-      {preview ? (
+      {processing ? (
+        <div className="flex h-36 w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/20 dark:text-emerald-300">
+          <Loader2 size={22} className="animate-spin" />
+          <span className="text-xs font-semibold">Optimizing photo…</span>
+        </div>
+      ) : preview ? (
         <div className="relative overflow-hidden rounded-xl">
           <img src={preview} alt={label} className="h-36 w-full object-cover" />
           <div className="absolute inset-x-0 bottom-0 flex justify-center gap-3 bg-gradient-to-t from-black/70 pb-2.5 pt-6">
