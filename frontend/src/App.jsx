@@ -23,7 +23,7 @@ import {
   X,
 } from 'lucide-react'
 import clsx from 'clsx'
-import { api, attendanceService, authService, dashboardService } from './services/api'
+import { api, attendanceService, authService, dashboardService, employeeService } from './services/api'
 import DashboardPage from './pages/DashboardPage'
 import AttendancePage from './pages/AttendancePage'
 import EmployeesPage from './pages/EmployeesPage'
@@ -131,7 +131,7 @@ function AppShell({ isLoaded }) {
       canLoad(['dashboard.admin', 'dashboard.employee']) ? dashboardService.overview().catch(() => null) : Promise.resolve(null),
       canLoad(['attendance.view_own', 'attendance.view_all']) ? attendanceService.today().catch(() => null) : Promise.resolve(null),
       canLoad(['attendance.view_all', 'attendance.view_own']) ? api.get('/attendance').then((response) => response.data.data || []).catch(() => []) : Promise.resolve([]),
-      canLoad(['employees.view', 'employees.create', 'employees.update']) ? api.get('/employees').then((response) => response.data.data || []).catch(() => []) : Promise.resolve([]),
+      canLoad(['employees.view', 'employees.create', 'employees.update']) ? employeeService.fetchAll().catch(() => []) : Promise.resolve([]),
       canLoad(['visits.view', 'visits.create', 'visits.manage']) ? api.get('/customer-visits').then((response) => response.data.data || []).catch(() => []) : Promise.resolve([]),
       canLoad(['reports.view_all', 'reports.view_own']) ? api.get('/reports').then((response) => response.data.data || []).catch(() => []) : Promise.resolve([]),
       canLoad(['notifications.view', 'notifications.manage']) ? api.get('/notifications').then((response) => response.data.data || []).catch(() => []) : Promise.resolve([]),

@@ -24,7 +24,7 @@ import {
   Zap,
 } from 'lucide-react'
 import clsx from 'clsx'
-import { api } from '../../services/api'
+import { api, employeeService } from '../../services/api'
 
 const BONUS_TYPE_LABELS = {
   perfect_attendance: 'Perfect Attendance Bonus',
@@ -144,8 +144,7 @@ export default function BonusRulesSettings() {
   useEffect(() => { load() }, [load])
 
   useEffect(() => {
-    api.get('/employees').then((r) => {
-      const list = r.data.data || r.data || []
+    employeeService.fetchAll().then((list) => {
       setEmployees(list)
       if (!previewEmployeeId && list[0]?.id) setPreviewEmployeeId(String(list[0].id))
     }).catch(() => {})

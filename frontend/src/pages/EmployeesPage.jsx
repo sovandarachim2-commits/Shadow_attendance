@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   Download,
@@ -13,7 +13,7 @@ import {
   X,
 } from 'lucide-react'
 import { EmptyState, StatusPill } from '../components/shared/UI'
-import { api } from '../services/api'
+import { api, employeeService } from '../services/api'
 import { canAccess, employeeFullName, initials, titleCase } from '../utils/format'
 
 export default function EmployeesPage({ appData, refresh, setModal, setEditingEmployee, user }) {
@@ -23,8 +23,26 @@ export default function EmployeesPage({ appData, refresh, setModal, setEditingEm
   const [branch, setBranch] = useState('all')
   const [deletingId, setDeletingId] = useState(null)
   const [confirmEmployee, setConfirmEmployee] = useState(null)
+  const [employees, setEmployees] = useState(() => appData.employees || [])
+  const [loading, setLoading] = useState(false)
 
-  const employees = useMemo(() => appData.employees || [], [appData.employees])
+  const loadEmployees = useCallback(() => {
+    setLoading(true)
+    return employeeService.fetchAll()
+      .then((list) => setEmployees(list))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    loadEmployees()
+  }, [loadEmployees])
+
+  useEffect(() => {
+    if (!appData.loading && appData.employees?.length) {
+      setEmployees(appData.employees)
+    }
+  }, [appData.loading, appData.employees])
   const activeCount = employees.filter((item) => item.status === 'active').length
   const photoCount = employees.filter((item) => item.photo_path || item.photo_url).length
   const activePercent = employees.length ? Math.round((activeCount / employees.length) * 100) : 0
@@ -88,6 +106,7 @@ export default function EmployeesPage({ appData, refresh, setModal, setEditingEm
     setConfirmEmployee(null)
     try {
       await api.delete(`/employees/${confirmEmployee.id}`)
+      await loadEmployees()
       refresh()
     } catch (ex) {
       const msg = ex.response?.data?.message || 'Could not delete employee.'
@@ -127,7 +146,7 @@ export default function EmployeesPage({ appData, refresh, setModal, setEditingEm
           icon={Users}
           label="Total Employees"
           value={employees.length}
-          help="Loaded from employees API"
+          help="All records from database"
           tone="emerald"
         />
         <EmployeeStatCard
@@ -189,7 +208,11 @@ export default function EmployeesPage({ appData, refresh, setModal, setEditingEm
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-5 dark:border-slate-800">
           <div>
             <h3 className="text-lg font-bold text-slate-950 dark:text-white">Employee Directory</h3>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Manage and view all employee records.</p>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              {filteredEmployees.length === employees.length
+                ? `${employees.length} employee${employees.length === 1 ? '' : 's'} total`
+                : `${filteredEmployees.length} of ${employees.length} employees`}
+            </p>
           </div>
           <button className="inline-flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200">
             <Grid3X3 size={16} />
@@ -197,7 +220,12 @@ export default function EmployeesPage({ appData, refresh, setModal, setEditingEm
           </button>
         </div>
 
-        {filteredEmployees.length === 0 ? <EmptyState text="No employees match these filters." /> : (
+        {loading && employees.length === 0 ? (
+          <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-500">
+            <Loader2 size={18} className="animate-spin text-emerald-500" />
+            Loading all employees…
+          </div>
+        ) : filteredEmployees.length === 0 ? <EmptyState text="No employees match these filters." /> : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1320px] text-left text-sm">
               <thead className="bg-slate-50/80 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-950 dark:text-slate-400">

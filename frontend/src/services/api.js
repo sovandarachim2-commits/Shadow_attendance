@@ -43,3 +43,22 @@ export const permissionRequestService = {
   updateStatus: (id, payload) => api.patch(`/permission-requests/${id}/status`, payload).then((response) => response.data),
   remove: (id) => api.delete(`/permission-requests/${id}`),
 }
+
+/** Load every employee page from GET /employees (directory, dropdowns, etc.). */
+export const employeeService = {
+  async fetchAll(params = {}) {
+    const perPage = 100
+    let page = 1
+    let lastPage = 1
+    const all = []
+
+    do {
+      const { data } = await api.get('/employees', { params: { ...params, page, per_page: perPage } })
+      all.push(...(data.data || []))
+      lastPage = data.last_page ?? 1
+      page += 1
+    } while (page <= lastPage)
+
+    return all
+  },
+}
