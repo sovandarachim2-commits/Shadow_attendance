@@ -142,7 +142,7 @@ export default function BrandingPage({ appData, refresh }) {
             />
             <AssetUpload
               title="Website Icon"
-              description="Used as the browser tab favicon."
+              description="Used for the browser tab and phone home screen shortcut. Use a square PNG (192×192 or larger)."
               imageUrl={form.company_icon_url}
               uploading={uploading === 'icon'}
               onChange={(event) => uploadAsset(event, 'icon')}

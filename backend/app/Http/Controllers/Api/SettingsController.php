@@ -14,6 +14,16 @@ class SettingsController extends Controller
         return SystemSetting::all()->pluck('value', 'key');
     }
 
+    /** Public branding for favicon, home-screen icon, and document title (no auth). */
+    public function branding()
+    {
+        $keys = ['company_name', 'site_title', 'company_logo_url', 'company_icon_url'];
+
+        return SystemSetting::query()
+            ->whereIn('key', $keys)
+            ->pluck('value', 'key');
+    }
+
     public function update(Request $request)
     {
         $data = $request->validate([

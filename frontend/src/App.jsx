@@ -49,6 +49,7 @@ import EmployeeModal from './components/employees/EmployeeModal'
 import VisitModal from './components/visits/VisitModal'
 import ReportModal from './components/reports/ReportModal'
 import { FloatingSpinner, LoadingScreen, SummaryRow } from './components/shared/UI'
+import { applyDocumentBranding } from './utils/branding'
 import { canAccess, formatTime, userDisplayName } from './utils/format'
 
 const sidebarMainItems = [
@@ -89,15 +90,15 @@ const sidebarManageItems = [
   { label: 'Settings', target: 'Settings', icon: SettingsIcon, permissions: ['settings.view', 'settings.security', 'settings.api', 'settings.manage', 'settings.schedules', 'roles.manage'] },
 ]
 
-function GoogleMapsApp({ apiKey }) {
+function GoogleMapsApp({ apiKey, initialBranding }) {
   const { isLoaded } = useJsApiLoader({
     googleMapsApiKey: apiKey,
   })
 
-  return <AppShell isLoaded={isLoaded} />
+  return <AppShell isLoaded={isLoaded} initialBranding={initialBranding} />
 }
 
-function AppShell({ isLoaded }) {
+function AppShell({ isLoaded, initialBranding = {} }) {
   const [active, setActive] = useState('Dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -119,7 +120,7 @@ function AppShell({ isLoaded }) {
     visits: [],
     reports: [],
     notifications: [],
-    appSettings: {},
+    appSettings: initialBranding,
     loading: false,
   })
 
@@ -170,19 +171,7 @@ function AppShell({ isLoaded }) {
   }, [dark])
 
   useEffect(() => {
-    const title = data.appSettings?.site_title || data.appSettings?.company_name || 'SalesTrack'
-    document.title = title
-
-    const iconUrl = data.appSettings?.company_icon_url || data.appSettings?.company_logo_url
-    if (!iconUrl) return
-
-    let icon = document.querySelector("link[rel='icon']")
-    if (!icon) {
-      icon = document.createElement('link')
-      icon.rel = 'icon'
-      document.head.appendChild(icon)
-    }
-    icon.href = iconUrl
+    applyDocumentBranding(data.appSettings || {})
   }, [data.appSettings?.company_icon_url, data.appSettings?.company_logo_url, data.appSettings?.company_name, data.appSettings?.site_title])
 
   useEffect(() => {
@@ -541,14 +530,14 @@ function AppShell({ isLoaded }) {
   )
 }
 
-function App() {
+function App({ initialBranding = {} }) {
   const googleMapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY?.trim()
 
   if (!googleMapsApiKey) {
-    return <AppShell isLoaded={false} />
+    return <AppShell isLoaded={false} initialBranding={initialBranding} />
   }
 
-  return <GoogleMapsApp apiKey={googleMapsApiKey} />
+  return <GoogleMapsApp apiKey={googleMapsApiKey} initialBranding={initialBranding} />
 }
 
 function SidebarButton({ item, active, unreadCount = 0, withChevron = false, onClick }) {
