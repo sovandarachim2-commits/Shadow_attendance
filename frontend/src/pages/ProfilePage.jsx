@@ -531,14 +531,30 @@ function EditProfileModal({ user, employee, onClose, onSaved }) {
 
   const handleSave = async () => {
     setError(null)
+
+    if (form.new_password) {
+      if (form.new_password.length < 8) {
+        setError('New password must be at least 8 characters.')
+        return
+      }
+      if (form.new_password !== form.new_password_confirmation) {
+        setError('Password confirmation does not match.')
+        return
+      }
+    }
+    if (form.telegram_chat_id.trim() && !/^-?\d+$/.test(form.telegram_chat_id.trim())) {
+      setError('Telegram Chat ID must contain numbers only (e.g. 1793795246).')
+      return
+    }
+
     setSaving(true)
     try {
       const fd = new FormData()
       if (photoFile) fd.append('photo', photoFile)
       if (form.full_name.trim()) fd.append('full_name', form.full_name.trim())
-      if (form.phone) fd.append('phone', form.phone)
+      fd.append('phone', form.phone.trim())
       fd.append('telegram_chat_id', form.telegram_chat_id.trim())
-      if (form.address) fd.append('address', form.address)
+      fd.append('address', form.address.trim())
       if (form.new_password) {
         fd.append('new_password', form.new_password)
         fd.append('new_password_confirmation', form.new_password_confirmation)
