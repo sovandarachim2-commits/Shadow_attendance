@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
-  ArrowLeft, BriefcaseBusiness, Calendar, Check, ChevronDown, ChevronRight, Clock,
+  ArrowLeft, Calendar, Check, ChevronDown, ChevronRight, Clock,
   ClipboardList, Download, Filter, MapPin, RotateCcw, Timer, UserMinus, Users,
 } from 'lucide-react'
 import clsx from 'clsx'
@@ -12,7 +12,6 @@ import {
   StatusBadge, formatHoursCompact,
   formatBranchName,
   formatMobileDate, formatMonthLabel, formatPeriodLabel, formatWorkHours,
-  TypeBadge,
 } from '../components/attendance/reports/attendanceReportShared'
 import { apiError, canAccess } from '../utils/format'
 
@@ -30,7 +29,6 @@ export default function MyAttendanceReportsPage({ user, openPermissionRequest })
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [mobileShowAll, setMobileShowAll] = useState(false)
   const [mobileSearch, setMobileSearch] = useState('')
-  const [mobileTab, setMobileTab] = useState('history')
 
   const canExport = canAccess(user, ['reports.attendance.export', 'reports.attendance.view_own', 'attendance.view_own'])
 
@@ -84,7 +82,6 @@ export default function MyAttendanceReportsPage({ user, openPermissionRequest })
     // Reset the compact mobile list when report filters change.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMobileShowAll(false)
-    setMobileTab('history')
   }, [month, status, type, branch, mobileSearch])
 
   const applyMobileFilters = () => {
@@ -139,14 +136,7 @@ export default function MyAttendanceReportsPage({ user, openPermissionRequest })
         {detail ? (
           <MobileAttendanceDetail
             record={detail}
-            summary={summary}
-            month={month}
-            records={records}
-            activeTab={mobileTab}
-            setActiveTab={setMobileTab}
             onBack={() => setDetail(null)}
-            onMonthChange={setMonth}
-            onSelectDate={(row) => row && setDetail(row)}
           />
         ) : (
           <>
@@ -204,7 +194,7 @@ export default function MyAttendanceReportsPage({ user, openPermissionRequest })
               ) : (
                 <div className="space-y-3">
                   {mobileRecords.map((row) => (
-                    <MobileDayCard key={row.id} row={row} onTap={() => { setMobileTab('history'); setDetail(row) }} />
+                    <MobileDayCard key={row.id} row={row} onTap={() => setDetail(row)} />
                   ))}
                   {mobileFilteredRecords.length > 3 && (
                     <button
@@ -526,89 +516,18 @@ function MobileCalendar({ month, records, selectedDate, onMonthChange, onSelectD
   )
 }
 
-function MobileAttendanceDetail({
-  record, summary, month, records, activeTab, setActiveTab, onBack, onMonthChange, onSelectDate,
-}) {
-  const displayStatus = record.display_status || record.status
-  const timeline = record.timeline || []
-
+function MobileAttendanceDetail({ record, onBack }) {
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between gap-3">
-        <button
-          type="button"
-          className="grid h-12 w-12 place-items-center rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-white"
-          onClick={onBack}
-          aria-label="Back"
-        >
-          <ArrowLeft size={22} />
-        </button>
-        <div className="min-w-0 flex-1 text-center">
-          <h2 className="truncate text-xl font-extrabold text-slate-950 dark:text-white">Attendance History</h2>
-          <p className="mt-0.5 text-sm font-semibold text-slate-500">{formatMobileDate(record.attendance_date)} ({formatDayLong(record.attendance_date)})</p>
-        </div>
-        <span className="grid h-12 w-12 place-items-center rounded-2xl" />
-      </div>
-
+    <div className="space-y-3">
       <MobileDetailCard record={record} />
-
-      <div className="grid grid-cols-3 rounded-2xl border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        {['history', 'calendar', 'timeline'].map((tab) => (
-          <button
-            key={tab}
-            type="button"
-            onClick={() => setActiveTab(tab)}
-            className={clsx(
-              'h-11 rounded-xl text-sm font-extrabold capitalize transition',
-              activeTab === tab ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20' : 'text-slate-700 dark:text-slate-200',
-            )}
-          >
-            {tab}
-          </button>
-        ))}
-      </div>
-
-      {activeTab === 'history' && (
-        <section className="space-y-3">
-          {records.slice(0, 5).map((row) => (
-            <MobileDayCard key={row.id} row={row} onTap={() => onSelectDate(row)} />
-          ))}
-        </section>
-      )}
-
-      {activeTab === 'calendar' && (
-        <>
-          <MobileCalendar
-            month={month}
-            records={records}
-            selectedDate={record.attendance_date}
-            onMonthChange={onMonthChange}
-            onSelectDate={onSelectDate}
-          />
-          <MobileAttendanceSummary summary={summary} />
-        </>
-      )}
-
-      {activeTab === 'timeline' && (
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-          <div className={clsx('mb-5 flex items-center gap-3 rounded-2xl p-4', displayStatus === 'late' ? 'bg-amber-50 text-amber-700' : displayStatus === 'absent' ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700')}>
-            <span className="grid h-12 w-12 place-items-center rounded-full bg-current text-white">
-              <Check size={24} className="text-white" />
-            </span>
-            <div>
-              <p className="text-lg font-extrabold capitalize">{displayStatus?.replace('_', ' ') || 'Present'}</p>
-              <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">{formatMobileDate(record.attendance_date)} ({formatDayLong(record.attendance_date)})</p>
-            </div>
-          </div>
-          <TimelineList record={record} timeline={timeline} />
-          <div className="mt-5 grid grid-cols-2 gap-3">
-            <SummaryBox icon={Clock} label="Working Hours" value={formatWorkHours(record.work_minutes)} tone="emerald" />
-            <SummaryBox icon={Timer} label="Overtime Hours" value={formatWorkHours(Math.max(0, record.overtime_minutes ?? ((record.work_minutes || 0) - 480)))} tone="violet" />
-            <SummaryBox icon={Clock} label="Late Minutes" value={`${record.late_minutes ?? 0}m`} tone="amber" />
-            <SummaryBox icon={BriefcaseBusiness} label="Attendance Type" value={<TypeBadge type={record.type} />} tone="sky" />
-          </div>
-        </section>
-      )}
+      <button
+        type="button"
+        className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-extrabold text-slate-800 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100"
+        onClick={onBack}
+      >
+        <ArrowLeft size={17} />
+        Back
+      </button>
     </div>
   )
 }

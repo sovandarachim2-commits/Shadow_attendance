@@ -437,12 +437,14 @@ class AttendanceService
 
     private function sendTelegramSafely(callable $callback): bool
     {
-        try {
-            return (bool) $callback();
-        } catch (\Throwable $e) {
-            Log::warning('Telegram notification skipped', ['message' => $e->getMessage()]);
+        defer(function () use ($callback) {
+            try {
+                $callback();
+            } catch (\Throwable $e) {
+                Log::warning('Telegram notification skipped', ['message' => $e->getMessage()]);
+            }
+        });
 
-            return false;
-        }
+        return true;
     }
 }
