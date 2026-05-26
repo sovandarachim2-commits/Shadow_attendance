@@ -12,7 +12,7 @@ class LateDeductionRuleController extends Controller
 {
     public function index()
     {
-        $rules = LateDeductionRule::orderBy('from_minutes')->get();
+        $rules = LateDeductionRule::with('schedules')->orderBy('from_minutes')->get();
 
         $today = Carbon::today();
         $todayAttendances = Attendance::whereDate('attendance_date', $today)->get();
@@ -32,13 +32,26 @@ class LateDeductionRuleController extends Controller
 
     public function store(Request $request)
     {
-        return LateDeductionRule::create($this->validated($request));
+        $data = $this->validated($request);
+        $scheduleIds = $data['schedule_ids'] ?? [];
+        unset($data['schedule_ids']);
+
+        $rule = LateDeductionRule::create($data);
+        $rule->schedules()->sync($scheduleIds);
+
+        return $rule->load('schedules');
     }
 
     public function update(Request $request, LateDeductionRule $lateDeductionRule)
     {
-        $lateDeductionRule->update($this->validated($request));
-        return $lateDeductionRule->fresh();
+        $data = $this->validated($request);
+        $scheduleIds = $data['schedule_ids'] ?? [];
+        unset($data['schedule_ids']);
+
+        $lateDeductionRule->update($data);
+        $lateDeductionRule->schedules()->sync($scheduleIds);
+
+        return $lateDeductionRule->fresh('schedules');
     }
 
     public function destroy(LateDeductionRule $lateDeductionRule)
@@ -59,7 +72,8 @@ class LateDeductionRuleController extends Controller
             'status'             => ['nullable', 'boolean'],
             'telegram_chat_id'   => ['nullable', 'string', 'max:120'],
             'telegram_topic_id'  => ['nullable', 'integer', 'min:1'],
-            'schedule_id'        => ['nullable', 'integer', 'exists:work_schedules,id'],
+            'schedule_ids'       => ['nullable', 'array'],
+            'schedule_ids.*'     => ['integer', 'exists:work_schedules,id'],
         ]);
     }
 }

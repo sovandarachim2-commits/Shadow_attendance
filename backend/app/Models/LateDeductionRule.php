@@ -11,7 +11,6 @@ class LateDeductionRule extends Model
         'rule_name', 'grace_minutes', 'from_minutes', 'to_minutes',
         'deduction_type', 'deduction_amount', 'status',
         'telegram_chat_id', 'telegram_topic_id',
-        'schedule_id',
     ];
 
     protected $casts = [
@@ -21,11 +20,10 @@ class LateDeductionRule extends Model
         'deduction_amount'   => 'decimal:2',
         'status'             => 'boolean',
         'telegram_topic_id'  => 'integer',
-        'schedule_id'        => 'integer',
     ];
 
-    public function schedule()
+    public function schedules()
     {
-        return $this->belongsTo(WorkSchedule::class, 'schedule_id');
+        return $this->belongsToMany(WorkSchedule::class, 'late_deduction_rule_work_schedule');
     }
 }

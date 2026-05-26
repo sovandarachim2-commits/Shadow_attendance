@@ -59,7 +59,7 @@ const EMPTY_RULE = {
   status: true,
   telegram_chat_id: '',
   telegram_topic_id: '',
-  schedule_id: null,
+  schedule_ids: [],
 }
 
 function parseTimeToMinutes(timeStr) {
@@ -152,9 +152,9 @@ export default function LateRulesSettings() {
 
     // Schedule-aware rule matching: schedule-specific first, then global fallback
     const scheduleRules = previewScheduleId
-      ? deductionRules.filter((r) => r.schedule_id === previewScheduleId)
+      ? deductionRules.filter((r) => (r.schedules || []).some((s) => s.id === previewScheduleId))
       : []
-    const globalRules = deductionRules.filter((r) => r.schedule_id == null)
+    const globalRules = deductionRules.filter((r) => !r.schedules || r.schedules.length === 0)
     const applied = findAppliedRule(lateMinutes, scheduleRules.length ? scheduleRules : globalRules)
 
     const lateAfterMin = start + grace
@@ -200,7 +200,7 @@ export default function LateRulesSettings() {
       status: Boolean(form.status),
       telegram_chat_id: form.telegram_chat_id?.trim() || null,
       telegram_topic_id: form.telegram_topic_id !== '' && form.telegram_topic_id != null ? Number(form.telegram_topic_id) : null,
-      schedule_id: form.schedule_id ? Number(form.schedule_id) : null,
+      schedule_ids: Array.isArray(form.schedule_ids) ? form.schedule_ids.map(Number) : [],
     }
     try {
       if (id) {
@@ -345,7 +345,7 @@ export default function LateRulesSettings() {
                   <tr key={row.id} className="transition-colors hover:bg-slate-50/80 dark:hover:bg-slate-800/40">
                     <td className="px-4 py-4 font-medium text-slate-400">{i + 1}</td>
                     <td className="px-4 py-4">
-                      <ScheduleBadge scheduleId={row.schedule_id} scheduleName={row.schedule?.schedule_name} />
+                      <ScheduleBadge schedules={row.schedules} />
                     </td>
                     <td className="px-4 py-4 font-semibold text-slate-800 dark:text-slate-100">{formatRange(row.from_minutes, row.to_minutes)}</td>
                     <td className="px-4 py-4"><TypeBadge type={row.deduction_type} /></td>
@@ -353,7 +353,7 @@ export default function LateRulesSettings() {
                     <td className="px-4 py-4"><StatusBadge active={row.status} /></td>
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-4">
-                        <button type="button" onClick={() => setRuleModal({ mode: 'edit', id: row.id, form: { ...row, deduction_amount: row.deduction_amount ?? '', schedule_id: row.schedule_id ?? null } })} className="text-sm font-bold text-emerald-600 hover:underline dark:text-emerald-400">Edit</button>
+                        <button type="button" onClick={() => setRuleModal({ mode: 'edit', id: row.id, form: { ...row, deduction_amount: row.deduction_amount ?? '', schedule_ids: (row.schedules || []).map((s) => s.id) } })} className="text-sm font-bold text-emerald-600 hover:underline dark:text-emerald-400">Edit</button>
                         <button type="button" onClick={() => removeRule(row)} className="text-sm font-bold text-rose-600 hover:underline dark:text-rose-400">Delete</button>
                       </div>
                     </td>
@@ -369,13 +369,13 @@ export default function LateRulesSettings() {
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="font-bold text-slate-900 dark:text-white">#{i + 1} {formatRange(row.from_minutes, row.to_minutes)}</p>
-                    <ScheduleBadge scheduleId={row.schedule_id} scheduleName={row.schedule?.schedule_name} />
+                    <ScheduleBadge schedules={row.schedules} />
                   </div>
                   <TypeBadge type={row.deduction_type} />
                 </div>
                 <p className="mt-2 text-sm font-semibold">{deductionLabel(row.deduction_type, row.deduction_amount)}</p>
                 <div className="mt-3 flex gap-3">
-                  <button type="button" className="text-xs font-bold text-emerald-600" onClick={() => setRuleModal({ mode: 'edit', id: row.id, form: { ...row, deduction_amount: row.deduction_amount ?? '', schedule_id: row.schedule_id ?? null } })}>Edit</button>
+                  <button type="button" className="text-xs font-bold text-emerald-600" onClick={() => setRuleModal({ mode: 'edit', id: row.id, form: { ...row, deduction_amount: row.deduction_amount ?? '', schedule_ids: (row.schedules || []).map((s) => s.id) } })}>Edit</button>
                   <button type="button" className="text-xs font-bold text-rose-600" onClick={() => removeRule(row)}>Delete</button>
                 </div>
               </div>
@@ -559,8 +559,8 @@ function InfoBar({ children, variant }) {
   )
 }
 
-function ScheduleBadge({ scheduleId, scheduleName }) {
-  if (!scheduleId) {
+function ScheduleBadge({ schedules = [] }) {
+  if (!schedules || schedules.length === 0) {
     return (
       <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
         All Schedules
@@ -568,9 +568,13 @@ function ScheduleBadge({ scheduleId, scheduleName }) {
     )
   }
   return (
-    <span className="inline-flex rounded-full bg-violet-100 px-3 py-1 text-xs font-bold text-violet-700 dark:bg-violet-950/50 dark:text-violet-300">
-      {scheduleName || `Schedule #${scheduleId}`}
-    </span>
+    <div className="flex flex-wrap gap-1">
+      {schedules.map((s) => (
+        <span key={s.id} className="inline-flex rounded-full bg-violet-100 px-3 py-1 text-xs font-bold text-violet-700 dark:bg-violet-950/50 dark:text-violet-300">
+          {s.schedule_name}
+        </span>
+      ))}
+    </div>
   )
 }
 
@@ -662,22 +666,33 @@ function RuleModal({ modal, onClose, onSave, workSchedules = [] }) {
           <button type="button" onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100"><X size={20} /></button>
         </div>
         <div className="space-y-3">
-          <label className="block">
-            <span className="mb-1 text-sm font-semibold">Applies to Schedule</span>
-            <select
-              className={inputCls}
-              value={form.schedule_id ?? ''}
-              onChange={(e) => set('schedule_id', e.target.value === '' ? null : Number(e.target.value))}
-            >
-              <option value="">All Schedules (Global)</option>
-              {workSchedules.map((s) => (
-                <option key={s.id} value={s.id}>{s.schedule_name}</option>
-              ))}
-            </select>
+          <div>
+            <span className="mb-1.5 block text-sm font-semibold">Applies to Schedule</span>
+            <div className="max-h-36 overflow-y-auto rounded-xl border border-slate-200 bg-white p-2 dark:border-slate-700 dark:bg-slate-950">
+              {workSchedules.length === 0 ? (
+                <p className="px-2 py-1 text-xs text-slate-400">No schedules available.</p>
+              ) : workSchedules.map((s) => {
+                const checked = (form.schedule_ids || []).includes(s.id)
+                return (
+                  <label key={s.id} className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-slate-300 accent-emerald-600"
+                      checked={checked}
+                      onChange={() => {
+                        const ids = form.schedule_ids || []
+                        set('schedule_ids', checked ? ids.filter((id) => id !== s.id) : [...ids, s.id])
+                      }}
+                    />
+                    <span className="text-sm text-slate-700 dark:text-slate-200">{s.schedule_name}</span>
+                  </label>
+                )
+              })}
+            </div>
             <p className="mt-1 text-xs text-slate-400">
-              "All Schedules" is the fallback — used when no schedule-specific rule matches.
+              Leave all unchecked to apply globally (fallback for all schedules).
             </p>
-          </label>
+          </div>
           <ModalField label="Rule name" value={form.rule_name} onChange={(v) => set('rule_name', v)} placeholder="Late 16-30 min" />
           <div className="grid grid-cols-2 gap-3">
             <ModalField label="From (min)" type="number" value={form.from_minutes} onChange={(v) => set('from_minutes', v)} />

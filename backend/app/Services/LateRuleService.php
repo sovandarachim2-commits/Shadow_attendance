@@ -149,6 +149,7 @@ class LateRuleService
     private function findMatchingRule(int $lateMinutes, ?int $scheduleId = null): ?LateDeductionRule
     {
         $activeRules = LateDeductionRule::query()
+            ->with('schedules')
             ->where('status', true)
             ->orderBy('from_minutes')
             ->get();
@@ -158,16 +159,20 @@ class LateRuleService
             return $lateMinutes >= (int) $rule->from_minutes && $lateMinutes <= $to;
         };
 
-        // First: try schedule-specific rules
+        // First: try schedule-specific rules (rule has the employee's schedule assigned)
         if ($scheduleId !== null) {
-            $scheduleRule = $activeRules->where('schedule_id', $scheduleId)->first($matcher);
+            $scheduleRule = $activeRules
+                ->filter(fn ($r) => $r->schedules->pluck('id')->contains($scheduleId))
+                ->first($matcher);
             if ($scheduleRule) {
                 return $scheduleRule;
             }
         }
 
-        // Fall back: global rules (schedule_id is null)
-        return $activeRules->whereNull('schedule_id')->first($matcher);
+        // Fall back: global rules (no schedules assigned)
+        return $activeRules
+            ->filter(fn ($r) => $r->schedules->isEmpty())
+            ->first($matcher);
     }
 
     /**

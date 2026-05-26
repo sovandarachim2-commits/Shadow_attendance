@@ -15,7 +15,7 @@ class LateRuleController extends Controller
     public function index()
     {
         $settings = LateRule::query()->firstOrCreate([]);
-        $rules = LateDeductionRule::with('schedule')->orderBy('from_minutes')->get();
+        $rules = LateDeductionRule::with('schedules')->orderBy('from_minutes')->get();
         $workSchedules = WorkSchedule::orderBy('schedule_name')->get([
             'id', 'schedule_name',
             'monday_start', 'tuesday_start', 'wednesday_start',
