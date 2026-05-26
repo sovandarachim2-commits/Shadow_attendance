@@ -141,20 +141,43 @@ function EmployeeDashboard({ appData, isLoaded, onAttendanceAction, setActive, u
 function buildWeeklyChart(attendance) {
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
   const today = new Date()
+
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(today)
     d.setDate(today.getDate() - (6 - i))
-    const dateStr = d.toDateString()
-    const recs = attendance.filter((a) =>
-      new Date(a.check_in_at || a.date || a.created_at).toDateString() === dateStr,
-    )
+    const dateKey = dateToKey(d)
+    const record = attendance.find((a) => attendanceDateKey(a) === dateKey)
+    const status = record?.status || 'dayoff'
+    const workMinutes = Number(record?.work_minutes || 0)
+    const hours = Math.round((workMinutes / 60) * 100) / 100
+
     return {
       day: dayNames[d.getDay()],
-      present: recs.filter((a) => a.status === 'present').length,
-      late: recs.filter((a) => a.status === 'late').length,
-      absent: recs.filter((a) => a.status === 'absent').length,
+      date: dateKey,
+      status,
+      hours,
+      workMinutes,
+      barValue: hours,
     }
   })
+}
+
+function attendanceDateKey(row) {
+  const value = row?.attendance_date || row?.date || row?.check_in_at || row?.created_at
+  if (!value) return ''
+  return dateToKey(new Date(value))
+}
+
+function dateToKey(date) {
+  if (Number.isNaN(date.getTime())) return ''
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+function formatHourValue(hours) {
+  const totalMinutes = Math.round(Number(hours || 0) * 60)
+  const h = Math.floor(totalMinutes / 60)
+  const m = totalMinutes % 60
+  return `${h}h ${String(m).padStart(2, '0')}m`
 }
 
 const COLOR = {
@@ -459,32 +482,69 @@ function MyRequestsPanel({ reports, setActive }) {
 }
 
 function MyAttendanceBarChart({ data }) {
+  const statusColors = {
+    present: '#10b981',
+    late: '#f59e0b',
+    absent: '#ef4444',
+    dayoff: '#8b5cf6',
+  }
+  const workedDays = data.filter((row) => row.status !== 'dayoff' && row.hours > 0)
+  const lowHours = workedDays.length ? Math.min(...workedDays.map((row) => row.hours)) : 0
+  const highHours = workedDays.length ? Math.max(...workedDays.map((row) => row.hours)) : 0
+
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      <div className="mb-4 flex items-center justify-between">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-base font-bold">My Attendance Overview</h3>
-        <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-500 dark:border-slate-700">This Week</span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-500 dark:border-slate-700">This Week</span>
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+            Low {formatHourValue(lowHours)} / High {formatHourValue(highHours)}
+          </span>
+        </div>
       </div>
       <div className="h-48 min-h-48 min-w-0">
         <ResponsiveContainer width="100%" height="100%" debounce={50}>
           <BarChart data={data} margin={{ left: -20 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
             <XAxis dataKey="day" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-            <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-            <Tooltip />
-            <Bar dataKey="present" fill="#10b981" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="late" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="absent" fill="#ef4444" radius={[4, 4, 0, 0]} />
+            <YAxis
+              tick={{ fontSize: 11 }}
+              axisLine={false}
+              tickLine={false}
+              domain={[0, (dataMax) => Math.max(8, Math.ceil(dataMax || 0))]}
+              tickFormatter={(value) => `${value}h`}
+            />
+            <Tooltip content={<AttendanceHoursTooltip />} cursor={{ fill: 'rgba(15, 23, 42, 0.04)' }} />
+            <Bar dataKey="barValue" radius={[4, 4, 0, 0]} minPointSize={6}>
+              {data.map((entry) => (
+                <Cell key={entry.date} fill={statusColors[entry.status] || statusColors.dayoff} />
+              ))}
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>
       <div className="mt-2 flex items-center gap-4">
-        {[['Present', '#10b981'], ['Late', '#f59e0b'], ['Absent', '#ef4444']].map(([label, color]) => (
+        {[['Present', '#10b981'], ['Late', '#f59e0b'], ['Absent', '#ef4444'], ['Day Off', '#8b5cf6']].map(([label, color]) => (
           <span key={label} className="flex items-center gap-1.5 text-xs text-slate-500">
             <span className="h-2 w-2 rounded-full" style={{ background: color }} /> {label}
           </span>
         ))}
       </div>
+    </div>
+  )
+}
+
+function AttendanceHoursTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null
+
+  const row = payload[0].payload
+  const status = row.status === 'dayoff' ? 'Day Off' : titleCase(row.status)
+
+  return (
+    <div className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs shadow-lg dark:border-slate-700 dark:bg-slate-900">
+      <p className="font-bold text-slate-900 dark:text-white">{label} · {status}</p>
+      <p className="mt-1 text-slate-500">Working Hours: <span className="font-semibold text-slate-700 dark:text-slate-200">{formatHourValue(row.hours)}</span></p>
     </div>
   )
 }

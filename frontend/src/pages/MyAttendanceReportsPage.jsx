@@ -27,8 +27,8 @@ export default function MyAttendanceReportsPage({ user, openPermissionRequest })
   const [data, setData] = useState({ employee: null, summary: {}, records: [] })
   const [detail, setDetail] = useState(null)
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
-  const [mobileShowAll, setMobileShowAll] = useState(false)
-  const [mobileSearch, setMobileSearch] = useState('')
+  const [mobileFullOpen, setMobileFullOpen] = useState(false)
+  const [mobileFullTab, setMobileFullTab] = useState('history')
 
   const canExport = canAccess(user, ['reports.attendance.export', 'reports.attendance.view_own', 'attendance.view_own'])
 
@@ -62,27 +62,14 @@ export default function MyAttendanceReportsPage({ user, openPermissionRequest })
     return list.filter((record) => formatBranchName(record.branch) === branch)
   }, [data.records, branch])
   const monthRange = useMemo(() => getMonthRange(month), [month])
-  const mobileFilteredRecords = useMemo(() => {
-    const query = mobileSearch.trim().toLowerCase()
-    if (!query) return records
-
-    return records.filter((record) => [
-      formatMobileDate(record.attendance_date),
-      formatDayShort(record.attendance_date),
-      record.display_status || record.status,
-      record.type,
-      formatBranchName(record.branch),
-      record.location,
-      timeRange(record),
-    ].filter(Boolean).some((value) => String(value).toLowerCase().includes(query)))
-  }, [records, mobileSearch])
-  const mobileRecords = mobileShowAll ? mobileFilteredRecords : mobileFilteredRecords.slice(0, 3)
+  const mobileRecords = records.slice(0, 3)
 
   useEffect(() => {
-    // Reset the compact mobile list when report filters change.
+    // Reset the full mobile view when report filters change.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setMobileShowAll(false)
-  }, [month, status, type, branch, mobileSearch])
+    setMobileFullOpen(false)
+    setMobileFullTab('history')
+  }, [month, status, type, branch])
 
   const applyMobileFilters = () => {
     setMonth(draft.month ?? month)
@@ -138,6 +125,17 @@ export default function MyAttendanceReportsPage({ user, openPermissionRequest })
             record={detail}
             onBack={() => setDetail(null)}
           />
+        ) : mobileFullOpen ? (
+          <MobileFullAttendanceView
+            activeTab={mobileFullTab}
+            setActiveTab={setMobileFullTab}
+            records={records}
+            month={month}
+            summary={summary}
+            onBack={() => setMobileFullOpen(false)}
+            onMonthChange={setMonth}
+            onSelectDate={(row) => row && setDetail(row)}
+          />
         ) : (
           <>
             <MobilePeriodPicker month={month} monthRange={monthRange} onMonthChange={setMonth} />
@@ -174,38 +172,21 @@ export default function MyAttendanceReportsPage({ user, openPermissionRequest })
                 <button
                   type="button"
                   className="flex items-center gap-1 text-sm font-bold text-emerald-600 dark:text-emerald-400"
-                  onClick={() => setMobileShowAll(true)}
+                  onClick={() => setMobileFullOpen(true)}
                 >
                   View All <ChevronRight size={16} />
                 </button>
               </div>
 
-              <input
-                className="mb-3 h-12 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm font-semibold outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-800 dark:bg-slate-900 dark:text-white"
-                value={mobileSearch}
-                onChange={(event) => setMobileSearch(event.target.value)}
-                placeholder="Search date, status, type, location..."
-              />
-
               {loading ? (
                 <div className="py-16"><FloatingSpinner /></div>
-              ) : mobileFilteredRecords.length === 0 ? (
+              ) : records.length === 0 ? (
                 <EmptyState title="No attendance records" description="No data for this period." />
               ) : (
                 <div className="space-y-3">
                   {mobileRecords.map((row) => (
                     <MobileDayCard key={row.id} row={row} onTap={() => setDetail(row)} />
                   ))}
-                  {mobileFilteredRecords.length > 3 && (
-                    <button
-                      type="button"
-                      className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white text-sm font-extrabold text-emerald-600 shadow-sm transition active:scale-[0.99] dark:border-slate-800 dark:bg-slate-900"
-                      onClick={() => setMobileShowAll((current) => !current)}
-                    >
-                      {mobileShowAll ? 'Show Less' : `View All (${mobileFilteredRecords.length} entries)`}
-                      <ChevronRight size={18} className={clsx('transition', mobileShowAll && 'rotate-90')} />
-                    </button>
-                  )}
                 </div>
               )}
             </section>
@@ -516,6 +497,91 @@ function MobileCalendar({ month, records, selectedDate, onMonthChange, onSelectD
   )
 }
 
+function MobileFullAttendanceView({
+  activeTab, setActiveTab, records, month, summary, onBack, onMonthChange, onSelectDate,
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          className="grid h-11 w-11 place-items-center rounded-2xl border border-slate-200 bg-white text-slate-900 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-white"
+          onClick={onBack}
+          aria-label="Back"
+        >
+          <ArrowLeft size={21} />
+        </button>
+        <div className="min-w-0">
+          <h2 className="truncate text-xl font-extrabold text-slate-950 dark:text-white">My Attendance History</h2>
+          <p className="text-sm font-semibold text-slate-500">{formatMonthLabel(month)}</p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 rounded-2xl border border-slate-200 bg-white p-1 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        {['history', 'calendar', 'timeline'].map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => setActiveTab(tab)}
+            className={clsx(
+              'h-12 rounded-xl text-sm font-extrabold capitalize transition',
+              activeTab === tab ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20' : 'text-slate-700 dark:text-slate-200',
+            )}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'history' && (
+        records.length === 0 ? (
+          <EmptyState title="No attendance records" description="No data for this period." />
+        ) : (
+          <section className="space-y-3">
+            {records.map((row) => (
+              <MobileDayCard key={row.id} row={row} onTap={() => onSelectDate(row)} />
+            ))}
+          </section>
+        )
+      )}
+
+      {activeTab === 'calendar' && (
+        <>
+          <MobileCalendar
+            month={month}
+            records={records}
+            selectedDate=""
+            onMonthChange={onMonthChange}
+            onSelectDate={onSelectDate}
+          />
+          <MobileAttendanceSummary summary={summary} />
+        </>
+      )}
+
+      {activeTab === 'timeline' && (
+        records.length === 0 ? (
+          <EmptyState title="No attendance records" description="No data for this period." />
+        ) : (
+          <section className="space-y-3">
+            {records.map((record) => (
+              <article key={record.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                <div className="mb-5 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-base font-extrabold text-slate-950 dark:text-white">{formatMobileDate(record.attendance_date)}</p>
+                    <p className="text-sm font-semibold text-slate-500">{formatDayShort(record.attendance_date)}</p>
+                  </div>
+                  <StatusBadge status={record.display_status || record.status} />
+                </div>
+                <TimelineList record={record} timeline={record.timeline || []} compact />
+              </article>
+            ))}
+          </section>
+        )
+      )}
+    </div>
+  )
+}
+
 function MobileAttendanceDetail({ record, onBack }) {
   return (
     <div className="space-y-3">
@@ -630,16 +696,6 @@ function SummaryRow({ label, value, icon: Icon, tone }) {
   )
 }
 
-function SummaryBox({ icon: Icon, label, value, tone }) {
-  return (
-    <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
-      <SummaryIcon Icon={Icon} tone={tone} />
-      <p className="mt-3 text-xs font-semibold text-slate-500">{label}</p>
-      <div className="mt-1 text-base font-extrabold text-slate-950 dark:text-white">{value}</div>
-    </div>
-  )
-}
-
 function SummaryIcon({ Icon, tone }) {
   const tones = {
     emerald: 'bg-emerald-100 text-emerald-600',
@@ -691,12 +747,6 @@ function formatDayShort(dateStr) {
   if (!dateStr) return ''
   const date = new Date(`${dateStr}T12:00:00`)
   return date.toLocaleDateString(undefined, { weekday: 'short' })
-}
-
-function formatDayLong(dateStr) {
-  if (!dateStr) return ''
-  const date = new Date(`${dateStr}T12:00:00`)
-  return date.toLocaleDateString(undefined, { weekday: 'long' })
 }
 
 function timeRange(row) {
