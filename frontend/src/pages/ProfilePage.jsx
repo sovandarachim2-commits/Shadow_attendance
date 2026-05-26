@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useCallback } from 'react'
 import {
   Activity, BriefcaseBusiness, Building2, CalendarCheck, Camera,
   CheckCircle2, ChevronLeft, Clock, Copy, Download, Eye, EyeOff, FileText, KeyRound,
@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import clsx from 'clsx'
 import { api } from '../services/api'
+import { compressImageForUpload } from '../utils/imageCapture'
 import { EmptyState, PanelHeader, StatusPill } from '../components/shared/UI'
 import {
   apiError, attendanceLocationMapUrl, canUpdateAllProfiles, canUpdateOwnProfile, employeeFullName, formatAttendanceLocation, formatDate, formatRelativeTime, formatTime,
@@ -522,12 +523,13 @@ function EditProfileModal({ user, employee, onClose, onSaved }) {
   const set = (k) => (e) => setForm((p) => ({ ...p, [k]: e.target.value }))
   const fullName = form.full_name.trim() || user.name
 
-  const pickPhoto = (e) => {
+  const pickPhoto = useCallback(async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
-    setPhotoFile(file)
-    setPhotoPreview(URL.createObjectURL(file))
-  }
+    const compressed = await compressImageForUpload(file, { maxDimension: 800, quality: 0.82 })
+    setPhotoFile(compressed)
+    setPhotoPreview(URL.createObjectURL(compressed))
+  }, [])
 
   const handleSave = async () => {
     setError(null)

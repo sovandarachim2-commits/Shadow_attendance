@@ -56,7 +56,11 @@ class ProfileController extends Controller
         }
 
         if ($request->hasFile('photo')) {
-            $emp['photo_path'] = $this->images->store($request->file('photo'), 'employees/photos');
+            try {
+                $emp['photo_path'] = $this->images->store($request->file('photo'), 'employees/photos');
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Profile photo upload failed', ['error' => $e->getMessage()]);
+            }
         }
 
         if ($emp !== []) {
