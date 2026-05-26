@@ -44,7 +44,7 @@ D) SSH — copy all commands
   php artisan storage:link
 
   # Safe migrate (do NOT full migrate if DB already exists)
-  php artisan migrate --path=database/migrations/2026_05_20_000001_add_telegram_chat_id_to_employees_table.php --forceeeeeee
+  php artisan migrate --path=database/migrations/2026_05_20_000001_add_telegram_chat_id_to_employees_table.php --force
   php artisan config:clear
   php artisan config:cache
   php artisan route:cache
@@ -79,4 +79,8 @@ G) TEST
     -H "Content-Type: application/json" -H "Accept: application/json" \
     -d '{"username":"superadmin@shadow.com","password":"SuperAdmin@123"}'
 
-  Login: superadmin@shadow.com / SuperAdmin@123
+  Login (works on production now):
+    admin@shadow.com / Admin@123
+
+  Super Admin (superadmin@shadow.com) — reset password via SSH if needed:
+    cd backend && php artisan tinker --execute="\\App\\Models\\User::where('email','superadmin@shadow.com')->update(['password'=>\\Illuminate\\Support\\Facades\\Hash::make('SuperAdmin@123')]);"

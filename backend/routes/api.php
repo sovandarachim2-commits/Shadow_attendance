@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\CustomerVisitController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\BranchController;
+use App\Http\Controllers\Api\BootstrapController;
 use App\Http\Controllers\Api\DepartmentController;
 use App\Http\Controllers\Api\EmployeeController;
 use App\Http\Controllers\Api\IpRestrictionController;
@@ -30,6 +31,7 @@ Route::get('/settings/branding', [SettingsController::class, 'branding']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/auth/me', [AuthController::class, 'me']);
     Route::post('/auth/logout', [AuthController::class, 'logout']);
+    Route::get('/bootstrap', BootstrapController::class);
 
     Route::post('/profile', [ProfileController::class, 'update'])
         ->middleware('permission:profile.update_own,profile.update_all');

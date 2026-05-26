@@ -25,6 +25,10 @@ export const authService = {
   logout: () => api.post('/auth/logout').finally(() => localStorage.removeItem('attendance_token')),
 }
 
+export const bootstrapService = {
+  load: () => api.get('/bootstrap').then((response) => response.data),
+}
+
 export const attendanceService = {
   today: () => api.get('/attendance/today').then((response) => response.data),
   checkIn: (formData) => api.post('/attendance/check-in', formData),

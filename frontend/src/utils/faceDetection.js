@@ -1,7 +1,17 @@
 const HUMAN_MIN_FACE_SCORE = 0.72
 const HUMAN_MIN_BOX_RATIO = 0.08
+const FACE_DETECTION_TIMEOUT_MS = 12000
 
 let humanPromise = null
+
+function withTimeout(promise, ms, label = 'Operation timed out.') {
+  let timer
+  const timeout = new Promise((_, reject) => {
+    timer = window.setTimeout(() => reject(new Error(label)), ms)
+  })
+
+  return Promise.race([promise, timeout]).finally(() => window.clearTimeout(timer))
+}
 
 function supportsNativeFaceDetector() {
   return typeof window !== 'undefined' && 'FaceDetector' in window
@@ -100,8 +110,8 @@ export async function detectFaceInPhoto(file) {
   let image = null
   try {
     image = await imageFileToBitmap(file)
-    const human = await getHumanDetector()
-    const result = await human.detect(image)
+    const human = await withTimeout(getHumanDetector(), FACE_DETECTION_TIMEOUT_MS, 'Face detector did not load in time.')
+    const result = await withTimeout(human.detect(image), FACE_DETECTION_TIMEOUT_MS, 'Face detection took too long.')
     const imageArea = (image.width || image.naturalWidth || 1) * (image.height || image.naturalHeight || 1)
     const validFaces = (result.face || []).filter((face) => {
       const score = face.faceScore || face.boxScore || 0
@@ -128,7 +138,7 @@ export async function detectFaceInPhoto(file) {
     try {
       image = await imageFileToBitmap(file)
       const detector = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 1 })
-      const faces = await detector.detect(image)
+      const faces = await withTimeout(detector.detect(image), FACE_DETECTION_TIMEOUT_MS, 'Native face detection took too long.')
       return { detected: faces.length > 0, method: 'native', faces }
     } catch {
       // Native detector also failed.

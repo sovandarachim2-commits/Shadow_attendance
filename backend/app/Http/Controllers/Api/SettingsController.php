@@ -5,13 +5,14 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\SystemSetting;
 use App\Services\ImageUploadService;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Http\Request;
 
 class SettingsController extends Controller
 {
     public function index()
     {
-        return SystemSetting::all()->pluck('value', 'key');
+        return $this->settings();
     }
 
     /** Public branding for favicon, home-screen icon, and document title (no auth). */
@@ -19,9 +20,9 @@ class SettingsController extends Controller
     {
         $keys = ['company_name', 'site_title', 'company_logo_url', 'company_icon_url'];
 
-        return SystemSetting::query()
+        return Cache::remember('system_settings.branding', now()->addMinutes(10), fn () => SystemSetting::query()
             ->whereIn('key', $keys)
-            ->pluck('value', 'key');
+            ->pluck('value', 'key'));
     }
 
     public function update(Request $request)
@@ -40,7 +41,10 @@ class SettingsController extends Controller
             );
         }
 
-        return SystemSetting::all()->pluck('value', 'key');
+        Cache::forget('system_settings.all');
+        Cache::forget('system_settings.branding');
+
+        return $this->settings();
     }
 
     public function uploadLogo(Request $request, ImageUploadService $images)
@@ -67,6 +71,14 @@ class SettingsController extends Controller
             ['value' => $url, 'group' => 'general'],
         );
 
+        Cache::forget('system_settings.all');
+        Cache::forget('system_settings.branding');
+
         return response()->json([$responseKey => $url]);
+    }
+
+    private function settings()
+    {
+        return Cache::remember('system_settings.all', now()->addMinutes(10), fn () => SystemSetting::all()->pluck('value', 'key'));
     }
 }

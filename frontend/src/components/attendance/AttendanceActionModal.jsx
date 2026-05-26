@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { Camera, CheckCircle2, Clock, Loader2, LogOut, MapPin, Navigation, X, XCircle } from 'lucide-react'
+import { Camera, CheckCircle2, Clock, Loader2, LogOut, MapPin, Navigation, RefreshCw, ShieldCheck, SwitchCamera, X, XCircle } from 'lucide-react'
 import clsx from 'clsx'
 import { attendanceService } from '../../services/api'
 import { reverseGeocode } from '../../utils/geocode'
 import { coordsFromPosition, geolocationErrorMessage, isGeolocationSupported, isSecureGeolocationContext, requestCurrentPosition } from '../../utils/geolocation'
 import { DEFAULT_ATTENDANCE_REQUIREMENTS, mergeRequirements } from '../../utils/attendanceRequirements'
 import { detectFaceInPhoto } from '../../utils/faceDetection'
-import { unmirrorFrontCameraImage } from '../../utils/imageCapture'
+import { compressImageForUpload } from '../../utils/imageCapture'
 import CameraCaptureModal from '../shared/CameraCaptureModal'
 import NoticeAlertCard from '../shared/NoticeAlertCard'
 
@@ -126,7 +126,13 @@ export default function AttendanceActionModal({ action, user, onClose, onSaved }
       return
     }
 
-    const nextFile = shouldUnmirror ? await unmirrorFrontCameraImage(file) : file
+    const nextFile = await compressImageForUpload(file, {
+      maxBytes: 800 * 1024,
+      maxDimension: 720,
+      quality: 0.80,
+      unmirror: shouldUnmirror,
+      fileName: `selfie-${Date.now()}`,
+    })
     setCameraOpen(false)
     setFaceStatus('checking')
 
@@ -225,7 +231,7 @@ export default function AttendanceActionModal({ action, user, onClose, onSaved }
     : [
         requireGps ? (attendanceType === 'outdoor' ? 'Outdoor location required' : 'Live location required') : null,
         requirePhoto ? 'Selfie required' : null,
-      ].filter(Boolean).join(' · ') || 'Submit your attendance'
+      ].filter(Boolean).join(' - ') || 'Submit your attendance'
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/70 p-4 backdrop-blur-sm">
@@ -311,25 +317,39 @@ export default function AttendanceActionModal({ action, user, onClose, onSaved }
                 onTap={() => setCameraOpen(true)}
               />
               {selfiePreview && (
-                <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
-                  <img src={selfiePreview} alt="Attendance selfie preview" className="max-h-48 w-full object-cover" />
-                  <div className="border-t border-slate-100 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 dark:border-slate-800 dark:bg-emerald-950/20 dark:text-emerald-400">
-                    Face detected
+                <div className="overflow-hidden rounded-2xl border-2 border-emerald-200 bg-white shadow-sm dark:border-emerald-800/50 dark:bg-slate-900">
+                  {/* Photo */}
+                  <div className="relative">
+                    <img
+                      src={selfiePreview}
+                      alt="Attendance selfie"
+                      className="w-full object-cover"
+                      style={{ maxHeight: '260px' }}
+                    />
+                    {/* Verified badge overlay */}
+                    <div className="absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full bg-emerald-500/90 px-3 py-1.5 backdrop-blur-sm">
+                      <ShieldCheck size={13} className="text-white" />
+                      <span className="text-xs font-bold text-white">Face Verified</span>
+                    </div>
                   </div>
-                  <div className="flex justify-end gap-2 border-t border-slate-100 bg-slate-50 px-3 py-2 dark:border-slate-800 dark:bg-slate-950">
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 px-3 py-2.5">
                     <button
                       type="button"
-                      className="text-xs font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-300"
                       onClick={() => handleSelfie(null)}
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-200 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
                     >
+                      <RefreshCw size={12} />
                       Retake
                     </button>
                     <button
                       type="button"
-                      className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 dark:text-emerald-400"
                       onClick={() => setCameraOpen(true)}
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-50 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400 dark:hover:bg-emerald-950/50"
                     >
-                      Change photo
+                      <SwitchCamera size={12} />
+                      Change Photo
                     </button>
                   </div>
                 </div>

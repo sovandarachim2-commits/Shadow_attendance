@@ -78,6 +78,10 @@ class User extends Authenticatable
             return true;
         }
 
+        if ($this->role->relationLoaded('permissions')) {
+            return $this->role->permissions->contains('slug', $permission);
+        }
+
         return $this->role
             ->permissions()
             ->where('slug', $permission)

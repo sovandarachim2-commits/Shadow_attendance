@@ -84,8 +84,9 @@ class TelegramNotificationService
     }
 
     /**
-     * Send a single sendPhoto message (photo + caption) to all enabled destinations.
-     * If no photo URL, falls back to text-only sendMessage.
+     * Send attendance notification as a text message with the selfie URL pinned as the
+     * link preview. Telegram will render the photo as a large image above/below the text
+     * if the URL is publicly accessible — no sendPhoto API call needed.
      */
     public function sendAttendancePhoto(?string $photoUrl, string $caption, string|array $eventKeys): void
     {
@@ -99,20 +100,13 @@ class TelegramNotificationService
         $destinations = collect();
 
         foreach (array_values(array_unique($keys)) as $eventKey) {
-            $destinations = $destinations->merge($this->resolveDestinationsWithMeta($eventKey));
+            $destinations = $destinations->merge($this->resolveDestinations($eventKey));
         }
 
         $destinations
             ->unique(fn ($d) => $d->chat_id.'|'.($d->message_thread_id ?? ''))
             ->each(function ($d) use ($token, $photoUrl, $caption) {
-                $threadId = $d->message_thread_id ?? null;
-                $hasPhoto = $photoUrl && ($d->send_photo ?? false);
-
-                if ($hasPhoto) {
-                    $this->sendAttendancePhotoTelegram($d->chat_id, $photoUrl, $caption, $threadId);
-                } else {
-                    $this->sendPayload($token, $d->chat_id, $caption, $threadId);
-                }
+                $this->sendPayload($token, $d->chat_id, $caption, $d->message_thread_id ?? null, true, $photoUrl ?: null);
             });
     }
 
@@ -776,14 +770,20 @@ class TelegramNotificationService
         }
     }
 
-    private function sendPayload(string $token, string $chatId, string $message, ?int $threadId = null, bool $preview = true): array
+    private function sendPayload(string $token, string $chatId, string $message, ?int $threadId = null, bool $preview = true, ?string $previewUrl = null): array
     {
         try {
+            $linkPreviewOptions = ['is_disabled' => ! $preview];
+            if ($preview && $previewUrl) {
+                $linkPreviewOptions['url']               = $previewUrl;
+                $linkPreviewOptions['prefer_large_media'] = true;
+            }
+
             $payload = [
-                'chat_id'    => $chatId,
-                'text'       => $message,
-                'parse_mode' => 'HTML',
-                'link_preview_options' => ['is_disabled' => ! $preview],
+                'chat_id'              => $chatId,
+                'text'                 => $message,
+                'parse_mode'           => 'HTML',
+                'link_preview_options' => $linkPreviewOptions,
             ];
 
             if ($threadId) {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useJsApiLoader } from '@react-google-maps/api'
 import {
   Activity,
@@ -23,7 +23,7 @@ import {
   X,
 } from 'lucide-react'
 import clsx from 'clsx'
-import { api, attendanceService, authService, dashboardService, employeeService } from './services/api'
+import { api, attendanceService, authService, bootstrapService } from './services/api'
 import DashboardPage from './pages/DashboardPage'
 import AttendancePage from './pages/AttendancePage'
 import EmployeesPage from './pages/EmployeesPage'
@@ -112,6 +112,7 @@ function AppShell({ isLoaded, initialBranding = {} }) {
   const [modal, setModal] = useState(null)
   const [editingEmployee, setEditingEmployee] = useState(null)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const bootstrapRequestRef = useRef(null)
   const [data, setData] = useState({
     dashboard: null,
     todayAttendance: null,
@@ -127,19 +128,28 @@ function AppShell({ isLoaded, initialBranding = {} }) {
   const loadRealData = useCallback(async (account) => {
     setData((current) => ({ ...current, loading: true }))
 
-    const canLoad = (permissions) => canAccess(account, permissions)
-    const [dashboard, todayAttendance, attendance, employees, visits, reports, notifications, appSettings] = await Promise.all([
-      canLoad(['dashboard.admin', 'dashboard.employee']) ? dashboardService.overview().catch(() => null) : Promise.resolve(null),
-      canLoad(['attendance.view_own', 'attendance.view_all']) ? attendanceService.today().catch(() => null) : Promise.resolve(null),
-      canLoad(['attendance.view_all', 'attendance.view_own']) ? api.get('/attendance').then((response) => response.data.data || []).catch(() => []) : Promise.resolve([]),
-      canLoad(['employees.view', 'employees.create', 'employees.update']) ? employeeService.fetchAll().catch(() => []) : Promise.resolve([]),
-      canLoad(['visits.view', 'visits.create', 'visits.manage']) ? api.get('/customer-visits').then((response) => response.data.data || []).catch(() => []) : Promise.resolve([]),
-      canLoad(['reports.view_all', 'reports.view_own']) ? api.get('/reports').then((response) => response.data.data || []).catch(() => []) : Promise.resolve([]),
-      canLoad(['notifications.view', 'notifications.manage']) ? api.get('/notifications').then((response) => response.data.data || []).catch(() => []) : Promise.resolve([]),
-      canLoad(['settings.view', 'settings.security', 'settings.api', 'settings.manage', 'settings.schedules', 'roles.manage', 'dashboard.admin', 'dashboard.employee']) ? api.get('/settings').then((response) => response.data || {}).catch(() => ({})) : Promise.resolve({}),
-    ])
+    try {
+      if (!bootstrapRequestRef.current) {
+        bootstrapRequestRef.current = bootstrapService.load().finally(() => {
+          bootstrapRequestRef.current = null
+        })
+      }
 
-    setData({ dashboard, todayAttendance, attendance, employees, visits, reports, notifications, appSettings, loading: false })
+      const payload = await bootstrapRequestRef.current
+      setData({
+        dashboard: payload.dashboard ?? null,
+        todayAttendance: payload.todayAttendance ?? null,
+        attendance: payload.attendance ?? [],
+        employees: payload.employees ?? [],
+        visits: payload.visits ?? [],
+        reports: payload.reports ?? [],
+        notifications: payload.notifications ?? [],
+        appSettings: payload.appSettings ?? {},
+        loading: false,
+      })
+    } catch (error) {
+      setData((current) => ({ ...current, loading: false }))
+    }
   }, [])
 
   useEffect(() => {
