@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\EmployeeSchedule;
 use App\Models\WorkSchedule;
 use App\Models\User;
+use DateTimeInterface;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 
@@ -12,29 +13,68 @@ class WorkScheduleService
 {
     public function scheduleForEmployee(int $employeeId): WorkSchedule
     {
-        return $this->scheduleForEmployeeOnDate($employeeId, Carbon::today());
-    }
+        $schedule = $this->scheduleForEmployeeOnDate($employeeId, Carbon::today());
 
-    public function scheduleForEmployeeOnDate(int $employeeId, Carbon $date): WorkSchedule
-    {
-        $assignment = EmployeeSchedule::query()
-            ->with('schedule')
-            ->where('employee_id', $employeeId)
-            ->where('effective_date', '<=', $date->toDateString())
-            ->orderByDesc('effective_date')
-            ->first();
-
-        if ($assignment?->schedule) {
-            return $assignment->schedule;
+        if ($schedule) {
+            return $schedule;
         }
 
-        $default = WorkSchedule::query()->where('is_default', true)->first();
-
-        return $default ?? WorkSchedule::query()->firstOrFail();
+        throw ValidationException::withMessages([
+            'schedule' => 'No work schedule is configured. Add a default schedule in Settings → Schedules.',
+        ]);
     }
 
-    public function dayInfoForDate(WorkSchedule $schedule, Carbon $date): array
+    public function scheduleForEmployeeOnDate(int $employeeId, DateTimeInterface $date): ?WorkSchedule
     {
+        $date = Carbon::instance($date);
+
+        try {
+            $assignment = EmployeeSchedule::query()
+                ->with('schedule')
+                ->where('employee_id', $employeeId)
+                ->where('effective_date', '<=', $date->toDateString())
+                ->orderByDesc('effective_date')
+                ->first();
+
+            if ($assignment?->schedule) {
+                return $assignment->schedule;
+            }
+
+            return WorkSchedule::query()->where('is_default', true)->first()
+                ?? WorkSchedule::query()->first();
+        } catch (\Throwable $e) {
+            report($e);
+
+            return null;
+        }
+    }
+
+    /** Day info for reports; falls back to Mon–Fri working if schedules are missing. */
+    public function dayInfoForEmployeeOnDate(int $employeeId, DateTimeInterface $date): array
+    {
+        $date = Carbon::instance($date);
+        $schedule = $this->scheduleForEmployeeOnDate($employeeId, $date);
+
+        if ($schedule) {
+            return $this->dayInfoForDate($schedule, $date);
+        }
+
+        $isWeekend = in_array($date->dayOfWeek, [Carbon::SUNDAY, Carbon::SATURDAY], true);
+
+        return [
+            'day_key'        => strtolower($date->format('l')),
+            'day_label'      => $date->format('l'),
+            'is_working_day' => ! $isWeekend,
+            'start'          => null,
+            'end'            => null,
+            'schedule_id'    => null,
+            'schedule_name'  => null,
+        ];
+    }
+
+    public function dayInfoForDate(WorkSchedule $schedule, DateTimeInterface $date): array
+    {
+        $date = Carbon::instance($date);
         $dayKey = strtolower($date->format('l'));
         $startKey = "{$dayKey}_start";
         $start = $schedule->{$startKey};

@@ -110,6 +110,7 @@ class EmployeeMonthlyReportController extends Controller
                 'month'       => $monthStr,
                 'month_label' => $month->format('F Y'),
                 'employee'    => null,
+                'schedule'    => null,
                 'summary'     => $this->emptySummary(),
                 'days'        => [],
                 'total_days'  => $to->day,
@@ -130,7 +131,9 @@ class EmployeeMonthlyReportController extends Controller
 
         $employeeId = (int) $emp->id;
 
-        if (! $isAdmin && $employeeId !== (int) $user->employee_id) {
+        $ownEmployeeId = (int) ($user->employee_id ?? $user->employee?->id ?? 0);
+
+        if (! $isAdmin && $employeeId !== $ownEmployeeId) {
             abort(403);
         }
 
@@ -147,7 +150,18 @@ class EmployeeMonthlyReportController extends Controller
             ->whereBetween('attendance_date', [$from->toDateString(), $to->toDateString()])
             ->orderBy('attendance_date')
             ->get()
-            ->keyBy(fn ($r) => $r->attendance_date->format('Y-m-d'));
+            ->keyBy(function ($r) {
+                $date = $r->attendance_date;
+                if ($date === null) {
+                    return 'invalid';
+                }
+                if ($date instanceof \DateTimeInterface) {
+                    return Carbon::instance($date)->format('Y-m-d');
+                }
+
+                return Carbon::parse((string) $date)->format('Y-m-d');
+            })
+            ->filter(fn ($_, $key) => $key !== 'invalid');
 
         $allDays = [];
         $cursor  = $from->copy();
@@ -155,8 +169,7 @@ class EmployeeMonthlyReportController extends Controller
         while ($cursor->lte($to)) {
             $dateStr  = $cursor->toDateString();
             $record   = $records->get($dateStr);
-            $schedule = $this->workSchedules->scheduleForEmployeeOnDate($employeeId, $cursor);
-            $dayInfo  = $this->workSchedules->dayInfoForDate($schedule, $cursor);
+            $dayInfo = $this->workSchedules->dayInfoForEmployeeOnDate($employeeId, $cursor);
 
             if ($record) {
                 $isMissing = $record->check_in_at
@@ -222,10 +235,10 @@ class EmployeeMonthlyReportController extends Controller
             'month'       => $monthStr,
             'month_label' => $month->format('F Y'),
             'employee'    => $employee,
-            'schedule'    => [
+            'schedule'    => $activeSchedule ? [
                 'id'   => $activeSchedule->id,
                 'name' => $activeSchedule->schedule_name,
-            ],
+            ] : null,
             'summary'     => $summary,
             'days'        => array_values($days),
             'total_days'  => $to->day,
