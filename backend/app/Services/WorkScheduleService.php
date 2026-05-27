@@ -12,10 +12,15 @@ class WorkScheduleService
 {
     public function scheduleForEmployee(int $employeeId): WorkSchedule
     {
+        return $this->scheduleForEmployeeOnDate($employeeId, Carbon::today());
+    }
+
+    public function scheduleForEmployeeOnDate(int $employeeId, Carbon $date): WorkSchedule
+    {
         $assignment = EmployeeSchedule::query()
             ->with('schedule')
             ->where('employee_id', $employeeId)
-            ->where('effective_date', '<=', Carbon::today())
+            ->where('effective_date', '<=', $date->toDateString())
             ->orderByDesc('effective_date')
             ->first();
 

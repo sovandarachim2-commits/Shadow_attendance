@@ -5,12 +5,14 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
 use App\Models\Employee;
+use App\Services\WorkScheduleService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 class EmployeeMonthlyReportController extends Controller
 {
+    public function __construct(private WorkScheduleService $workSchedules) {}
     private const STATUS_LABELS = [
         'present'          => 'Present',
         'late'             => 'Late',
@@ -151,9 +153,10 @@ class EmployeeMonthlyReportController extends Controller
         $cursor  = $from->copy();
 
         while ($cursor->lte($to)) {
-            $dateStr   = $cursor->toDateString();
-            $record    = $records->get($dateStr);
-            $isWeekend = in_array($cursor->dayOfWeek, [0, 6], true);
+            $dateStr  = $cursor->toDateString();
+            $record   = $records->get($dateStr);
+            $schedule = $this->workSchedules->scheduleForEmployeeOnDate($employeeId, $cursor);
+            $dayInfo  = $this->workSchedules->dayInfoForDate($schedule, $cursor);
 
             if ($record) {
                 $isMissing = $record->check_in_at
@@ -176,11 +179,11 @@ class EmployeeMonthlyReportController extends Controller
                     'work_minutes' => $record->work_minutes,
                     'late_minutes' => $record->late_minutes,
                     'status'       => $status,
-                    'notes'        => $this->displayNote($record->notes, $status, (int) ($record->late_minutes ?? 0)),
+                    'notes'        => $this->displayNote($record->notes, $status, (int) ($record->late_minutes ?? 0), $dayInfo),
                     'id'           => $record->id,
                 ];
             } else {
-                $offStatus = $isWeekend ? 'day_off' : 'absent';
+                $offStatus = $dayInfo['is_working_day'] ? 'absent' : 'day_off';
                 $allDays[] = [
                     'date'         => $dateStr,
                     'day'          => $cursor->format('D'),
@@ -189,7 +192,7 @@ class EmployeeMonthlyReportController extends Controller
                     'work_minutes' => null,
                     'late_minutes' => null,
                     'status'       => $offStatus,
-                    'notes'        => $this->displayNote(null, $offStatus, 0),
+                    'notes'        => $this->displayNote(null, $offStatus, 0, $dayInfo),
                     'id'           => null,
                 ];
             }
@@ -213,10 +216,16 @@ class EmployeeMonthlyReportController extends Controller
             ? array_values(array_filter($allDays, fn ($d) => $d['status'] === $statusKey))
             : $allDays;
 
+        $activeSchedule = $this->workSchedules->scheduleForEmployeeOnDate($employeeId, $to);
+
         return [
             'month'       => $monthStr,
             'month_label' => $month->format('F Y'),
             'employee'    => $employee,
+            'schedule'    => [
+                'id'   => $activeSchedule->id,
+                'name' => $activeSchedule->schedule_name,
+            ],
             'summary'     => $summary,
             'days'        => array_values($days),
             'total_days'  => $to->day,
@@ -245,7 +254,7 @@ class EmployeeMonthlyReportController extends Controller
         ];
     }
 
-    private function displayNote(?string $stored, string $status, int $lateMinutes): ?string
+    private function displayNote(?string $stored, string $status, int $lateMinutes, ?array $dayInfo = null): ?string
     {
         if ($stored !== null && trim($stored) !== '') {
             return trim($stored);
@@ -254,11 +263,25 @@ class EmployeeMonthlyReportController extends Controller
         return match ($status) {
             'late'             => $lateMinutes > 0 ? "Late check in {$lateMinutes}m" : 'Late arrival',
             'missing_checkout' => 'Forgot to check out',
-            'day_off'          => 'Weekly Off',
+            'day_off'          => $this->dayOffNote($dayInfo),
             'on_leave', 'leave', 'half_day' => 'On leave',
             'holiday'          => 'Public holiday',
-            'absent'           => 'No attendance record',
+            'absent'           => $dayInfo && $dayInfo['is_working_day']
+                ? 'No attendance record (scheduled work day)'
+                : 'No attendance record',
             default            => null,
         };
+    }
+
+    private function dayOffNote(?array $dayInfo): string
+    {
+        $schedule = $dayInfo['schedule_name'] ?? null;
+        $label    = $dayInfo['day_label'] ?? 'Day';
+
+        if ($schedule) {
+            return "{$label} off — {$schedule}";
+        }
+
+        return 'Scheduled day off';
     }
 }

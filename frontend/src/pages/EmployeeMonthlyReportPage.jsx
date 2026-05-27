@@ -997,6 +997,7 @@ export default function EmployeeMonthlyReportPage({ user, appData }) {
   const days = data?.days || []
   const summary = data?.summary || {}
   const employee = data?.employee || null
+  const scheduleName = data?.schedule?.name || null
   const monthLabel = data?.month_label || formatMonthLabel(data?.month || month)
   const hasExportData = Boolean(
     reportSnapshotRef.current?.data?.employee && !filtersDirty,
@@ -1322,7 +1323,7 @@ export default function EmployeeMonthlyReportPage({ user, appData }) {
             <div>
               <p className="font-bold text-emerald-900 dark:text-emerald-200">{employee.name}</p>
               <p className="text-sm text-emerald-700 dark:text-emerald-400">
-                {[employee.employee_code, employee.position, employee.department, employee.branch]
+                {[employee.employee_code, employee.position, employee.department, employee.branch, scheduleName]
                   .filter(Boolean)
                   .join(' · ')}
               </p>
