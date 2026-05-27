@@ -29,9 +29,15 @@ class AttendanceService
             return;
         }
 
-        $employmentType = $user->relationLoaded('employee')
-            ? $user->employee?->employment_type
-            : $user->employee()->value('employment_type');
+        $employee = $user->relationLoaded('employee')
+            ? $user->employee
+            : $user->employee()->first(['id', 'employment_type', 'require_ip_restriction']);
+
+        if ($employee && $employee->require_ip_restriction === false) {
+            return;
+        }
+
+        $employmentType = $employee?->employment_type;
 
         if ($user->role?->slug === 'outdoor_sales' || $employmentType === 'outdoor_sales') {
             return;
@@ -40,9 +46,7 @@ class AttendanceService
         $allowed = $user->role?->load('ipAddresses')->ipAddresses ?? collect();
 
         if ($allowed->isEmpty()) {
-            throw ValidationException::withMessages([
-                'ip' => "Your role ({$user->role?->name}) has no allowed IP addresses configured. An administrator must add at least one allowed IP before you can check in or out.",
-            ]);
+            return;
         }
 
         $clientIp = request()->ip();
@@ -230,7 +234,7 @@ class AttendanceService
                 . "{$gpsLine}\n"
                 . "{$faceLine}\n\n"
                 . "{$statusLine}";
-            $this->telegram->sendAttendancePhoto($photoUrl, $caption, $attendanceEventKey);
+            $this->telegram->sendWithPhoto($caption, $photoUrl, $attendanceEventKey);
 
             $privateMsg = "✅ <b>អ្នកបានចូលធ្វើការ</b>\n\n"
                 . "🕘 ម៉ោង: {$checkInFmt}\n"
@@ -283,14 +287,10 @@ class AttendanceService
             $this->sendTelegramSafely(function () use ($employee, $lateMessage, $ruleMessage, $rule, $photoUrl, $lateEventKey) {
                 $this->telegram->send($lateMessage, $lateEventKey);
 
-                // Send richer profile message + photo to the rule's own group if configured
+                // Send richer profile message to the rule's own group if configured.
                 $ruleChatId = trim((string) ($rule->telegram_chat_id ?? ''));
                 if ($ruleChatId !== '') {
-                    if ($photoUrl) {
-                        $this->telegram->sendPhotoRaw($ruleChatId, $photoUrl, $ruleMessage, $rule->telegram_topic_id ?? null);
-                    } else {
-                        $this->telegram->sendRaw($ruleChatId, $ruleMessage, $rule->telegram_topic_id ?? null);
-                    }
+                    $this->telegram->sendRaw($ruleChatId, $ruleMessage, $rule->telegram_topic_id ?? null);
                 }
 
                 if ($this->shouldNotifyEmployeeLate()) {
@@ -394,7 +394,7 @@ class AttendanceService
                 . "{$faceLine}\n\n"
                 . "✅ ស្ថានភាព៖ <b>បានបញ្ចប់ការងារ</b>";
 
-            $this->telegram->sendAttendancePhoto($checkOutPhotoUrl, $caption, $attendanceEventKey);
+            $this->telegram->sendWithPhoto($caption, $checkOutPhotoUrl, $attendanceEventKey);
 
             $this->notifyEmployeePrivate(
                 $employee,

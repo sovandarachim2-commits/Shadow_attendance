@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   AlertTriangle, Bot, Camera, CheckCircle2, ChevronDown, Clock, Fingerprint,
-  Locate, LogOut, MapPin, QrCode, Save, Settings, Shield, Smartphone, Zap,
+  Locate, LogOut, MapPin, QrCode, Save, Settings, Shield, Smartphone, Zap, BellRing,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { api } from '../../services/api'
@@ -14,6 +14,7 @@ const SECTIONS = [
   { id: 'selfie',     icon: Camera,       label: 'Selfie Verification',     desc: 'Attendance selfie capture and face matching.' },
   { id: 'qr',         icon: QrCode,       label: 'QR Code Settings',        desc: 'Enable rotating QR codes for office check-in.' },
   { id: 'automation', icon: Bot,          label: 'Automation Settings',     desc: 'Auto-detect, alerts and daily summaries.' },
+  { id: 'reminders',  icon: BellRing,     label: 'Reminder Schedule',       desc: 'Timed check-in and check-out Telegram alerts.' },
 ]
 
 const DEFAULT = {
@@ -24,6 +25,9 @@ const DEFAULT = {
   require_selfie: false, save_selfie: true, face_verification: false,
   enable_qr: false, qr_expiration_minutes: 5, dynamic_qr_rotation: false,
   auto_missing_checkout: true, auto_telegram_alerts: false, auto_daily_summary: false,
+  auto_check_in_reminder: false, check_in_reminder_time: '08:00',
+  auto_check_out_reminder: false, check_out_reminder_time: '17:00',
+  missing_checkout_detection_time: '18:00', daily_summary_time: '18:30',
 }
 
 export default function AttendanceRulesSettings() {
@@ -125,6 +129,7 @@ export default function AttendanceRulesSettings() {
                 {sec.id === 'selfie'     && <SelfieSection     rules={rules} set={set} />}
                 {sec.id === 'qr'         && <QrSection         rules={rules} set={set} />}
                 {sec.id === 'automation' && <AutomationSection rules={rules} set={set} />}
+                {sec.id === 'reminders'  && <ReminderSection   rules={rules} set={set} />}
               </div>
             )}
           </div>
@@ -310,10 +315,59 @@ function QrSection({ rules, set }) {
 
 function AutomationSection({ rules, set }) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <RToggle label="Auto Detect Missing Check Out" desc="Flag employees who forgot to check out at end of day." checked={rules.auto_missing_checkout} onChange={(v) => set('auto_missing_checkout', v)} />
+      {rules.auto_missing_checkout && (
+        <RField label="Missing Check Out Detect Time" className="max-w-[220px]">
+          <input className={inputCls} type="time" value={rules.missing_checkout_detection_time?.slice(0, 5) || '18:00'} onChange={(e) => set('missing_checkout_detection_time', e.target.value)} />
+        </RField>
+      )}
       <RToggle label="Auto Send Telegram Alerts" desc="Send Telegram messages for attendance events and missing check-outs." checked={rules.auto_telegram_alerts} onChange={(v) => set('auto_telegram_alerts', v)} />
       <RToggle label="Auto Daily Attendance Summary" desc="Send a daily summary report to managers each evening." checked={rules.auto_daily_summary} onChange={(v) => set('auto_daily_summary', v)} />
+      {rules.auto_daily_summary && (
+        <RField label="Daily Summary Send Time" className="max-w-[220px]">
+          <input className={inputCls} type="time" value={rules.daily_summary_time?.slice(0, 5) || '18:30'} onChange={(e) => set('daily_summary_time', e.target.value)} />
+        </RField>
+      )}
+    </div>
+  )
+}
+
+function ReminderSection({ rules, set }) {
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-sky-100 bg-sky-50 px-4 py-3 text-sm text-sky-900 dark:border-sky-900/50 dark:bg-sky-950/30 dark:text-sky-200">
+        These reminders send private Telegram messages to employees who have a Telegram Chat ID on their profile.
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="space-y-3 rounded-lg border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/60">
+          <RToggle
+            label="Check In Reminder"
+            desc="Notify employees who have not checked in yet."
+            checked={rules.auto_check_in_reminder}
+            onChange={(v) => set('auto_check_in_reminder', v)}
+          />
+          {rules.auto_check_in_reminder && (
+            <RField label="Send Time" className="max-w-[220px]">
+              <input className={inputCls} type="time" value={rules.check_in_reminder_time?.slice(0, 5) || '08:00'} onChange={(e) => set('check_in_reminder_time', e.target.value)} />
+            </RField>
+          )}
+        </div>
+
+        <div className="space-y-3 rounded-lg border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/60">
+          <RToggle
+            label="Check Out Reminder"
+            desc="Notify employees who checked in but have not checked out."
+            checked={rules.auto_check_out_reminder}
+            onChange={(v) => set('auto_check_out_reminder', v)}
+          />
+          {rules.auto_check_out_reminder && (
+            <RField label="Send Time" className="max-w-[220px]">
+              <input className={inputCls} type="time" value={rules.check_out_reminder_time?.slice(0, 5) || '17:00'} onChange={(e) => set('check_out_reminder_time', e.target.value)} />
+            </RField>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

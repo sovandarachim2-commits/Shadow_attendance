@@ -44,6 +44,8 @@ return new class extends Migration
             $table->boolean('auto_missing_checkout')->default(true);
             $table->boolean('auto_telegram_alerts')->default(false);
             $table->boolean('auto_daily_summary')->default(false);
+            $table->time('missing_checkout_detection_time')->default('18:00:00');
+            $table->time('daily_summary_time')->default('18:30:00');
             $table->timestamps();
         });
 
@@ -73,6 +75,8 @@ return new class extends Migration
             'auto_missing_checkout'    => true,
             'auto_telegram_alerts'     => false,
             'auto_daily_summary'       => false,
+            'missing_checkout_detection_time' => '18:00:00',
+            'daily_summary_time'       => '18:30:00',
             'created_at'               => now(),
             'updated_at'               => now(),
         ]);

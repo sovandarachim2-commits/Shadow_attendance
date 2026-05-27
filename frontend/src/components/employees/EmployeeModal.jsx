@@ -39,6 +39,7 @@ export default function EmployeeModal({ employee, onClose, onSaved }) {
   const [access, setAccess] = useState({
     gpsRestriction: Boolean(employee?.require_gps),
     faceVerification: Boolean(employee?.require_face_verification),
+    ipRestriction: employee?.require_ip_restriction !== false,
   })
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
@@ -103,6 +104,7 @@ export default function EmployeeModal({ employee, onClose, onSaved }) {
     Object.entries(payload).forEach(([key, value]) => body.append(key, typeof value === 'boolean' ? (value ? '1' : '0') : value))
     body.append('require_face_verification', access.faceVerification ? '1' : '0')
     body.append('require_gps', access.gpsRestriction ? '1' : '0')
+    body.append('require_ip_restriction', access.ipRestriction ? '1' : '0')
     if (photo) body.append('photo', photo)
     if (isEdit) body.append('_method', 'PUT')
 
@@ -248,6 +250,12 @@ export default function EmployeeModal({ employee, onClose, onSaved }) {
                   description="Employee must enable device location (GPS) to check in or out."
                   checked={access.gpsRestriction}
                   onChange={() => setAccess((current) => ({ ...current, gpsRestriction: !current.gpsRestriction }))}
+                />
+                <EmployeeCheck
+                  title="IP Restriction"
+                  description="Employee must check in or out from an allowed office IP or Wi-Fi range."
+                  checked={access.ipRestriction}
+                  onChange={() => setAccess((current) => ({ ...current, ipRestriction: !current.ipRestriction }))}
                 />
                 <EmployeeCheck
                   title="Face Verification"

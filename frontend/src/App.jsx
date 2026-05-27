@@ -8,6 +8,7 @@ import {
   ChevronDown,
   Clock,
   FileText,
+  Hammer,
   Home,
   Image,
   LogOut,
@@ -20,6 +21,7 @@ import {
   Sun,
   Users,
   UserRound,
+  Wallet,
   X,
 } from 'lucide-react'
 import clsx from 'clsx'
@@ -39,9 +41,12 @@ import ProfilePage from './pages/ProfilePage'
 import SecurityPage from './pages/SecurityPage'
 import BrandingPage from './pages/BrandingPage'
 import PermissionRequestsPage from './pages/PermissionRequestsPage'
+import PermissionTypesPage from './pages/PermissionTypesPage'
 import AttendanceHistoryPage from './pages/AttendanceHistoryPage'
 import AdminAttendanceReportsPage from './pages/AdminAttendanceReportsPage'
 import MyAttendanceReportsPage from './pages/MyAttendanceReportsPage'
+import EmployeeMonthlyReportPage from './pages/EmployeeMonthlyReportPage'
+import PayrollPage from './pages/PayrollPage'
 import LoginPage from './pages/LoginPage'
 import MobileNav from './components/layout/MobileNav'
 import AttendanceActionModal from './components/attendance/AttendanceActionModal'
@@ -55,20 +60,33 @@ import { canAccess, formatTime, userDisplayName } from './utils/format'
 const sidebarMainItems = [
   { label: 'Dashboard', target: 'Dashboard', icon: Home, permissions: ['dashboard.admin', 'dashboard.employee'] },
   { label: 'Customer Visits', target: 'Customer Visits', icon: ShoppingBag, permissions: ['visits.view', 'visits.create', 'visits.manage'] },
-  { label: 'Reports', target: 'Reports', icon: FileText, permissions: ['reports.create', 'reports.view_own', 'reports.view_all', 'reports.export'] },
+  { label: 'Payroll Management', target: 'Payroll Management', icon: Wallet, permissions: ['payroll.view_all', 'payroll.view_own'] },
   { label: 'Route Map', target: 'Route Map', icon: MapPinned, permissions: ['gps.view', 'gps.live', 'gps.history'] },
   { label: 'Profile', target: 'Profile', icon: UserRound, permissions: ['profile.update_own', 'profile.update_all', 'dashboard.admin', 'dashboard.employee'] },
   { label: 'Notifications', target: 'Notifications', icon: Bell, permissions: ['notifications.view', 'notifications.manage'] },
 ]
 
+const reportSubItems = [
+  { label: 'Daily Reports', target: 'Reports', activeTargets: ['Reports', 'Daily Reports'], permissions: ['reports.create', 'reports.view_own', 'reports.view_all', 'reports.export'] },
+  { label: 'Employee Monthly Report', target: 'Employee Monthly Report', activeTargets: ['Employee Monthly Report', 'Monthly Report'], permissions: ['employee_report.view_all', 'employee_report.view_own'] },
+]
+
+const REPORTS_TARGETS = new Set(['Reports', 'Daily Reports', 'Employee Monthly Report', 'Monthly Report'])
+
 const attendanceSubItems = [
   { label: 'All Attendance', target: 'Attendance History', activeTargets: ['Attendance History'], permissions: ['attendance.view_all'] },
   { label: 'Attendance Reports', target: 'Admin Attendance Reports', activeTargets: ['Admin Attendance Reports'], permissions: ['reports.attendance.view_all', 'attendance.view_all'] },
   { label: 'My Attendance Reports', target: 'My Attendance Reports', activeTargets: ['My Attendance Reports'], permissions: ['reports.attendance.view_own', 'attendance.view_own'] },
-  { label: 'Attendance Requests', target: 'Permission Requests', activeTargets: ['Permission Requests'], permissions: ['requests.view_all', 'requests.view_own', 'requests.create', 'requests.approve'] },
 ]
 
-const ATTENDANCE_TARGETS = new Set(['Check In / Out', 'Attendance History', 'Admin Attendance Reports', 'My Attendance Reports', 'Permission Requests'])
+const ATTENDANCE_TARGETS = new Set(['Check In / Out', 'Attendance History', 'Admin Attendance Reports', 'My Attendance Reports'])
+
+const permissionMgmtSubItems = [
+  { label: 'Attendance Requests', target: 'Permission Requests', activeTargets: ['Permission Requests'], permissions: ['requests.view_all', 'requests.view_own', 'requests.create', 'requests.approve'] },
+  { label: 'Permission Types', target: 'Permission Types', activeTargets: ['Permission Types'], permissions: ['settings.manage'] },
+]
+
+const PERMISSION_MGMT_TARGETS = new Set(['Permission Requests', 'Permission Types'])
 
 const rolePermissionSubItems = [
   { label: 'Set Permissions', target: 'Roles & Permissions', activeTargets: ['Roles & Permissions', 'Users & Roles'], permissions: ['roles.manage', 'permissions.manage'] },
@@ -103,6 +121,8 @@ function AppShell({ isLoaded, initialBranding = {} }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [attendanceOpen, setAttendanceOpen] = useState(false)
+  const [permissionOpen, setPermissionOpen] = useState(false)
+  const [reportsOpen, setReportsOpen] = useState(false)
   const [rolesOpen, setRolesOpen] = useState(false)
   const [dark, setDark] = useState(() => localStorage.getItem('attendance_theme') === 'dark')
   const [user, setUser] = useState(null)
@@ -238,6 +258,10 @@ function AppShell({ isLoaded, initialBranding = {} }) {
   }
   const filteredAttendanceSubItems = attendanceSubItems.filter((item) => canAccess(user, item.permissions))
   const isAttendanceExpanded = attendanceOpen || ATTENDANCE_TARGETS.has(active)
+  const filteredPermissionMgmtSubItems = permissionMgmtSubItems.filter((item) => canAccess(user, item.permissions))
+  const isPermissionExpanded = permissionOpen || PERMISSION_MGMT_TARGETS.has(active)
+  const filteredReportSubItems = reportSubItems.filter((item) => canAccess(user, item.permissions))
+  const isReportsExpanded = reportsOpen || REPORTS_TARGETS.has(active)
   const filteredRolePermissionSubItems = rolePermissionSubItems.filter((item) => canAccess(user, item.permissions))
   const isRolesExpanded = rolesOpen || ROLE_PERMISSION_TARGETS.has(active)
   const pages = {
@@ -258,6 +282,10 @@ function AppShell({ isLoaded, initialBranding = {} }) {
     'Attendance History': <AttendanceHistoryPage {...props} viewMode="all" />,
     'Admin Attendance Reports': <AdminAttendanceReportsPage {...props} />,
     'My Attendance Reports': <MyAttendanceReportsPage {...props} />,
+    'Employee Monthly Report': <EmployeeMonthlyReportPage {...props} />,
+    'Monthly Report': <EmployeeMonthlyReportPage {...props} />,
+    'Payroll Management': <PayrollPage {...props} />,
+    'Permission Types': <PermissionTypesPage />,
     Employees: <EmployeesPage {...props} />,
     Branches: <BranchesPage />,
     Departments: <DepartmentsPage />,
@@ -327,6 +355,50 @@ function AppShell({ isLoaded, initialBranding = {} }) {
                 }}
               />
             ))}
+
+            {filteredPermissionMgmtSubItems.length > 0 && (
+              <SidebarAccordion
+                label="Permission Management"
+                icon={Hammer}
+                isOpen={isPermissionExpanded}
+                onToggle={() => setPermissionOpen((v) => !v)}
+              >
+                {filteredPermissionMgmtSubItems.map((subItem) => (
+                  <SidebarGroupItem
+                    key={subItem.target}
+                    label={subItem.label}
+                    isActive={subItem.activeTargets.includes(active)}
+                    onClick={() => {
+                      setActive(subItem.target)
+                      setPermissionOpen(true)
+                      setSidebarOpen(false)
+                    }}
+                  />
+                ))}
+              </SidebarAccordion>
+            )}
+
+            {filteredReportSubItems.length > 0 && (
+              <SidebarAccordion
+                label="Reports"
+                icon={FileText}
+                isOpen={isReportsExpanded}
+                onToggle={() => setReportsOpen((v) => !v)}
+              >
+                {filteredReportSubItems.map((subItem) => (
+                  <SidebarGroupItem
+                    key={subItem.target}
+                    label={subItem.label}
+                    isActive={subItem.activeTargets.includes(active)}
+                    onClick={() => {
+                      setActive(subItem.target)
+                      setReportsOpen(true)
+                      setSidebarOpen(false)
+                    }}
+                  />
+                ))}
+              </SidebarAccordion>
+            )}
 
             {filteredAttendanceSubItems.length > 0 && (
               <SidebarAccordion

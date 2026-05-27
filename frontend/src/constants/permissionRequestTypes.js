@@ -1,6 +1,50 @@
-import { CalendarDays, CalendarX, FileText, LogIn, LogOut, MapPin, Pencil, Shield, Stethoscope, Zap } from 'lucide-react'
+import {
+  BriefcaseBusiness,
+  CalendarDays,
+  CalendarX,
+  FileText,
+  Home,
+  LogIn,
+  LogOut,
+  MapPin,
+  Pencil,
+  Shield,
+  Stethoscope,
+  Timer,
+  Zap,
+} from 'lucide-react'
 
 export const PERMISSION_REQUEST_TYPES = [
+  {
+    id: 'Personal Permission',
+    shortLabel: 'Personal',
+    desc: 'Request permission for personal matters.',
+    icon: Shield,
+    color: 'orange',
+    showTime: true,
+    showDateRange: false,
+    reasonPlaceholder: 'Choose a reason and add details if needed...',
+  },
+  {
+    id: 'Late Check In',
+    shortLabel: 'Late in',
+    desc: 'Request approval for a late check-in.',
+    icon: LogIn,
+    color: 'sky',
+    showTime: true,
+    showDateRange: false,
+    reasonPlaceholder: 'Why late check-in is needed...',
+  },
+  {
+    id: 'Early Check Out',
+    shortLabel: 'Early out',
+    desc: 'Request approval to check out early.',
+    icon: LogOut,
+    color: 'amber',
+    showTime: true,
+    showDateRange: false,
+    reasonPlaceholder: 'Why early check-out is needed...',
+  },
   {
     id: 'Leave Request',
     shortLabel: 'Leave',
@@ -9,7 +53,7 @@ export const PERMISSION_REQUEST_TYPES = [
     color: 'emerald',
     showTime: false,
     showDateRange: true,
-    reasonPlaceholder: 'Reason for leave (vacation, personal, family, etc.)…',
+    reasonPlaceholder: 'Reason for leave...',
   },
   {
     id: 'Sick Leave',
@@ -19,17 +63,17 @@ export const PERMISSION_REQUEST_TYPES = [
     color: 'rose',
     showTime: false,
     showDateRange: true,
-    reasonPlaceholder: 'Describe your illness or medical reason…',
+    reasonPlaceholder: 'Describe your illness or medical reason...',
   },
   {
-    id: 'Request Permission',
-    shortLabel: 'Permission',
-    desc: 'Request permission for a period — select from date to date.',
-    icon: Shield,
-    color: 'orange',
-    showTime: true,
+    id: 'Emergency Leave',
+    shortLabel: 'Emergency',
+    desc: 'Request urgent leave for an emergency.',
+    icon: Zap,
+    color: 'rose',
+    showTime: false,
     showDateRange: true,
-    reasonPlaceholder: 'Reason for permission request…',
+    reasonPlaceholder: 'Describe the emergency...',
   },
   {
     id: 'Outdoor Work',
@@ -39,17 +83,47 @@ export const PERMISSION_REQUEST_TYPES = [
     color: 'blue',
     showTime: false,
     showDateRange: true,
-    reasonPlaceholder: 'Customer, site, or route for outdoor work…',
+    reasonPlaceholder: 'Customer, site, or route for outdoor work...',
+  },
+  {
+    id: 'Work From Home',
+    shortLabel: 'WFH',
+    desc: 'Request approval to work from home.',
+    icon: Home,
+    color: 'emerald',
+    showTime: false,
+    showDateRange: true,
+    reasonPlaceholder: 'Reason for work from home...',
+  },
+  {
+    id: 'Overtime',
+    shortLabel: 'OT',
+    desc: 'Request overtime approval.',
+    icon: Timer,
+    color: 'violet',
+    showTime: true,
+    showDateRange: false,
+    reasonPlaceholder: 'Reason for overtime...',
+  },
+  {
+    id: 'Request Permission',
+    shortLabel: 'Permission',
+    desc: 'Request permission for a period.',
+    icon: BriefcaseBusiness,
+    color: 'orange',
+    showTime: true,
+    showDateRange: true,
+    reasonPlaceholder: 'Reason for permission request...',
   },
   {
     id: 'Early Leave',
     shortLabel: 'Early out',
-    desc: 'Leave before work end — submit before you check out.',
+    desc: 'Leave before work end, submit before you check out.',
     icon: FileText,
     color: 'amber',
     showTime: true,
     showDateRange: false,
-    reasonPlaceholder: 'Why you need to leave before scheduled end time…',
+    reasonPlaceholder: 'Why you need to leave before scheduled end time...',
   },
   {
     id: 'Attendance Edit',
@@ -59,7 +133,7 @@ export const PERMISSION_REQUEST_TYPES = [
     color: 'violet',
     showTime: true,
     showDateRange: false,
-    reasonPlaceholder: 'Which dates/times should be corrected…',
+    reasonPlaceholder: 'Which dates/times should be corrected...',
   },
   {
     id: 'Manual Check In',
@@ -84,12 +158,12 @@ export const PERMISSION_REQUEST_TYPES = [
   {
     id: 'Day Off',
     shortLabel: 'Day off',
-    desc: 'Request scheduled days off (from date to date).',
+    desc: 'Request scheduled days off from date to date.',
     icon: CalendarX,
     color: 'violet',
     showTime: false,
     showDateRange: true,
-    reasonPlaceholder: 'Reason for day off (personal, holiday, etc.)…',
+    reasonPlaceholder: 'Reason for day off...',
   },
   {
     id: 'Custom Request',
@@ -99,7 +173,7 @@ export const PERMISSION_REQUEST_TYPES = [
     color: 'slate',
     showTime: false,
     showDateRange: true,
-    reasonPlaceholder: 'Describe your request in detail…',
+    reasonPlaceholder: 'Describe your request in detail...',
   },
 ]
 
@@ -116,23 +190,32 @@ export function defaultRequestTime(typeId) {
   return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
 }
 
-export function newRequestForm(typeId = 'Leave Request') {
+export function newRequestForm(typeId = 'Personal Permission') {
   const today = new Date().toISOString().slice(0, 10)
+  const time = defaultRequestTime(typeId)
   return {
     type: typeId,
+    replacementEmployeeId: '',
+    reasonType: '',
+    durationType: 'hours',
     date: today,
     dateEnd: today,
-    time: defaultRequestTime(typeId),
+    time,
+    timeTo: time,
+    dayPart: 'Full Day',
+    totalDays: 1,
+    totalHours: 0,
     reason: '',
+    note: '',
+    attachment: null,
     gps: '',
     emergency: false,
   }
 }
 
-// Stats category groupings
 export const REQUEST_CATEGORIES = {
-  'Leave Requests': ['Leave Request', 'Day Off'],
-  'Permission Requests': ['Request Permission', 'Early Leave', 'Attendance Edit', 'Manual Check In', 'Missing Check Out', 'Custom Request'],
-  'Outdoor Work': ['Outdoor Work'],
+  'Leave Requests': ['Leave Request', 'Day Off', 'Emergency Leave'],
+  'Permission Requests': ['Personal Permission', 'Request Permission', 'Late Check In', 'Early Check Out', 'Early Leave', 'Attendance Edit', 'Manual Check In', 'Missing Check Out', 'Custom Request'],
+  'Outdoor Work': ['Outdoor Work', 'Work From Home', 'Overtime'],
   'Sick Leave': ['Sick Leave'],
 }

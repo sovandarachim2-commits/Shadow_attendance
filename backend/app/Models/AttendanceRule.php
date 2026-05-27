@@ -13,7 +13,11 @@ class AttendanceRule extends Model
         'allow_outdoor_checkin', 'require_gps', 'require_customer_photo', 'require_customer_location',
         'require_selfie', 'save_selfie', 'face_verification',
         'enable_qr', 'qr_expiration_minutes', 'dynamic_qr_rotation',
-        'auto_missing_checkout', 'auto_telegram_alerts', 'auto_daily_summary',
+        'auto_missing_checkout', 'auto_telegram_alerts',
+        'auto_check_in_reminder', 'check_in_reminder_time',
+        'auto_check_out_reminder', 'check_out_reminder_time',
+        'auto_daily_summary',
+        'missing_checkout_detection_time', 'daily_summary_time',
     ];
 
     protected $casts = [
@@ -38,6 +42,8 @@ class AttendanceRule extends Model
         'dynamic_qr_rotation'       => 'boolean',
         'auto_missing_checkout'     => 'boolean',
         'auto_telegram_alerts'      => 'boolean',
+        'auto_check_in_reminder'    => 'boolean',
+        'auto_check_out_reminder'   => 'boolean',
         'auto_daily_summary'        => 'boolean',
     ];
 }

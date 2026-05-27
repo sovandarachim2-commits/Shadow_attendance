@@ -41,7 +41,13 @@ class AttendanceRuleController extends Controller
             'dynamic_qr_rotation'       => ['nullable', 'boolean'],
             'auto_missing_checkout'     => ['nullable', 'boolean'],
             'auto_telegram_alerts'      => ['nullable', 'boolean'],
+            'auto_check_in_reminder'    => ['nullable', 'boolean'],
+            'check_in_reminder_time'    => ['nullable', 'date_format:H:i,H:i:s'],
+            'auto_check_out_reminder'   => ['nullable', 'boolean'],
+            'check_out_reminder_time'   => ['nullable', 'date_format:H:i,H:i:s'],
             'auto_daily_summary'        => ['nullable', 'boolean'],
+            'missing_checkout_detection_time' => ['nullable', 'date_format:H:i,H:i:s'],
+            'daily_summary_time'        => ['nullable', 'date_format:H:i,H:i:s'],
         ]);
 
         $rule = AttendanceRule::firstOrCreate([]);

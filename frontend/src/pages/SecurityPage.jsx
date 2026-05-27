@@ -1,15 +1,23 @@
 import { useEffect, useState } from 'react'
 import {
+  AlertCircle,
   AlertTriangle,
   CalendarDays,
   Check,
   ChevronRight,
+  CircleDollarSign,
+  Clock,
   Cloud,
   Download,
   FileClock,
+  FileText,
+  Hammer,
+  HardDrive,
   Mail,
   Map,
   MapPin,
+  Pencil,
+  Plus,
   QrCode,
   RefreshCcw,
   Gift,
@@ -17,9 +25,11 @@ import {
   Send,
   Settings,
   ShieldCheck,
+  Trash2,
   Wallet,
   Upload,
   Wifi,
+  XCircle,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { api } from '../services/api'
@@ -29,6 +39,7 @@ import WorkScheduleSettings from '../components/settings/WorkScheduleSettings'
 import TelegramNotificationSettings from '../components/settings/TelegramNotificationSettings'
 import LateRulesSettings from '../components/settings/LateRulesSettings'
 import BonusRulesSettings from '../components/settings/BonusRulesSettings'
+import AssignPermissionTypeModal, { PERM_COLORS, EMPTY_PERM_FORM } from '../components/settings/AssignPermissionTypeModal'
 
 const settingsSections = [
   { id: 'general', label: 'General Settings', icon: Settings },
@@ -37,6 +48,7 @@ const settingsSections = [
   { id: 'bonus-rules', label: 'Bonus Rules', icon: Gift },
   { id: 'payroll', label: 'Payroll Settings', icon: Wallet },
   { id: 'schedule', label: 'Work Schedule', icon: CalendarDays },
+  { id: 'permission-types', label: 'Permission Types', icon: Hammer },
   { id: 'locations', label: 'Office Locations', icon: MapPin },
   { id: 'gps', label: 'GPS & Tracking', icon: Wifi },
   { id: 'qr', label: 'QR Attendance', icon: QrCode },
@@ -48,7 +60,7 @@ const settingsSections = [
 ]
 
 const SAVEABLE_SECTIONS = new Set(['general', 'gps', 'security'])
-const STANDALONE_SECTIONS = new Set(['late-rules', 'bonus-rules', 'payroll', 'telegram'])
+const STANDALONE_SECTIONS = new Set(['late-rules', 'bonus-rules', 'payroll', 'telegram', 'permission-types'])
 
 export default function SecurityPage({ refresh }) {
   const [activeSection, setActiveSection] = useState('general')
@@ -199,6 +211,7 @@ function renderSettingsContent(section, notify, settings, updateSetting, refresh
     case 'locations':  return <OfficeLocations notify={notify} />
     case 'gps':        return <GpsTracking {...sp} />
     case 'qr':         return <QrAttendance notify={notify} />
+    case 'permission-types': return <PermissionTypesSettings />
     case 'telegram':   return <TelegramNotificationSettings notify={notify} />
     case 'email':      return <EmailNotifications />
     case 'maps':       return <GoogleMapsSettings />
@@ -206,6 +219,440 @@ function renderSettingsContent(section, notify, settings, updateSetting, refresh
     case 'security':   return <SecuritySettings {...sp} />
     default:           return <GeneralSettings {...sp} />
   }
+}
+
+// ── Permission Types Settings ────────────────────────────────────────────────
+
+function PermissionTypesSettings() {
+  const [types, setTypes]     = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [editing, setEditing] = useState(null)
+  const [notice, setNotice]   = useState({ text: '', ok: true })
+
+  const notify = (text, ok = true) => {
+    setNotice({ text, ok })
+    window.setTimeout(() => setNotice({ text: '', ok: true }), 3000)
+  }
+
+  const load = () => {
+    setLoading(true)
+    api.get('/permission-types')
+      .then((res) => setTypes(res.data?.data ?? res.data ?? []))
+      .catch(() => notify('Could not load permission types.', false))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { load() }, [])
+
+  const handleSave = async (form) => {
+    if (editing) {
+      await api.put(`/permission-types/${editing.id}`, form)
+      notify('Permission type updated.')
+    } else {
+      await api.post('/permission-types', form)
+      notify('Permission type created.')
+    }
+    load()
+  }
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Delete this permission type?')) return
+    try {
+      await api.delete(`/permission-types/${id}`)
+      notify('Deleted.')
+      load()
+    } catch { notify('Could not delete.', false) }
+  }
+
+  const openCreate = () => { setEditing(null); setShowForm(true) }
+  const openEdit   = (item) => { setEditing(item); setShowForm(true) }
+  const closeForm  = () => { setShowForm(false); setEditing(null) }
+
+  const handleSaveAndClose = async (form) => {
+    await handleSave(form)
+    closeForm()
+  }
+
+  return (
+    <div className="space-y-4">
+
+      {/* ── Desktop: inline form (replaces list) ─────────────────────────── */}
+      {showForm && (
+        <div className="hidden lg:block">
+          <PermissionTypeFormInline
+            initialData={editing}
+            onClose={closeForm}
+            onSave={handleSaveAndClose}
+          />
+        </div>
+      )}
+
+      {/* ── List view (hidden on desktop when form is open) ──────────────── */}
+      <div className={clsx(showForm ? 'lg:hidden' : '', 'space-y-4')}>
+
+        {/* Header */}
+        <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="flex items-center gap-3">
+            <div className="grid h-11 w-11 place-items-center rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+              <Hammer size={20} />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-900 dark:text-white">Permission Types</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Define custom permission types for requests.</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={openCreate}
+            className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700"
+          >
+            <Plus size={16} />
+            <span className="hidden sm:inline">New Type</span>
+          </button>
+        </div>
+
+        {/* Notice */}
+        {notice.text && (
+          <div className={clsx(
+            'rounded-lg border px-4 py-3 text-sm font-semibold',
+            notice.ok
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900/60 dark:bg-emerald-950/30 dark:text-emerald-200'
+              : 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-200',
+          )}>{notice.text}</div>
+        )}
+
+        {/* Type list */}
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          {loading && <p className="py-10 text-center text-sm text-slate-400">Loading…</p>}
+          {!loading && types.length === 0 && (
+            <div className="flex flex-col items-center gap-3 py-14">
+              <div className="grid h-14 w-14 place-items-center rounded-2xl bg-slate-100 text-slate-400 dark:bg-slate-800">
+                <Hammer size={24} />
+              </div>
+              <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">No permission types yet.</p>
+              <button type="button" onClick={openCreate} className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white transition hover:bg-emerald-700">
+                <Plus size={15} /> Create First Type
+              </button>
+            </div>
+          )}
+          {!loading && types.length > 0 && (
+            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+              {types.map((item) => (
+                <li key={item.id} className="flex items-center gap-4 px-5 py-4">
+                  <div className="h-11 w-11 shrink-0 rounded-full shadow-sm" style={{ backgroundColor: item.color || '#9ca3af' }} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-bold text-slate-900 dark:text-white">{item.name}</p>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+                      <span className="flex items-center gap-1">
+                        <Clock size={11} />
+                        {item.allowedTimes ?? item.allowed_times ?? 0}× {item.limitType === 'per_day' || item.limit_type === 'per_day' ? 'per day' : 'per month'}
+                      </span>
+                      <span className="text-slate-300 dark:text-slate-600">|</span>
+                      <span className="flex items-center gap-1">
+                        <CircleDollarSign size={11} /> ${Number(item.deductionAmount ?? item.deduction_amount ?? 0).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <button type="button" onClick={() => openEdit(item)} className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800" title="Edit">
+                      <Pencil size={15} />
+                    </button>
+                    <button type="button" onClick={() => handleDelete(item.id)} className="grid h-9 w-9 place-items-center rounded-lg border border-rose-200 text-rose-500 transition hover:bg-rose-50 dark:border-rose-900 dark:hover:bg-rose-950/30" title="Delete">
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      {/* ── Mobile-only: full-screen form overlay ────────────────────────── */}
+      {showForm && (
+        <div className="lg:hidden">
+          <AssignPermissionTypeModal
+            initialData={editing}
+            onClose={closeForm}
+            onSave={handleSaveAndClose}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Desktop inline form for Permission Type ───────────────────────────────────
+
+function PermissionTypeFormInline({ initialData, onClose, onSave }) {
+  const [form, setForm] = useState(
+    initialData ? {
+      name:            initialData.name            || '',
+      allowedTimes:    initialData.allowedTimes    ?? initialData.allowed_times    ?? 1,
+      limitType:       initialData.limitType       ?? initialData.limit_type       ?? 'per_month',
+      deductionAmount: initialData.deductionAmount ?? initialData.deduction_amount ?? 0,
+      color:           initialData.color           || '#f59e0b',
+      description:     initialData.description     || '',
+    } : { ...EMPTY_PERM_FORM },
+  )
+  const [errors, setErrors] = useState({})
+  const [saving, setSaving] = useState(false)
+
+  const set = (key, val) => {
+    setForm((f) => ({ ...f, [key]: val }))
+    if (errors[key]) setErrors((e) => ({ ...e, [key]: null }))
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    const errs = {}
+    if (!form.name.trim()) errs.name = 'Name is required'
+    if (Object.keys(errs).length) { setErrors(errs); return }
+    setSaving(true)
+    try { await onSave(form) } finally { setSaving(false) }
+  }
+
+  const limitLabel = (lt) => lt === 'per_day' ? 'per day' : 'per month'
+
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <button type="button" onClick={onClose}
+          className="grid h-10 w-10 place-items-center rounded-full text-emerald-700 transition hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950/40">
+          <ChevronRight size={24} className="rotate-180" />
+        </button>
+        <div className="flex items-center gap-3">
+          <div className="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300">
+            <Hammer size={22} />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-slate-950 dark:text-white">
+              {initialData ? 'Edit Permission Type' : 'Add Permission Type'}
+            </h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {initialData ? 'Update this permission type.' : 'Create a new permission type for attendance and salary rules.'}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* 2-column layout */}
+      <form onSubmit={handleSubmit} className="grid gap-6 xl:grid-cols-[1fr_300px]">
+
+        {/* ── Left: fields ── */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900 space-y-6">
+
+          {/* Name */}
+          <div>
+            <label className="mb-2 block text-sm font-bold text-slate-900 dark:text-white">
+              Permission Type Name <span className="text-rose-500">*</span>
+            </label>
+            <div className={clsx(
+              'flex items-center gap-3 rounded-2xl border px-4 py-3.5 transition',
+              errors.name
+                ? 'border-rose-400 bg-rose-50/40 dark:border-rose-700 dark:bg-rose-950/20'
+                : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950',
+            )}>
+              <FileText size={20} className="shrink-0 text-emerald-500" />
+              <input
+                type="text"
+                placeholder="e.g. Late Check In"
+                value={form.name}
+                onChange={(e) => set('name', e.target.value)}
+                className="flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none placeholder:text-slate-400 dark:text-white"
+              />
+              {errors.name && <AlertCircle size={18} className="shrink-0 text-rose-500" />}
+            </div>
+            {errors.name
+              ? <p className="mt-1.5 text-xs font-semibold text-rose-500">{errors.name}</p>
+              : <p className="mt-1.5 text-xs text-slate-400">Enter a clear name for this permission type.</p>
+            }
+          </div>
+
+          {/* Allowed Times */}
+          <div>
+            <label className="mb-2 block text-sm font-bold text-slate-900 dark:text-white">
+              Allowed Times <span className="text-rose-500">*</span>
+            </label>
+            <div className="flex items-center overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950">
+              <div className="flex flex-1 items-center gap-3 px-4 py-3.5">
+                <Clock size={20} className="shrink-0 text-emerald-500" />
+                <input
+                  type="number"
+                  min="0"
+                  value={form.allowedTimes}
+                  onChange={(e) => set('allowedTimes', Number(e.target.value))}
+                  className="flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none dark:text-white"
+                />
+              </div>
+              <div className="border-l border-slate-200 bg-slate-50 px-5 py-3.5 dark:border-slate-700 dark:bg-slate-800">
+                <span className="text-sm font-semibold text-slate-500 dark:text-slate-300">Time(s)</span>
+              </div>
+            </div>
+            <p className="mt-1.5 text-xs text-slate-400">How many times employees can use this permission before deduction applies.</p>
+          </div>
+
+          {/* Limit Type */}
+          <div>
+            <label className="mb-2 block text-sm font-bold text-slate-900 dark:text-white">
+              Limit Type <span className="text-rose-500">*</span>
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { id: 'per_day',   label: 'Per Day'   },
+                { id: 'per_month', label: 'Per Month' },
+              ].map((opt) => {
+                const sel = form.limitType === opt.id
+                return (
+                  <button key={opt.id} type="button" onClick={() => set('limitType', opt.id)}
+                    className={clsx(
+                      'flex items-center gap-3 rounded-2xl border-2 px-4 py-3.5 text-left transition',
+                      sel
+                        ? 'border-emerald-500 bg-emerald-50 dark:border-emerald-600 dark:bg-emerald-950/30'
+                        : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950',
+                    )}>
+                    <CalendarDays size={20} className={sel ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'} />
+                    <span className={clsx('flex-1 text-sm font-bold',
+                      sel ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-600 dark:text-slate-300')}>
+                      {opt.label}
+                    </span>
+                    <span className={clsx(
+                      'grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 transition',
+                      sel ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300 dark:border-slate-600',
+                    )}>
+                      {sel && <span className="h-2 w-2 rounded-full bg-white" />}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+            <p className="mt-1.5 text-xs text-slate-400">Choose whether the allowed times limit resets daily or monthly.</p>
+          </div>
+
+          {/* Deduction Amount */}
+          <div>
+            <label className="mb-2 block text-sm font-bold text-slate-900 dark:text-white">
+              Deduction Amount <span className="text-rose-500">*</span>
+            </label>
+            <div className="flex items-center overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950">
+              <div className="flex flex-1 items-center gap-3 px-4 py-3.5">
+                <CircleDollarSign size={20} className="shrink-0 text-emerald-500" />
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={form.deductionAmount}
+                  onChange={(e) => set('deductionAmount', Number(e.target.value))}
+                  className="flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none dark:text-white"
+                />
+              </div>
+              <div className="border-l border-slate-200 bg-slate-50 px-5 py-3.5 dark:border-slate-700 dark:bg-slate-800">
+                <span className="text-sm font-semibold text-slate-500 dark:text-slate-300">$</span>
+              </div>
+            </div>
+            <p className="mt-1.5 text-xs text-slate-400">Amount deducted from salary when usage exceeds the allowed limit.</p>
+          </div>
+
+          {/* Color */}
+          <div>
+            <label className="mb-2 block text-sm font-bold text-slate-900 dark:text-white">
+              Color <span className="text-rose-500">*</span>
+            </label>
+            <div className="flex flex-wrap gap-2.5">
+              {PERM_COLORS.map((c) => (
+                <button key={c.id} type="button" onClick={() => set('color', c.hex)}
+                  className={clsx(
+                    'grid h-14 w-14 place-items-center rounded-2xl border-2 transition active:scale-95',
+                    form.color === c.hex
+                      ? 'border-emerald-500 dark:border-emerald-400'
+                      : 'border-slate-200 hover:border-slate-300 dark:border-slate-700',
+                  )}>
+                  <span className="grid h-9 w-9 place-items-center rounded-full" style={{ backgroundColor: c.hex }}>
+                    {form.color === c.hex && (
+                      <svg width="16" height="16" fill="none" stroke="white" strokeWidth="2.5" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <p className="mt-1.5 text-xs text-slate-400">Choose a color to represent this permission type.</p>
+          </div>
+
+          {/* Description */}
+          <div>
+            <label className="mb-2 block text-sm font-bold text-slate-900 dark:text-white">Description</label>
+            <div className="flex gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3.5 dark:border-slate-700 dark:bg-slate-950">
+              <FileText size={20} className="mt-0.5 shrink-0 text-emerald-500" />
+              <textarea
+                placeholder="Describe how this permission type works..."
+                value={form.description}
+                onChange={(e) => set('description', e.target.value)}
+                maxLength={500}
+                rows={4}
+                className="flex-1 resize-none bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400 dark:text-white"
+              />
+            </div>
+            <div className="mt-1.5 flex items-start justify-between gap-2">
+              <p className="text-xs text-slate-400">Provide a short description of this permission type and how it works.</p>
+              <span className="shrink-0 text-xs text-slate-400">{(form.description || '').length}/500</span>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Right: preview + actions ── */}
+        <div className="flex flex-col gap-4">
+          {/* Preview card */}
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+            <div className="h-2 w-full" style={{ backgroundColor: form.color || '#9ca3af' }} />
+            <div className="p-5">
+              <p className="mb-4 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Preview</p>
+              <div className="flex items-center gap-3">
+                <div className="h-11 w-11 shrink-0 rounded-full shadow-sm" style={{ backgroundColor: form.color || '#9ca3af' }} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-bold text-slate-900 dark:text-white">
+                    {form.name.trim() || 'Permission Type Name'}
+                  </p>
+                  {form.description && (
+                    <p className="mt-0.5 line-clamp-1 text-xs text-slate-400">{form.description}</p>
+                  )}
+                </div>
+              </div>
+              <div className="mt-4 flex items-center gap-3 rounded-xl bg-slate-50 px-4 py-2.5 dark:bg-slate-950">
+                <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  <Clock size={13} className="text-emerald-500" />
+                  {form.allowedTimes}× {limitLabel(form.limitType)}
+                </span>
+                <span className="text-slate-200 dark:text-slate-700">|</span>
+                <span className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                  <CircleDollarSign size={13} className="text-emerald-500" />
+                  ${Number(form.deductionAmount || 0).toFixed(2)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-1" />
+
+          {/* Action buttons */}
+          <div className="grid grid-cols-[1fr_1.7fr] gap-3">
+            <button type="button" onClick={onClose} disabled={saving}
+              className="flex h-14 items-center justify-center gap-2 rounded-2xl border-2 border-rose-300 text-sm font-bold text-rose-600 transition hover:bg-rose-50 disabled:opacity-60 dark:border-rose-800 dark:text-rose-400 dark:hover:bg-rose-950/20">
+              <XCircle size={17} /> Cancel
+            </button>
+            <button type="submit" disabled={saving}
+              className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-emerald-600 text-sm font-bold text-white shadow-lg shadow-emerald-600/25 transition hover:bg-emerald-700 disabled:opacity-60">
+              <HardDrive size={17} />
+              {saving ? 'Saving…' : 'Save Permission Type'}
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  )
 }
 
 function GeneralSettings({ settings, onUpdate, onSettingsSaved }) {

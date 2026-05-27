@@ -12,12 +12,13 @@ class Employee extends Model
     protected $fillable = [
         'department_id', 'position_id', 'branch_id', 'employee_code', 'first_name', 'last_name',
         'phone', 'telegram_chat_id', 'address', 'photo_path', 'hire_date', 'employment_type', 'status', 'face_template_status',
-        'require_face_verification', 'require_gps',
+        'require_face_verification', 'require_gps', 'require_ip_restriction',
     ];
 
     protected $casts = [
         'require_face_verification' => 'boolean',
         'require_gps' => 'boolean',
+        'require_ip_restriction' => 'boolean',
     ];
 
     public function getPhotoUrlAttribute(): ?string
@@ -40,4 +41,7 @@ class Employee extends Model
     public function user() { return $this->hasOne(User::class); }
     public function attendances() { return $this->hasMany(Attendance::class); }
     public function visits() { return $this->hasMany(CustomerVisit::class); }
+    public function salarySetup() { return $this->hasOne(SalarySetup::class); }
+    public function payrollItems() { return $this->hasMany(PayrollItem::class); }
+    public function salaryAdvances() { return $this->hasMany(SalaryAdvance::class); }
 }

@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Bell, CalendarDays, Check, ChevronRight, Clock, Download,
+  Bell, CalendarDays, Check, ChevronDown, ChevronRight, Clock, Download,
   FileText, Paperclip, Pencil, Plus, RefreshCw, Search,
-  SlidersHorizontal, Trash2, X, XCircle,
+  Send, SlidersHorizontal, Trash2, UploadCloud, UserRound, X, XCircle,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { newRequestForm, REQUEST_CATEGORIES, PERMISSION_REQUEST_TYPES, requestTypeMeta } from '../constants/permissionRequestTypes'
-import { permissionRequestService } from '../services/api'
+import { api, permissionRequestService } from '../services/api'
 import { apiError, canAccess, employeeFullName, titleCase } from '../utils/format'
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -30,6 +30,21 @@ function fmtDuration(start, end) {
   return days === 1 ? '1 Day' : `${days} Days`
 }
 
+function calcDays(start, end) {
+  if (!start || !end) return 1
+  const a = new Date(`${start}T00:00:00`)
+  const b = new Date(`${end}T00:00:00`)
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime()) || b < a) return 1
+  return Math.round((b - a) / 86400000) + 1
+}
+
+function calcHours(start, end) {
+  if (!start || !end || end <= start) return 0
+  const [sh, sm] = start.split(':').map(Number)
+  const [eh, em] = end.split(':').map(Number)
+  return Math.round((((eh * 60 + em) - (sh * 60 + sm)) / 60) * 100) / 100
+}
+
 function fmtSubmittedAt(iso) {
   if (!iso) return { date: '-', time: '-' }
   const dt = new Date(iso)
@@ -48,6 +63,8 @@ function mapApiRequest(row) {
     id: row.request_code,
     employeeId: row.employee_id,
     employeeName: employeeFullName(row.employee),
+    replacementEmployeeId: row.replacement_employee_id || '',
+    replacementName: row.replacement_employee ? employeeFullName(row.replacement_employee) : 'None',
     department: row.employee?.department?.name || '-',
     type: row.type,
     date: row.request_date,
@@ -55,7 +72,16 @@ function mapApiRequest(row) {
     dateRange: fmtDateRange(row.request_date, row.request_date_end),
     duration: fmtDuration(row.request_date, row.request_date_end),
     time: row.request_time || null,
+    startTime: row.start_time || row.request_time || null,
+    endTime: row.end_time || null,
+    durationType: row.duration_type || 'single_day',
+    dayPart: row.day_part || null,
+    totalHours: row.total_hours || null,
+    totalDays: row.total_days || null,
     reason: row.reason,
+    note: row.note || null,
+    attachmentPath: row.attachment_path || null,
+    attachmentName: row.attachment_name || null,
     status: titleCase(row.status),
     submittedAt: s.date,
     submittedTime: s.time,
@@ -102,6 +128,17 @@ const STATUS_STYLES = {
   Rejected: 'bg-rose-50 text-rose-700 ring-rose-200 dark:bg-rose-950/30 dark:text-rose-300 dark:ring-rose-900/60',
 }
 
+const REASON_OPTIONS = [
+  'Personal matter',
+  'Family matter',
+  'Sick / health reason',
+  'Traffic issue',
+  'Customer visit',
+  'Company task',
+  'Emergency',
+  'Other',
+]
+
 function StatusBadge({ status }) {
   return (
     <span className={clsx('inline-flex shrink-0 items-center rounded-full px-2.5 py-1 text-xs font-bold ring-1', STATUS_STYLES[status] || STATUS_STYLES.Pending)}>
@@ -122,7 +159,6 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
   const [loading, setLoading]         = useState(true)
   const [selected, setSelected]       = useState(null)
   const [notice, setNotice]           = useState({ text: '', ok: true })
-  const [mobileTab, setMobileTab]     = useState('overview')
   const [statusTab, setStatusTab]     = useState('All')
   const [typeFilter, setTypeFilter]   = useState('')
   const [deptFilter, setDeptFilter]   = useState('')
@@ -134,6 +170,8 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
   const [editingId, setEditingId]           = useState(null)
   const [submitting, setSubmitting]         = useState(false)
   const [form, setForm]               = useState(() => newRequestForm('Leave Request'))
+  const [replacementOptions, setReplacementOptions] = useState([])
+  const [permissionTypes, setPermissionTypes]       = useState([])
   const [showMobileDetail, setShowMobileDetail] = useState(false)
 
   const notify = (text, ok = true) => {
@@ -154,6 +192,19 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
   }, [])
 
   useEffect(() => { load() }, [load])
+
+  useEffect(() => {
+    api.get('/permission-types')
+      .then((res) => setPermissionTypes(res.data?.data ?? res.data ?? []))
+      .catch(() => setPermissionTypes([]))
+  }, [])
+
+  useEffect(() => {
+    if (!canSubmit) return
+    permissionRequestService.replacements()
+      .then(setReplacementOptions)
+      .catch(() => setReplacementOptions([]))
+  }, [canSubmit])
 
   useEffect(() => {
     if (!pendingRequestType) return
@@ -196,13 +247,13 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
     return { cats, total, totalPending }
   }, [requests])
 
-  const recentRequests = useMemo(() => requests.slice(0, 5), [requests])
-  const myRequests = useMemo(() => requests.filter((r) => r.employeeId === employeeId), [requests, employeeId])
 
   // ── actions ──────────────────────────────────────────────────────────────
 
+  const defaultType = () => permissionTypes[0]?.name || 'Personal Permission'
+
   const openForm = (type) => {
-    setForm(newRequestForm(type))
+    setForm(newRequestForm(type || defaultType()))
     setEditingId(null)
     setShowTypePicker(false)
     setShowForm(true)
@@ -211,10 +262,19 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
   const openEdit = (req) => {
     setForm({
       type: req.type,
+      replacementEmployeeId: req.replacementEmployeeId || '',
+      reasonType: REASON_OPTIONS.includes(req.reason) ? req.reason : 'Other',
+      durationType: req.durationType || 'single_day',
       date: isoDay(req.date),
       dateEnd: isoDay(req.dateEnd || req.date),
-      time: req.time || '',
+      time: req.startTime || req.time || '',
+      timeTo: req.endTime || '',
+      dayPart: req.dayPart || 'Full Day',
+      totalDays: req.totalDays || calcDays(isoDay(req.date), isoDay(req.dateEnd || req.date)),
+      totalHours: req.totalHours || calcHours(req.startTime || req.time, req.endTime),
       reason: req.reason,
+      note: req.note || '',
+      attachment: null,
       gps: '',
       emergency: req.emergency,
     })
@@ -225,14 +285,45 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
   const submitRequest = async (e) => {
     e.preventDefault()
     if (submitting) return
-    const meta = requestTypeMeta(form.type)
-    const payload = {
-      type: form.type,
-      request_date: form.date,
-      request_date_end: meta.showDateRange ? (form.dateEnd || form.date) : form.date,
-      request_time: meta.showTime && form.time ? form.time : null,
-      reason: form.reason || 'No reason provided.',
-      is_emergency: form.emergency,
+    const reason = form.reason || form.reasonType
+    const startDate = form.date
+    const endDate = form.durationType === 'multiple_day' ? (form.dateEnd || form.date) : form.date
+    const totalDays = form.durationType === 'multiple_day' ? calcDays(startDate, endDate) : 1
+    const totalHours = form.durationType === 'hours' ? calcHours(form.time, form.timeTo) : null
+
+    if (!form.type || !reason || !startDate) {
+      notify('Please complete all required fields.', false)
+      return
+    }
+    if (form.durationType === 'hours' && (!form.time || !form.timeTo || totalHours <= 0)) {
+      notify('Please select a valid start and end time.', false)
+      return
+    }
+
+    const payload = new FormData()
+    payload.append('type', form.type)
+    payload.append('replacement_employee_id', form.replacementEmployeeId || '')
+    payload.append('request_date', startDate)
+    payload.append('request_date_end', endDate)
+    payload.append('duration_type', form.durationType)
+    payload.append('reason', reason)
+    payload.append('note', form.note || '')
+    payload.append('is_emergency', form.type === 'Emergency Leave' ? '1' : (form.emergency ? '1' : '0'))
+
+    if (form.durationType === 'hours') {
+      payload.append('request_time', form.time)
+      payload.append('start_time', form.time)
+      payload.append('end_time', form.timeTo)
+      payload.append('total_hours', String(totalHours))
+    } else if (form.durationType === 'multiple_day') {
+      payload.append('total_days', String(totalDays))
+    } else {
+      payload.append('day_part', form.dayPart || 'Full Day')
+      payload.append('total_days', '1')
+    }
+
+    if (form.attachment) {
+      payload.append('attachment', form.attachment)
     }
     setSubmitting(true)
     try {
@@ -306,6 +397,22 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
 
       {/* ══════════════ DESKTOP ══════════════════════════════════════════════ */}
       <div className="hidden lg:block space-y-5">
+        {/* ── Desktop inline form (replaces list when showForm=true) ───────── */}
+        {showForm && (
+          <DesktopFormView
+            form={form}
+            setForm={setForm}
+            replacementOptions={replacementOptions}
+            permissionTypes={permissionTypes}
+            isEdit={Boolean(editingId)}
+            submitting={submitting}
+            onClose={() => { setShowForm(false); setEditingId(null) }}
+            onSubmit={submitRequest}
+          />
+        )}
+
+        {/* ── List view (hidden while form is open) ───────────────────────── */}
+        <div className={showForm ? 'hidden' : 'space-y-5'}>
         {/* Header */}
         <div className="flex items-start justify-between">
           <div>
@@ -316,7 +423,7 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
             {canSubmit && (
               <button
                 type="button"
-                onClick={() => setShowTypePicker(true)}
+                onClick={() => openForm(defaultType())}
                 className="inline-flex h-10 items-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700"
               >
                 <Plus size={16} />
@@ -506,7 +613,8 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
             />
           )}
         </div>
-      </div>
+        </div> {/* end list-view wrapper */}
+      </div>   {/* end hidden lg:block */}
 
       {/* ══════════════ MOBILE ═══════════════════════════════════════════════ */}
       <div className="lg:hidden">
@@ -525,7 +633,7 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
         )}
 
         {/* Type picker sheet */}
-        {showTypePicker && (
+        {false && showTypePicker && (
           <TypePickerSheet onClose={() => setShowTypePicker(false)} onPick={openForm} />
         )}
 
@@ -540,112 +648,49 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
           </button>
         </div>
 
-        {/* Overview / My Requests tabs */}
-        <div className="mb-4 flex rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
-          {['overview', 'my'].map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setMobileTab(t)}
-              className={clsx(
-                'flex-1 rounded-lg py-2 text-sm font-semibold transition',
-                mobileTab === t
-                  ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-900 dark:text-white'
-                  : 'text-slate-500 dark:text-slate-400',
-              )}
-            >
-              {t === 'overview' ? 'Overview' : 'My Requests'}
-            </button>
-          ))}
-        </div>
-
-        {/* Overview tab */}
-        {mobileTab === 'overview' && (
-          <div className="space-y-4">
-            {/* Summary cards 2×2 + total */}
-            <div className="grid grid-cols-2 gap-3">
-              {stats.cats.map(({ label, count, pending }) => (
-                <MobileStatCard key={label} label={label} count={count} pending={pending} />
-              ))}
-              <MobileStatCard label="Total Requests" count={stats.total} pending={stats.totalPending} wide />
-            </div>
-
-            {/* New Request button */}
-            {canSubmit && (
+        {/* My Requests — shown directly, no tab switching */}
+        <div className="space-y-4">
+          {/* Status filter pills */}
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {['All', 'Pending', 'Approved', 'Rejected'].map((s) => (
               <button
+                key={s}
                 type="button"
-                onClick={() => setShowTypePicker(true)}
-                className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 text-sm font-bold text-white shadow-lg shadow-emerald-600/25 transition active:scale-[0.98]"
-              >
-                <Plus size={18} />
-                New Request
-              </button>
-            )}
-
-            {/* Recent Requests */}
-            <div>
-              <div className="mb-3 flex items-center justify-between">
-                <p className="font-bold text-slate-900 dark:text-white">Recent Requests</p>
-                <button type="button" onClick={() => setMobileTab('my')} className="text-xs font-bold text-emerald-600">View All</button>
-              </div>
-              <div className="space-y-2">
-                {loading && <p className="py-4 text-center text-sm text-slate-400">Loading…</p>}
-                {recentRequests.map((req) => (
-                  <MobileRequestRow key={req.dbId} req={req} onPress={() => selectRow(req)} />
-                ))}
-                {!loading && recentRequests.length === 0 && (
-                  <p className="py-6 text-center text-sm text-slate-400">No requests yet.</p>
+                onClick={() => setStatusTab(s)}
+                className={clsx(
+                  'shrink-0 rounded-full px-4 py-1.5 text-xs font-bold transition',
+                  statusTab === s
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
                 )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* My Requests tab */}
-        {mobileTab === 'my' && (
-          <div className="space-y-4">
-            {/* Status filter tabs */}
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {['All', 'Pending', 'Approved', 'Rejected'].map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  onClick={() => setStatusTab(s)}
-                  className={clsx(
-                    'shrink-0 rounded-full px-4 py-1.5 text-xs font-bold transition',
-                    statusTab === s
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
-                  )}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-
-            {/* Grouped list */}
-            {loading && <p className="py-8 text-center text-sm text-slate-400">Loading…</p>}
-            {!loading && filtered.length === 0 && (
-              <p className="py-10 text-center text-sm text-slate-400">No requests found.</p>
-            )}
-            {groupByMonth(filtered).map(([month, reqs]) => (
-              <div key={month}>
-                <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">{month}</p>
-                <div className="space-y-2">
-                  {reqs.map((req) => (
-                    <MobileRequestRow key={req.dbId} req={req} showEmployee={canViewAll} onPress={() => selectRow(req)} />
-                  ))}
-                </div>
-              </div>
+              >
+                {s}
+              </button>
             ))}
           </div>
-        )}
+
+          {/* Grouped list */}
+          {loading && <p className="py-8 text-center text-sm text-slate-400">Loading…</p>}
+          {!loading && filtered.length === 0 && (
+            <p className="py-10 text-center text-sm text-slate-400">No requests found.</p>
+          )}
+          {groupByMonth(filtered).map(([month, reqs]) => (
+            <div key={month}>
+              <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-400">{month}</p>
+              <div className="space-y-2">
+                {reqs.map((req) => (
+                  <MobileRequestRow key={req.dbId} req={req} showEmployee={canViewAll} onPress={() => selectRow(req)} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
 
         {/* Mobile FAB */}
         {canSubmit && (
           <button
             type="button"
-            onClick={() => setShowTypePicker(true)}
+            onClick={() => openForm(defaultType())}
             className="fixed bottom-24 right-5 z-30 grid h-14 w-14 place-items-center rounded-full bg-emerald-600 text-white shadow-xl shadow-emerald-900/25 transition active:scale-95"
             aria-label="New request"
           >
@@ -654,17 +699,214 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
         )}
       </div>
 
-      {/* ── Request form modal (shared) ─────────────────────────────────── */}
+      {/* ── Mobile-only form overlay ─────────────────────────────────────── */}
       {showForm && (
-        <RequestFormModal
-          form={form}
-          setForm={setForm}
-          isEdit={Boolean(editingId)}
-          submitting={submitting}
-          onClose={() => { setShowForm(false); setEditingId(null) }}
-          onSubmit={submitRequest}
-        />
+        <div className="lg:hidden">
+          <RequestPermissionFormModal
+            form={form}
+            setForm={setForm}
+            replacementOptions={replacementOptions}
+            permissionTypes={permissionTypes}
+            isEdit={Boolean(editingId)}
+            submitting={submitting}
+            onClose={() => { setShowForm(false); setEditingId(null) }}
+            onSubmit={submitRequest}
+          />
+        </div>
       )}
+    </div>
+  )
+}
+
+// ─── Desktop: inline form view ───────────────────────────────────────────────
+
+function DesktopFormView({ form, setForm, replacementOptions, permissionTypes = [], isEdit, submitting, onClose, onSubmit }) {
+  const totalDays = calcDays(form.date, form.dateEnd)
+  const totalHours = calcHours(form.time, form.timeTo)
+
+  const setType = (type) => {
+    const next = newRequestForm(type)
+    setForm({ ...next, replacementEmployeeId: form.replacementEmployeeId, reasonType: form.reasonType, reason: form.reason, note: form.note, date: form.date, dateEnd: form.dateEnd, durationType: form.durationType, dayPart: form.dayPart, attachment: form.attachment })
+  }
+
+  const setDurationType = (durationType) => {
+    setForm((f) => ({ ...f, durationType, dateEnd: durationType === 'multiple_day' ? f.dateEnd : f.date, time: durationType === 'hours' ? (f.time || defaultTime()) : '', timeTo: durationType === 'hours' ? (f.timeTo || defaultTime(60)) : '', dayPart: durationType === 'single_day' ? (f.dayPart || 'Full Day') : 'Full Day' }))
+  }
+
+  const coverName = form.replacementEmployeeId
+    ? (replacementOptions.find((e) => String(e.id) === String(form.replacementEmployeeId))
+        ? employeeFullName(replacementOptions.find((e) => String(e.id) === String(form.replacementEmployeeId)))
+        : 'Selected')
+    : 'No Cover'
+
+  return (
+    <div className="space-y-5">
+      {/* ── Page header ──────────────────────────────────────────────── */}
+      <div className="flex items-center gap-3">
+        <button type="button" onClick={onClose} className="grid h-10 w-10 place-items-center rounded-full text-emerald-700 transition hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950/40">
+          <ChevronRight size={24} className="rotate-180" />
+        </button>
+        <div>
+          <h2 className="text-2xl font-bold text-slate-950 dark:text-white">{isEdit ? 'Edit Request' : 'Request Permission'}</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Submit your permission or leave request.</p>
+        </div>
+      </div>
+
+      {/* ── 2-column layout ──────────────────────────────────────────── */}
+      <form onSubmit={onSubmit} className="grid gap-6 xl:grid-cols-[1fr_320px]">
+
+        {/* ── Left: form card ─────────────────────────────────────────── */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="space-y-6">
+
+            {/* Covered By */}
+            <div>
+              <FieldLabel text="Covered By" />
+              <button
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, replacementEmployeeId: '' }))}
+                className={clsx(
+                  'mb-3 flex w-full items-center gap-4 rounded-xl border-2 px-4 py-3.5 text-left transition',
+                  !form.replacementEmployeeId
+                    ? 'border-emerald-500 bg-emerald-50 dark:border-emerald-600 dark:bg-emerald-950/30'
+                    : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-600',
+                )}
+              >
+                <span className={clsx('grid h-10 w-10 shrink-0 place-items-center rounded-full border-2 border-dashed transition', !form.replacementEmployeeId ? 'border-emerald-500 bg-emerald-100 text-emerald-600 dark:border-emerald-400 dark:bg-emerald-950/50 dark:text-emerald-400' : 'border-slate-300 bg-slate-50 text-slate-400 dark:border-slate-600 dark:bg-slate-900')}>
+                  <UserRound size={16} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className={clsx('text-sm font-bold', !form.replacementEmployeeId ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-600 dark:text-slate-400')}>No Cover</p>
+                  <p className="text-xs text-slate-400">Not covered by anyone</p>
+                </div>
+                <span className={clsx('grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 transition', !form.replacementEmployeeId ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300 dark:border-slate-600')}>
+                  {!form.replacementEmployeeId && <Check size={11} className="text-white" />}
+                </span>
+              </button>
+              <div className={clsx('rounded-xl border-2 p-3 transition', form.replacementEmployeeId ? 'border-emerald-500 bg-emerald-50/50 dark:border-emerald-600 dark:bg-emerald-950/20' : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950')}>
+                <p className="mb-2 text-xs font-bold text-slate-500 dark:text-slate-400">Select who will cover</p>
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-emerald-600 dark:text-emerald-400"><UserRound size={17} /></span>
+                  <select className="h-12 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-10 pr-10 text-sm font-semibold text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-900 dark:text-white" value={form.replacementEmployeeId || ''} onChange={(e) => setForm((f) => ({ ...f, replacementEmployeeId: e.target.value }))}>
+                    <option value="">Choose a cover person…</option>
+                    {replacementOptions.map((e) => <option key={e.id} value={e.id}>{employeeFullName(e)}</option>)}
+                  </select>
+                  <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                </div>
+                {form.replacementEmployeeId && (
+                  <button type="button" onClick={() => setForm((f) => ({ ...f, replacementEmployeeId: '' }))} className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-rose-500 hover:text-rose-700 dark:text-rose-400">
+                    <X size={12} /> Clear selection
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Permission Type */}
+            <PermissionTypePicker
+              permissionTypes={permissionTypes}
+              value={form.type}
+              onChange={setType}
+            />
+
+            {/* Duration Type */}
+            <div>
+              <FieldLabel text="Duration Type" required />
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { id: 'single_day', label: 'Single Day', icon: CalendarDays },
+                  { id: 'multiple_day', label: 'Multiple Day', icon: CalendarDays },
+                  { id: 'hours', label: 'Hours', icon: Clock },
+                ].map((item) => {
+                  const DIcon = item.icon
+                  const sel = form.durationType === item.id
+                  return (
+                    <button key={item.id} type="button" onClick={() => setDurationType(item.id)} className={clsx('flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition', sel ? 'border-emerald-500 bg-emerald-50 shadow-sm dark:border-emerald-600 dark:bg-emerald-950/30' : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950')}>
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300"><DIcon size={17} /></span>
+                      <span className="flex-1 text-sm font-bold text-slate-900 dark:text-white">{item.label}</span>
+                      <span className={clsx('grid h-5 w-5 shrink-0 place-items-center rounded-full border-2', sel ? 'border-emerald-600' : 'border-slate-300 dark:border-slate-600')}>{sel && <span className="h-2.5 w-2.5 rounded-full bg-emerald-600" />}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Date / Time section */}
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 dark:border-emerald-900/60 dark:bg-emerald-950/20">
+              {form.durationType === 'single_day' && (
+                <div className="space-y-4">
+                  <FormField label="Date *"><IconInput icon={CalendarDays}><input type="date" className={mobileInputCls} value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value, dateEnd: e.target.value }))} required /></IconInput></FormField>
+                  <div className="grid grid-cols-2 gap-3">
+                    {['Full Day', 'Half Day'].map((part) => (
+                      <button key={part} type="button" onClick={() => setForm((f) => ({ ...f, dayPart: part }))} className={clsx('h-12 rounded-xl border text-sm font-bold transition', form.dayPart === part ? 'border-emerald-500 bg-white text-emerald-700 shadow-sm' : 'border-slate-200 bg-white/70 text-slate-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300')}>{part}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {form.durationType === 'multiple_day' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField label="Start Date *"><IconInput icon={CalendarDays}><input type="date" className={mobileInputCls} value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value, dateEnd: f.dateEnd < e.target.value ? e.target.value : f.dateEnd }))} required /></IconInput></FormField>
+                    <FormField label="End Date *"><IconInput icon={CalendarDays}><input type="date" className={mobileInputCls} value={form.dateEnd} min={form.date} onChange={(e) => setForm((f) => ({ ...f, dateEnd: e.target.value }))} required /></IconInput></FormField>
+                  </div>
+                  <ReadOnlyTotal label="Total Days" value={totalDays} suffix="Day(s)" />
+                </div>
+              )}
+              {form.durationType === 'hours' && (
+                <div className="space-y-4">
+                  <FormField label="Date *"><IconInput icon={CalendarDays}><input type="date" className={mobileInputCls} value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value, dateEnd: e.target.value }))} required /></IconInput></FormField>
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField label="Start Time *"><IconInput icon={Clock}><input type="time" className={mobileInputCls} value={form.time || ''} onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))} required /></IconInput></FormField>
+                    <FormField label="End Time *"><IconInput icon={Clock}><input type="time" className={mobileInputCls} value={form.timeTo || ''} onChange={(e) => setForm((f) => ({ ...f, timeTo: e.target.value }))} required /></IconInput></FormField>
+                  </div>
+                  <ReadOnlyTotal label="Total Hours" value={totalHours} suffix="Hour(s)" invalid={form.time && form.timeTo && totalHours <= 0} />
+                </div>
+              )}
+            </div>
+
+            {/* Reason */}
+            <FormField label="Reason *">
+              <textarea className="min-h-28 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white" placeholder="Write reason..." value={form.reason || ''} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} maxLength={500} required />
+              <p className="mt-1 text-right text-xs font-medium text-slate-500">{(form.reason || '').length}/500</p>
+            </FormField>
+          </div>
+        </div>
+
+        {/* ── Right: summary + actions ────────────────────────────────── */}
+        <div className="flex flex-col gap-4">
+          {/* Summary card */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <p className="mb-4 text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">Request Summary</p>
+            <div className="space-y-3 text-sm">
+              {[
+                { label: 'Type',     value: form.type },
+                { label: 'Duration', value: form.durationType === 'hours' ? `${totalHours} hour(s)` : form.durationType === 'multiple_day' ? `${totalDays} day(s)` : `1 day (${form.dayPart})` },
+                { label: 'Date',     value: form.date ? fmtDate(form.date) : '—' },
+                ...(form.durationType === 'multiple_day' ? [{ label: 'End', value: form.dateEnd ? fmtDate(form.dateEnd) : '—' }] : []),
+                { label: 'Cover',    value: coverName },
+              ].map(({ label, value }) => (
+                <div key={label} className="flex items-start justify-between gap-3">
+                  <span className="shrink-0 text-slate-400">{label}</span>
+                  <span className="text-right font-semibold text-slate-700 dark:text-slate-200">{value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Spacer pushes buttons to bottom on tall screens */}
+          <div className="flex-1" />
+
+          {/* Action buttons */}
+          <div className="grid grid-cols-2 gap-3">
+            <button type="button" onClick={onClose} disabled={submitting} className="inline-flex h-14 items-center justify-center gap-2 rounded-xl border border-rose-300 bg-white text-sm font-black text-rose-600 transition hover:bg-rose-50 disabled:opacity-60 dark:border-rose-900 dark:bg-slate-950 dark:hover:bg-rose-950/20">
+              <XCircle size={18} /> Cancel
+            </button>
+            <button type="submit" disabled={submitting} className="inline-flex h-14 items-center justify-center gap-2 rounded-xl bg-emerald-600 text-sm font-black text-white shadow-lg shadow-emerald-600/25 transition hover:bg-emerald-700 disabled:opacity-60">
+              <Send size={18} />
+              {submitting ? (isEdit ? 'Saving...' : 'Requesting...') : (isEdit ? 'Save Changes' : 'Request')}
+            </button>
+          </div>
+        </div>
+      </form>
     </div>
   )
 }
@@ -854,11 +1096,12 @@ function MobileRequestRow({ req, showEmployee, onPress }) {
 // ─── Mobile: type picker sheet ───────────────────────────────────────────────
 
 const PICKER_TYPES = [
-  { id: 'Leave Request',      label: 'Leave Request',      desc: 'Request time off for vacation, personal or other reasons.' },
-  { id: 'Request Permission', label: 'Permission Request', desc: 'Request permission for personal work or other activities.' },
-  { id: 'Outdoor Work',       label: 'Outdoor Work Request', desc: 'Request to work from outdoor location.' },
-  { id: 'Sick Leave',         label: 'Sick Leave',         desc: 'Request sick leave due to illness.' },
-  { id: 'Custom Request',     label: 'Custom Request',     desc: 'Request for other types that are not listed.' },
+  { id: 'Personal Permission', label: 'Personal Permission', desc: 'Fast request for personal matters.' },
+  { id: 'Late Check In',       label: 'Late Check In',       desc: 'Request approval for late arrival.' },
+  { id: 'Early Check Out',     label: 'Early Check Out',     desc: 'Request approval to leave early.' },
+  { id: 'Leave Request',       label: 'Leave Request',       desc: 'Request time off for vacation or personal reasons.' },
+  { id: 'Sick Leave',          label: 'Sick Leave',          desc: 'Request sick leave due to illness.' },
+  { id: 'Outdoor Work',        label: 'Outdoor Work',        desc: 'Request to work from an outdoor location.' },
 ]
 
 function TypePickerSheet({ onClose, onPick }) {
@@ -1024,6 +1267,303 @@ function ApprovalStep({ step, label, reviewer, status }) {
 }
 
 // ─── Request form modal ──────────────────────────────────────────────────────
+
+function RequestPermissionFormModal({ form, setForm, replacementOptions, permissionTypes = [], isEdit, submitting, onClose, onSubmit }) {
+  const totalDays = calcDays(form.date, form.dateEnd)
+  const totalHours = calcHours(form.time, form.timeTo)
+  const attachmentPreview = form.attachment ? URL.createObjectURL(form.attachment) : null
+
+  const setType = (type) => {
+    const next = newRequestForm(type)
+    setForm({ ...next, replacementEmployeeId: form.replacementEmployeeId, reasonType: form.reasonType, reason: form.reason, note: form.note, date: form.date, dateEnd: form.dateEnd, durationType: form.durationType, dayPart: form.dayPart, attachment: form.attachment })
+  }
+
+  const setDurationType = (durationType) => {
+    setForm((f) => ({ ...f, durationType, dateEnd: durationType === 'multiple_day' ? f.dateEnd : f.date, time: durationType === 'hours' ? (f.time || defaultTime()) : '', timeTo: durationType === 'hours' ? (f.timeTo || defaultTime(60)) : '', dayPart: durationType === 'single_day' ? (f.dayPart || 'Full Day') : 'Full Day' }))
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-50 dark:bg-slate-950">
+      <form className="mx-auto flex min-h-full w-full max-w-3xl flex-col" onSubmit={onSubmit}>
+        <div className="sticky top-0 z-20 bg-white/95 px-5 pb-5 pt-6 shadow-sm backdrop-blur dark:bg-slate-950/95 sm:px-8">
+          <div className="grid grid-cols-[44px_1fr_44px] items-center">
+            <button type="button" onClick={onClose} className="grid h-11 w-11 place-items-center rounded-full text-emerald-700 transition hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950/40">
+              <ChevronRight size={26} className="rotate-180" />
+            </button>
+            <div className="text-center">
+              <h3 className="text-2xl font-black text-slate-950 dark:text-white">{isEdit ? 'Edit Request' : 'Request Permission'}</h3>
+              <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">Submit your permission or leave request.</p>
+            </div>
+            <span />
+          </div>
+        </div>
+
+        <div className="flex-1 space-y-5 px-4 py-5 pb-28 sm:px-8">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xl shadow-slate-200/60 dark:border-slate-800 dark:bg-slate-900 dark:shadow-none sm:p-6">
+            <div className="space-y-5">
+              {/* ── Covered By ───────────────────────────────────────────── */}
+              <div>
+                <FieldLabel text="Covered By" />
+
+                {/* No Cover card */}
+                <button
+                  type="button"
+                  onClick={() => setForm((f) => ({ ...f, replacementEmployeeId: '' }))}
+                  className={clsx(
+                    'mb-3 flex w-full items-center gap-4 rounded-xl border-2 px-4 py-3.5 text-left transition',
+                    !form.replacementEmployeeId
+                      ? 'border-emerald-500 bg-emerald-50 dark:border-emerald-600 dark:bg-emerald-950/30'
+                      : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-600',
+                  )}
+                >
+                  <span className={clsx(
+                    'grid h-10 w-10 shrink-0 place-items-center rounded-full border-2 border-dashed transition',
+                    !form.replacementEmployeeId
+                      ? 'border-emerald-500 bg-emerald-100 text-emerald-600 dark:border-emerald-400 dark:bg-emerald-950/50 dark:text-emerald-400'
+                      : 'border-slate-300 bg-slate-50 text-slate-400 dark:border-slate-600 dark:bg-slate-900',
+                  )}>
+                    <UserRound size={16} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className={clsx('text-sm font-bold', !form.replacementEmployeeId ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-600 dark:text-slate-400')}>
+                      No Cover
+                    </p>
+                    <p className="text-xs text-slate-400">Not covered by anyone</p>
+                  </div>
+                  <span className={clsx(
+                    'grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 transition',
+                    !form.replacementEmployeeId
+                      ? 'border-emerald-600 bg-emerald-600'
+                      : 'border-slate-300 dark:border-slate-600',
+                  )}>
+                    {!form.replacementEmployeeId && <Check size={11} className="text-white" />}
+                  </span>
+                </button>
+
+                {/* Assign replacement dropdown */}
+                <div className={clsx(
+                  'rounded-xl border-2 p-3 transition',
+                  form.replacementEmployeeId
+                    ? 'border-emerald-500 bg-emerald-50/50 dark:border-emerald-600 dark:bg-emerald-950/20'
+                    : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950',
+                )}>
+                  <p className="mb-2 text-xs font-bold text-slate-500 dark:text-slate-400">Select who will cover</p>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-emerald-600 dark:text-emerald-400">
+                      <UserRound size={17} />
+                    </span>
+                    <select
+                      className="h-12 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-10 pr-10 text-sm font-semibold text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                      value={form.replacementEmployeeId || ''}
+                      onChange={(e) => setForm((f) => ({ ...f, replacementEmployeeId: e.target.value }))}
+                    >
+                      <option value="">Choose a cover person…</option>
+                      {replacementOptions.map((employee) => (
+                        <option key={employee.id} value={employee.id}>{employeeFullName(employee)}</option>
+                      ))}
+                    </select>
+                    <ChevronDown size={16} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  </div>
+                  {form.replacementEmployeeId && (
+                    <button
+                      type="button"
+                      onClick={() => setForm((f) => ({ ...f, replacementEmployeeId: '' }))}
+                      className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-rose-500 hover:text-rose-700 dark:text-rose-400"
+                    >
+                      <X size={12} /> Clear selection
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <PermissionTypePicker
+                permissionTypes={permissionTypes}
+                value={form.type}
+                onChange={setType}
+              />
+
+              <div>
+                <FieldLabel text="Duration Type" required />
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  {[
+                    { id: 'single_day', label: 'Single Day', icon: CalendarDays },
+                    { id: 'multiple_day', label: 'Multiple Day', icon: CalendarDays },
+                    { id: 'hours', label: 'Hours', icon: Clock },
+                  ].map((item) => {
+                    const DIcon = item.icon
+                    const selected = form.durationType === item.id
+                    return (
+                      <button key={item.id} type="button" onClick={() => setDurationType(item.id)} className={clsx('flex min-h-16 items-center gap-3 rounded-xl border px-4 text-left transition duration-200', selected ? 'border-emerald-500 bg-emerald-50 shadow-sm shadow-emerald-100 dark:border-emerald-600 dark:bg-emerald-950/30 dark:shadow-none' : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950')}>
+                        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300"><DIcon size={19} /></span>
+                        <span className="min-w-0 flex-1 text-sm font-bold text-slate-900 dark:text-white">{item.label}</span>
+                        <span className={clsx('grid h-6 w-6 shrink-0 place-items-center rounded-full border-2', selected ? 'border-emerald-600' : 'border-slate-300 dark:border-slate-600')}>{selected && <span className="h-3 w-3 rounded-full bg-emerald-600" />}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 dark:border-emerald-900/60 dark:bg-emerald-950/20">
+                {form.durationType === 'single_day' && (
+                  <div className="space-y-4">
+                    <FormField label="Date *"><IconInput icon={CalendarDays}><input type="date" className={mobileInputCls} value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value, dateEnd: e.target.value }))} required /></IconInput></FormField>
+                    <div className="grid grid-cols-2 gap-3">
+                      {['Full Day', 'Half Day'].map((part) => (
+                        <button key={part} type="button" onClick={() => setForm((f) => ({ ...f, dayPart: part }))} className={clsx('h-12 rounded-xl border text-sm font-bold transition', form.dayPart === part ? 'border-emerald-500 bg-white text-emerald-700 shadow-sm' : 'border-slate-200 bg-white/70 text-slate-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300')}>{part}</button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {form.durationType === 'multiple_day' && (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <FormField label="Start Date *"><IconInput icon={CalendarDays}><input type="date" className={mobileInputCls} value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value, dateEnd: f.dateEnd < e.target.value ? e.target.value : f.dateEnd }))} required /></IconInput></FormField>
+                      <FormField label="End Date *"><IconInput icon={CalendarDays}><input type="date" className={mobileInputCls} value={form.dateEnd} min={form.date} onChange={(e) => setForm((f) => ({ ...f, dateEnd: e.target.value }))} required /></IconInput></FormField>
+                    </div>
+                    <ReadOnlyTotal label="Total Days" value={totalDays} suffix="Day(s)" />
+                  </div>
+                )}
+
+                {form.durationType === 'hours' && (
+                  <div className="space-y-4">
+                    <FormField label="Date *"><IconInput icon={CalendarDays}><input type="date" className={mobileInputCls} value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value, dateEnd: e.target.value }))} required /></IconInput></FormField>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <FormField label="Start Time *"><IconInput icon={Clock}><input type="time" className={mobileInputCls} value={form.time || ''} onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))} required /></IconInput></FormField>
+                      <FormField label="End Time *"><IconInput icon={Clock}><input type="time" className={mobileInputCls} value={form.timeTo || ''} onChange={(e) => setForm((f) => ({ ...f, timeTo: e.target.value }))} required /></IconInput></FormField>
+                    </div>
+                    <ReadOnlyTotal label="Total Hours" value={totalHours} suffix="Hour(s)" invalid={form.time && form.timeTo && totalHours <= 0} />
+                  </div>
+                )}
+              </div>
+
+              <FormField label="Reason *">
+                <textarea className="min-h-28 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white" placeholder="Write reason..." value={form.reason || ''} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} maxLength={500} required />
+                <p className="mt-1 text-right text-xs font-medium text-slate-500">{(form.reason || '').length}/500</p>
+              </FormField>
+
+              {false && (
+              <div>
+                <FieldLabel text="Attachment" optional />
+                <label className="flex cursor-pointer items-center gap-3 rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 px-4 py-4 transition hover:border-emerald-300 hover:bg-emerald-50/60 dark:border-slate-700 dark:bg-slate-950 dark:hover:border-emerald-800">
+                  <span className="grid h-11 w-11 place-items-center rounded-full bg-white text-emerald-600 shadow-sm dark:bg-slate-900"><UploadCloud size={20} /></span>
+                  <span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold text-slate-800 dark:text-white">{form.attachment?.name || 'Upload image or PDF'}</span><span className="text-xs font-medium text-slate-500">JPG, PNG, WEBP or PDF up to 5 MB</span></span>
+                  <input type="file" accept="image/*,.pdf" className="hidden" onChange={(e) => setForm((f) => ({ ...f, attachment: e.target.files?.[0] || null }))} />
+                </label>
+                {form.attachment && (
+                  <div className="mt-3 flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-950">
+                    {form.attachment.type?.startsWith('image/') ? <img src={attachmentPreview} alt="" className="h-14 w-14 rounded-lg object-cover" /> : <span className="grid h-14 w-14 place-items-center rounded-lg bg-rose-50 text-rose-600"><FileText size={22} /></span>}
+                    <div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-slate-800 dark:text-white">{form.attachment.name}</p><p className="text-xs text-slate-500">{Math.ceil(form.attachment.size / 1024)} KB</p></div>
+                    <button type="button" onClick={() => setForm((f) => ({ ...f, attachment: null }))} className="grid h-9 w-9 place-items-center rounded-full text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"><X size={18} /></button>
+                  </div>
+                )}
+              </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-4 py-4 shadow-[0_-12px_28px_rgba(15,23,42,0.08)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/95">
+          <div className="mx-auto grid max-w-3xl grid-cols-[1fr_1.5fr] gap-3">
+            <button type="button" onClick={onClose} className="inline-flex h-14 items-center justify-center gap-2 rounded-xl border border-rose-300 bg-white text-sm font-black text-rose-600 transition hover:bg-rose-50 disabled:opacity-60 dark:border-rose-900 dark:bg-slate-950" disabled={submitting}><XCircle size={19} />Cancel</button>
+            <button type="submit" className="inline-flex h-14 items-center justify-center gap-2 rounded-xl bg-emerald-600 text-sm font-black text-white shadow-lg shadow-emerald-600/25 transition hover:bg-emerald-700 disabled:opacity-60" disabled={submitting}><Send size={19} />{submitting ? (isEdit ? 'Saving...' : 'Requesting...') : (isEdit ? 'Save Changes' : 'Request')}</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+// ─── Permission Type picker (dropdown) ───────────────────────────────────────
+
+function PermissionTypePicker({ permissionTypes, value, onChange }) {
+  const selected = permissionTypes.find((pt) => pt.name === value)
+  const color = selected?.color || '#9ca3af'
+
+  return (
+    <div>
+      <FieldLabel text="Permission Type" required />
+      {permissionTypes.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-slate-200 py-4 text-center text-sm text-slate-400 dark:border-slate-700">
+          No permission types set up yet. Go to{' '}
+          <span className="font-semibold text-emerald-600">Permission Management → Permission Types</span>{' '}
+          to add some.
+        </div>
+      ) : (
+        <div className="relative">
+          {/* colored circle on the left */}
+          <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2">
+            <span
+              className="block h-5 w-5 rounded-full shadow-sm"
+              style={{ backgroundColor: color }}
+            />
+          </span>
+
+          <select
+            className="h-14 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-12 pr-10 text-sm font-semibold text-slate-700 shadow-sm transition focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-200 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:focus:border-emerald-600 dark:focus:ring-emerald-900/40"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            required
+          >
+            <option value="" disabled>Select permission type…</option>
+            {permissionTypes.map((pt) => (
+              <option key={pt.id} value={pt.name}>
+                {pt.name}
+              </option>
+            ))}
+          </select>
+
+          <ChevronDown
+            size={18}
+            className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"
+          />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function defaultTime(addMinutes = 0) {
+  const date = new Date(Date.now() + addMinutes * 60000)
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
+function FieldLabel({ text, required, optional }) {
+  return <label className="mb-2 block text-sm font-black text-slate-950 dark:text-white">{text}{required && <span className="ml-1 text-rose-500">*</span>}{optional && <span className="ml-1 font-semibold text-slate-400">(Optional)</span>}</label>
+}
+
+function FormSelect({ label, required, icon: Icon, value, onChange, placeholder, children }) {
+  return (
+    <div>
+      <FieldLabel text={label} required={required} />
+      <div className="relative">
+        <span className="pointer-events-none absolute left-4 top-1/2 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300"><Icon size={21} /></span>
+        <select className="h-16 w-full appearance-none rounded-xl border border-slate-200 bg-white pl-20 pr-12 text-base font-semibold text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white" value={value} onChange={(e) => onChange(e.target.value)} required={required}>
+          {placeholder && <option value="">{placeholder}</option>}
+          {children}
+        </select>
+        <ChevronDown size={21} className="pointer-events-none absolute right-5 top-1/2 -translate-y-1/2 text-slate-500" />
+      </div>
+    </div>
+  )
+}
+
+function IconInput({ icon: Icon, children }) {
+  return <div className="relative"><span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-emerald-600 dark:text-emerald-300"><Icon size={20} /></span>{children}</div>
+}
+
+function ReadOnlyTotal({ label, value, suffix, invalid }) {
+  return (
+    <div>
+      <FieldLabel text={label} required />
+      <div className={clsx('flex h-14 overflow-hidden rounded-xl border bg-white dark:bg-slate-950', invalid ? 'border-rose-300' : 'border-slate-200 dark:border-slate-700')}>
+        <div className="flex flex-1 items-center px-4 text-lg font-black text-slate-900 dark:text-white">{value || 0}</div>
+        <div className="flex min-w-28 items-center justify-center border-l border-emerald-200 bg-emerald-50 px-4 text-base font-bold text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300">{suffix}</div>
+      </div>
+      {invalid && <p className="mt-1 text-xs font-semibold text-rose-600">End time must be after start time.</p>}
+    </div>
+  )
+}
 
 function RequestFormModal({ form, setForm, isEdit, submitting, onClose, onSubmit }) {
   const meta = requestTypeMeta(form.type)
@@ -1198,3 +1738,4 @@ function FormField({ label, children }) {
 
 const filterInputCls = 'h-9 rounded-lg border border-slate-200 bg-white px-2 text-sm outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white'
 const fieldCls = 'h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white'
+const mobileInputCls = 'h-14 w-full rounded-xl border border-slate-200 bg-white pl-12 pr-4 text-base font-semibold text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white'

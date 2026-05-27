@@ -3,26 +3,34 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Employee;
 use App\Models\Notification;
 use App\Models\PermissionRequest;
 use App\Models\User;
 use App\Services\TelegramNotificationService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class PermissionRequestController extends Controller
 {
     private const TYPES = [
+        'Personal Permission',
+        'Late Check In',
+        'Early Check Out',
         'Leave Request',
         'Sick Leave',
+        'Emergency Leave',
+        'Outdoor Work',
+        'Work From Home',
+        'Overtime',
+        'Request Permission',
         'Early Leave',
         'Attendance Edit',
         'Manual Check In',
         'Missing Check Out',
         'Day Off',
-        'Outdoor Work',
-        'Request Permission',
         'Custom Request',
     ];
 
@@ -31,7 +39,7 @@ class PermissionRequestController extends Controller
     public function index(Request $request)
     {
         $query = PermissionRequest::query()
-            ->with(['employee.department', 'reviewer'])
+            ->with(['employee.department', 'replacementEmployee', 'reviewer'])
             ->when(
                 ! $request->user()->hasPermission('requests.view_all'),
                 fn ($q) => $q->where('employee_id', $request->user()->employee_id)
@@ -51,26 +59,32 @@ class PermissionRequestController extends Controller
             throw ValidationException::withMessages(['employee' => 'Your account is not linked to an employee profile.']);
         }
 
-        $data = $request->validate([
-            'type' => ['required', 'string', Rule::in(self::TYPES)],
-            'request_date' => ['required', 'date'],
-            'request_date_end' => ['required', 'date', 'after_or_equal:request_date'],
-            'request_time' => ['nullable', 'string', 'max:20'],
-            'reason' => ['required', 'string', 'max:5000'],
-            'is_emergency' => ['nullable', 'boolean'],
-            'gps_location' => ['nullable', 'string', 'max:500'],
-        ]);
+        $data = $this->validatedPayload($request);
+        $data = $this->normalizeDurationFields($data);
 
         $this->assertNoDuplicateActiveRequest($employee->id, $data);
 
+        $attachment = $this->storeAttachment($request);
+
         $record = PermissionRequest::create([
             'employee_id' => $employee->id,
+            'replacement_employee_id' => $data['replacement_employee_id'] ?? null,
             'request_code' => 'PR-PENDING-'.uniqid(),
             'type' => $data['type'],
             'request_date' => $data['request_date'],
             'request_date_end' => $data['request_date_end'],
             'request_time' => $data['request_time'] ?? null,
+            'start_time' => $data['start_time'] ?? null,
+            'end_time' => $data['end_time'] ?? null,
+            'total_hours' => $data['total_hours'] ?? null,
+            'total_days' => $data['total_days'] ?? null,
+            'day_part' => $data['day_part'] ?? null,
             'reason' => $data['reason'],
+            'duration_type' => $data['duration_type'],
+            'note' => $data['note'] ?? null,
+            'attachment_path' => $attachment['path'] ?? null,
+            'attachment_name' => $attachment['name'] ?? null,
+            'attachment_mime' => $attachment['mime'] ?? null,
             'status' => 'pending',
             'is_emergency' => (bool) ($data['is_emergency'] ?? false),
             'gps_location' => $data['gps_location'] ?? null,
@@ -81,13 +95,13 @@ class PermissionRequestController extends Controller
             'request_code' => sprintf('PR-%s-%04d', $record->created_at->format('Y'), $record->id),
         ]);
 
-        $record = $record->fresh(['employee', 'reviewer']);
+        $record = $record->fresh(['employee', 'replacementEmployee', 'reviewer']);
 
         Notification::create([
             'user_id' => null,
             'type' => self::EVENT_KEY,
             'title' => "New Permission Request: {$record->request_code}",
-            'message' => "{$employee->first_name} {$employee->last_name} submitted a {$record->type} for ".$this->formatDateRange($record),
+            'message' => "{$employee->first_name} {$employee->last_name} submitted a {$record->type} for ".$this->formatDuration($record),
             'payload' => [
                 'request_id' => $record->id,
                 'request_code' => $record->request_code,
@@ -95,27 +109,9 @@ class PermissionRequestController extends Controller
             ],
         ]);
 
-        $telegram->send(
-            "✅ <b>បានដាក់សំណើសុំអនុញ្ញាត</b>\n".
-            "<b>លេខសំណើ:</b> {$record->request_code}\n".
-            "<b>បុគ្គលិក:</b> {$employee->first_name} {$employee->last_name}\n".
-            "<b>ប្រភេទ:</b> {$record->type}\n".
-            '<b>រយៈពេល:</b> '.$this->formatDateRange($record)."\n".
-            "<b>មូលហេតុ:</b> {$record->reason}\n".
-            "<b>ស្ថានភាព:</b> រង់ចាំអនុម័ត",
-            $this->eventKeyForEmployee($employee),
-        );
-
-        $this->sendPrivateAdminTelegram(
-            $telegram,
-            $this->buildAdminRequestPrivateMessage($record),
-        );
-
-        $telegram->sendToEmployee(
-            $employee,
-            $this->buildEmployeeRequestSubmittedMessage($record),
-            'permission_request_submitted_private',
-        );
+        $telegram->send($this->buildPermissionRequestMessage($record), $this->eventKeyForEmployee($employee));
+        $this->sendPrivateAdminTelegram($telegram, $this->buildPermissionRequestMessage($record));
+        $telegram->sendToEmployee($employee, $this->buildEmployeeRequestSubmittedMessage($record), 'permission_request_submitted_private');
 
         return $record;
     }
@@ -124,32 +120,29 @@ class PermissionRequestController extends Controller
     {
         $this->assertOwnPending($request, $permissionRequest);
 
-        $data = $request->validate([
-            'type' => ['sometimes', 'required', 'string', Rule::in(self::TYPES)],
-            'request_date' => ['sometimes', 'required', 'date'],
-            'request_date_end' => ['sometimes', 'required', 'date', 'after_or_equal:request_date'],
-            'request_time' => ['nullable', 'string', 'max:20'],
-            'reason' => ['sometimes', 'required', 'string', 'max:5000'],
-            'is_emergency' => ['nullable', 'boolean'],
-            'gps_location' => ['nullable', 'string', 'max:500'],
-        ]);
+        $data = $this->validatedPayload($request, true);
+        $data = $this->normalizeDurationFields(array_merge([
+            'type' => $permissionRequest->type,
+            'request_date' => $permissionRequest->request_date->toDateString(),
+            'request_date_end' => optional($permissionRequest->request_date_end)->toDateString() ?: $permissionRequest->request_date->toDateString(),
+            'duration_type' => $permissionRequest->duration_type ?: 'single_day',
+            'replacement_employee_id' => $permissionRequest->replacement_employee_id,
+        ], $data));
 
-        if (isset($data['request_date'], $data['request_date_end']) && $data['request_date_end'] < $data['request_date']) {
-            throw ValidationException::withMessages(['request_date_end' => 'End date must be on or after start date.']);
+        $this->assertNoDuplicateActiveRequest($permissionRequest->employee_id, $data, $permissionRequest->id);
+
+        $attachment = $this->storeAttachment($request);
+        if ($attachment) {
+            $data = array_merge($data, [
+                'attachment_path' => $attachment['path'],
+                'attachment_name' => $attachment['name'],
+                'attachment_mime' => $attachment['mime'],
+            ]);
         }
-
-        $merged = array_merge($permissionRequest->only([
-            'type',
-            'request_date',
-            'request_date_end',
-            'request_time',
-        ]), $data);
-
-        $this->assertNoDuplicateActiveRequest($permissionRequest->employee_id, $merged, $permissionRequest->id);
 
         $permissionRequest->update($data);
 
-        return $permissionRequest->fresh(['employee', 'reviewer']);
+        return $permissionRequest->fresh(['employee', 'replacementEmployee', 'reviewer']);
     }
 
     public function updateStatus(Request $request, PermissionRequest $permissionRequest, TelegramNotificationService $telegram)
@@ -170,10 +163,9 @@ class PermissionRequestController extends Controller
             'reviewed_at' => now(),
         ]);
 
-        $updated = $permissionRequest->fresh(['employee', 'reviewer']);
+        $updated = $permissionRequest->fresh(['employee', 'replacementEmployee', 'reviewer']);
         $employeeUserId = optional($updated->employee->user)->id;
         $statusLabel = ucfirst($updated->status);
-        $statusKhmer = $updated->status === 'approved' ? 'បានអនុម័ត' : 'បានបដិសេធ';
         $adminName = $request->user()->name ?? 'Admin';
 
         Notification::create([
@@ -188,19 +180,8 @@ class PermissionRequestController extends Controller
             ],
         ]);
 
-        $statusMessage = "✅ <b>សំណើសុំអនុញ្ញាត {$statusKhmer}</b>\n".
-            "<b>លេខសំណើ:</b> {$updated->request_code}\n".
-            "<b>បុគ្គលិក:</b> {$updated->employee->first_name} {$updated->employee->last_name}\n".
-            "<b>ស្ថានភាព:</b> {$statusKhmer}\n".
-            "<b>ពិនិត្យដោយ:</b> {$adminName}";
-
-        $telegram->send($statusMessage, $this->eventKeyForEmployee($updated->employee));
-
-        $telegram->sendToEmployee(
-            $updated->employee,
-            $this->buildEmployeeStatusPrivateMessage($updated, $adminName),
-            'permission_status_private',
-        );
+        $telegram->send($this->buildStatusMessage($updated, $adminName), $this->eventKeyForEmployee($updated->employee));
+        $telegram->sendToEmployee($updated->employee, $this->buildStatusMessage($updated, $adminName), 'permission_status_private');
 
         return $updated;
     }
@@ -212,6 +193,117 @@ class PermissionRequestController extends Controller
         $permissionRequest->delete();
 
         return response()->noContent();
+    }
+
+    public function replacements()
+    {
+        return response()->json([
+            'data' => Employee::query()
+                ->with(['user.role'])
+                ->where('status', 'active')
+                ->where(function ($query) {
+                    $query->whereDoesntHave('user.role')
+                        ->orWhereHas('user.role', fn ($role) => $role->whereNotIn('slug', ['admin', 'super_admin']));
+                })
+                ->orderBy('first_name')
+                ->get(['id', 'first_name', 'last_name', 'employee_code']),
+        ]);
+    }
+
+    private function validatedPayload(Request $request, bool $partial = false): array
+    {
+        $required = $partial ? 'sometimes' : 'required';
+
+        return $request->validate([
+            'type' => [$required, 'string', Rule::in(self::TYPES)],
+            'replacement_employee_id' => ['nullable', 'exists:employees,id'],
+            'request_date' => [$required, 'date'],
+            'request_date_end' => ['nullable', 'date', 'after_or_equal:request_date'],
+            'request_time' => ['nullable', 'string', 'max:20'],
+            'start_time' => ['nullable', 'date_format:H:i'],
+            'end_time' => ['nullable', 'date_format:H:i'],
+            'total_hours' => ['nullable', 'numeric', 'min:0', 'max:24'],
+            'total_days' => ['nullable', 'integer', 'min:1', 'max:366'],
+            'day_part' => ['nullable', Rule::in(['Full Day', 'Half Day'])],
+            'duration_type' => ['nullable', Rule::in(['single_day', 'multiple_day', 'hours'])],
+            'reason' => [$required, 'string', 'max:5000'],
+            'note' => ['nullable', 'string', 'max:5000'],
+            'attachment' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:5120'],
+            'is_emergency' => ['nullable', 'boolean'],
+            'gps_location' => ['nullable', 'string', 'max:500'],
+        ]);
+    }
+
+    private function normalizeDurationFields(array $data): array
+    {
+        $data['duration_type'] ??= 'single_day';
+        $data['request_date_end'] ??= $data['request_date'];
+
+        if ($data['request_date_end'] < $data['request_date']) {
+            throw ValidationException::withMessages(['request_date_end' => 'End date must be on or after start date.']);
+        }
+
+        $data['replacement_employee_id'] = $data['replacement_employee_id'] ?? null;
+        if ($data['replacement_employee_id']) {
+            $isProtected = Employee::query()
+                ->whereKey($data['replacement_employee_id'])
+                ->whereHas('user.role', fn ($role) => $role->whereIn('slug', ['admin', 'super_admin']))
+                ->exists();
+
+            if ($isProtected) {
+                throw ValidationException::withMessages(['replacement_employee_id' => 'Admin and Super Admin cannot be selected as replacement.']);
+            }
+        }
+
+        if ($data['duration_type'] === 'hours') {
+            if (empty($data['start_time']) || empty($data['end_time'])) {
+                throw ValidationException::withMessages(['start_time' => 'Start time and end time are required for hours requests.']);
+            }
+
+            if ($data['end_time'] <= $data['start_time']) {
+                throw ValidationException::withMessages(['end_time' => 'End time must be after start time.']);
+            }
+
+            $data['request_date_end'] = $data['request_date'];
+            $data['request_time'] = $data['start_time'];
+            $data['total_days'] = 1;
+            $data['day_part'] = null;
+            $data['total_hours'] = $data['total_hours'] ?? round((strtotime($data['end_time']) - strtotime($data['start_time'])) / 3600, 2);
+        } elseif ($data['duration_type'] === 'multiple_day') {
+            $data['start_time'] = null;
+            $data['end_time'] = null;
+            $data['request_time'] = null;
+            $data['total_hours'] = null;
+            $data['day_part'] = null;
+            $data['total_days'] = $data['total_days'] ?? (int) ((strtotime($data['request_date_end']) - strtotime($data['request_date'])) / 86400) + 1;
+        } else {
+            $data['duration_type'] = 'single_day';
+            $data['request_date_end'] = $data['request_date'];
+            $data['start_time'] = null;
+            $data['end_time'] = null;
+            $data['request_time'] = null;
+            $data['total_hours'] = null;
+            $data['total_days'] = 1;
+            $data['day_part'] = $data['day_part'] ?? 'Full Day';
+        }
+
+        return $data;
+    }
+
+    private function storeAttachment(Request $request): ?array
+    {
+        if (! $request->hasFile('attachment')) {
+            return null;
+        }
+
+        $file = $request->file('attachment');
+        $path = $file->store('permission-requests', 'public');
+
+        return [
+            'path' => Storage::disk('public')->url($path),
+            'name' => $file->getClientOriginalName(),
+            'mime' => $file->getClientMimeType(),
+        ];
     }
 
     private function sendPrivateAdminTelegram(TelegramNotificationService $telegram, string $message): void
@@ -232,60 +324,60 @@ class PermissionRequestController extends Controller
             : 'office_permission_request';
     }
 
-    private function buildAdminRequestPrivateMessage(PermissionRequest $record): string
+    private function buildPermissionRequestMessage(PermissionRequest $record): string
     {
         $employee = $record->employee;
 
-        return "✅ <b>បានដាក់សំណើសុំអនុញ្ញាត</b>\n\n"
-            ."📄 <b>លេខសំណើ:</b> {$record->request_code}\n"
-            ."<b>👤 បុគ្គលិក:</b> {$employee->first_name} {$employee->last_name}\n"
-            ."📌 <b>ប្រភេទ:</b> {$record->type}\n"
-            ."📅 <b>រយៈពេល:</b> {$this->formatDateRange($record)}\n"
-            ."📝 <b>មូលហេតុ:</b> {$record->reason}\n\n"
-            ."⏳ <b>ស្ថានភាព:</b> កំពុងរង់ចាំអនុម័ត";
+        return "📄 <b>NEW PERMISSION REQUEST</b>\n\n"
+            ."👤 <b>Employee:</b> {$employee->first_name} {$employee->last_name}\n"
+            ."📌 <b>Type:</b> {$record->type}\n"
+            ."📅 <b>Duration:</b> {$this->formatDuration($record)}\n"
+            ."📝 <b>Reason:</b> {$record->reason}\n\n"
+            ."⏳ <b>Status:</b> Pending Approval";
     }
 
     private function buildEmployeeRequestSubmittedMessage(PermissionRequest $record): string
     {
-        return "📝 <b>សំណើរបស់អ្នកត្រូវបានដាក់រួចរាល់</b>\n\n"
-            ."📄 <b>លេខសំណើ:</b> {$record->request_code}\n"
-            ."📌 <b>ប្រភេទ:</b> {$record->type}\n"
-            ."📅 <b>រយៈពេល:</b> {$this->formatDateRange($record)}\n"
-            ."📝 <b>មូលហេតុ:</b> {$record->reason}\n\n"
-            ."⏳ <b>ស្ថានភាព:</b> កំពុងរង់ចាំអនុម័ត";
+        return "📄 <b>Your permission request was submitted</b>\n\n"
+            ."<b>Request:</b> {$record->request_code}\n"
+            ."<b>Type:</b> {$record->type}\n"
+            ."<b>Duration:</b> {$this->formatDuration($record)}\n"
+            ."<b>Reason:</b> {$record->reason}\n\n"
+            ."⏳ <b>Status:</b> Pending Approval";
     }
 
-    private function buildEmployeeStatusPrivateMessage(PermissionRequest $record, string $adminName): string
+    private function buildStatusMessage(PermissionRequest $record, string $adminName): string
     {
-        $reviewedAt = optional($record->reviewed_at)->format('d M Y · h:i A');
+        $status = ucfirst($record->status);
 
-        if ($record->status === 'approved') {
-            return "✅ <b>សំណើរបស់អ្នកត្រូវបានអនុម័ត</b>\n\n"
-                ."📄 <b>លេខសំណើ:</b> {$record->request_code}\n"
-                ."📌 <b>ប្រភេទ:</b> {$record->type}\n"
-                ."📅 <b>រយៈពេល:</b> {$this->formatDateRange($record)}\n\n"
-                ."👨‍💼 <b>អនុម័តដោយ:</b> {$adminName}\n"
-                ."🕒 <b>អនុម័តនៅ:</b> {$reviewedAt}\n\n"
-                ."✅ <b>ស្ថានភាព:</b> អនុម័តរួចរាល់";
-        }
-
-        return "❌ <b>សំណើរបស់អ្នកមិនត្រូវបានអនុម័ត</b>\n\n"
-            ."📄 <b>លេខសំណើ:</b> {$record->request_code}\n"
-            ."📌 <b>ប្រភេទ:</b> {$record->type}\n"
-            ."📅 <b>រយៈពេល:</b> {$this->formatDateRange($record)}\n\n"
-            ."👨‍💼 <b>ពិនិត្យដោយ:</b> {$adminName}\n"
-            ."🕒 <b>បដិសេធនៅ:</b> {$reviewedAt}\n"
-            ."📝 <b>មូលហេតុ:</b> {$record->admin_notes}\n\n"
-            ."❌ <b>ស្ថានភាព:</b> មិនអនុម័ត";
+        return "📄 <b>PERMISSION REQUEST {$status}</b>\n\n"
+            ."👤 <b>Employee:</b> {$record->employee->first_name} {$record->employee->last_name}\n"
+            ."📌 <b>Type:</b> {$record->type}\n"
+            ."📅 <b>Duration:</b> {$this->formatDuration($record)}\n"
+            ."👨‍💼 <b>Reviewed by:</b> {$adminName}\n"
+            ."📝 <b>Note:</b> {$record->admin_notes}";
     }
 
-    private function formatDateRange(PermissionRequest $record): string
+    private function formatDuration(PermissionRequest $record): string
     {
         $start = $record->request_date->format('d M Y');
         $endDate = $record->request_date_end ?? $record->request_date;
         $end = $endDate->format('d M Y');
 
-        return $end === $start ? $start : "{$start} – {$end}";
+        if ($record->duration_type === 'hours') {
+            $from = $record->start_time ?: $record->request_time;
+            $to = $record->end_time;
+            $hours = $record->total_hours ? " ({$record->total_hours} hour(s))" : '';
+            return trim("{$start} {$from} - {$to}{$hours}");
+        }
+
+        if ($record->duration_type === 'single_day') {
+            return trim($start.' '.($record->day_part ?: 'Full Day'));
+        }
+
+        $days = $record->total_days ? " ({$record->total_days} day(s))" : '';
+
+        return ($end === $start ? $start : "{$start} - {$end}").$days;
     }
 
     private function assertOwnPending(Request $request, PermissionRequest $permissionRequest): void

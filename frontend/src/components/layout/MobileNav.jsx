@@ -29,7 +29,7 @@ export default function MobileNav({ active, setActive, user, onAttendanceAction,
 
   const rightItems = [
     { label: 'Requests', target: 'Permission Requests', icon: FileCheck2, isActive: active === 'Permission Requests', permissions: ['requests.view_all', 'requests.view_own', 'requests.create', 'requests.approve'] },
-    { label: 'Profile',  target: 'Profile',             icon: UserRound,  isActive: active === 'Profile',             permissions: ['profile.update_own', 'profile.update_all', 'dashboard.admin', 'dashboard.employee'] },
+    { label: 'Profile', target: 'Profile', icon: UserRound, isActive: active === 'Profile', permissions: ['profile.view'] },
   ].filter((item) => canAccess(user, item.permissions))
 
   return (

@@ -24,3 +24,32 @@ body.dark {
     transform: translateX(100%);
   }
 }
+
+@media print {
+  @page {
+    margin: 12mm;
+    size: auto;
+  }
+
+  body {
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .monthly-report-print-sheet,
+  .monthly-report-print-sheet * {
+    visibility: visible;
+  }
+
+  .monthly-report-print-sheet {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    display: block !important;
+  }
+}

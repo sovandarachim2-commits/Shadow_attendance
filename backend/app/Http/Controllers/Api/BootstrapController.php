@@ -39,7 +39,7 @@ class BootstrapController extends Controller
             'attendance' => $this->can($user, ['attendance.view_all', 'attendance.view_own'])
                 ? $this->attendanceRows($user)
                 : [],
-            'employees' => $this->can($user, ['employees.view', 'employees.create', 'employees.update'])
+            'employees' => $this->can($user, ['employees.view', 'employees.create', 'employees.update', 'employee_report.view_all'])
                 ? $this->employees()
                 : [],
             'visits' => $this->can($user, ['visits.view', 'visits.create', 'visits.manage'])

@@ -1,9 +1,9 @@
 /* eslint-disable no-unused-vars, react-hooks/set-state-in-effect */
 import { useCallback, useEffect, useState } from 'react'
 import {
-  Activity, Bell, BriefcaseBusiness, Building2, CalendarCheck,
+  Activity, BarChart3, Bell, BriefcaseBusiness, Building2, CalendarCheck,
   CheckCircle2, ChevronDown, Clock, FileCheck2, FileText, Home, KeyRound,
-  MapPinned, Search, Settings, ShieldCheck, ShoppingBag, UserPlus, UserRound, Users, X,
+  MapPinned, Search, Settings, ShieldCheck, ShoppingBag, UserPlus, UserRound, Users, Wallet, X,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { api } from '../services/api'
@@ -61,7 +61,7 @@ function IpRestrictionsTab({ roles }) {
       <div className="rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm text-sky-800 dark:border-sky-900/40 dark:bg-sky-950/30 dark:text-sky-300">
         <p className="font-semibold">IP Address Restrictions for Attendance</p>
         <p className="mt-1 text-sky-700 dark:text-sky-400">
-          Every role <strong>must have at least one allowed IP or Wi-Fi range configured</strong> before its employees can check in or out. For office Wi-Fi, use a CIDR range like <strong>192.168.110.0/24</strong> so phones with different IPs can still check in/out.
+          Leave a role without IP rules to allow attendance from anywhere. Add one or more allowed IPs or Wi-Fi ranges only when you want the system to verify employees against office networks.
         </p>
       </div>
 
@@ -88,7 +88,7 @@ function IpRestrictionsTab({ roles }) {
                   <span className="font-medium">{r.name}</span>
                   <span className={clsx('rounded-full px-2 py-0.5 text-xs font-bold',
                     count > 0 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400' : 'bg-slate-100 text-slate-400 dark:bg-slate-800')}>
-                    {count > 0 ? `${count} IP${count > 1 ? 's' : ''}` : 'No IP — Blocked'}
+                    {count > 0 ? `${count} IP${count > 1 ? 's' : ''}` : 'Open Access'}
                   </span>
                 </button>
               )
@@ -101,14 +101,14 @@ function IpRestrictionsTab({ roles }) {
             <div className="border-b border-slate-200 px-5 py-4 dark:border-slate-800">
               <h3 className="font-bold text-slate-900 dark:text-slate-100">{selectedRole.name}</h3>
               <p className="text-sm text-slate-500 dark:text-slate-400">
-                {ipList.length === 0 ? 'No IPs configured — employees in this role cannot check in/out until at least one IP is added.' : `Restricted to ${ipList.length} allowed IP address${ipList.length > 1 ? 'es' : ''}.`}
+                {ipList.length === 0 ? 'No IPs configured - employees in this role can check in/out from anywhere.' : `Restricted to ${ipList.length} allowed IP address${ipList.length > 1 ? 'es' : ''}.`}
               </p>
             </div>
             <div className="divide-y divide-slate-100 dark:divide-slate-800">
               {ipList.length === 0 ? (
                 <div className="flex flex-col items-center py-8 text-center">
                   <MapPinned size={28} className="mb-2 text-slate-300 dark:text-slate-600" />
-                  <p className="text-sm text-slate-400">No IPs added — employees in this role are <strong className="text-rose-500">blocked</strong> until at least one IP is configured.</p>
+                  <p className="text-sm text-slate-400">No IPs added - employees in this role can check in/out from anywhere.</p>
                 </div>
               ) : ipList.map((entry) => (
                 <div key={entry.id} className="flex items-center justify-between gap-3 px-5 py-3">
@@ -169,6 +169,16 @@ const PERMISSION_MODULES = [
     rows: [
       { label: 'My Attendance Reports',  desc: 'Show personal attendance report page',          view:   ['reports.attendance.view_own', 'attendance.view_own'] },
       { label: 'All Attendance Reports', desc: 'Show attendance reports for all employees',     view:   'reports.attendance.view_all' },
+    ],
+  },
+  {
+    key: 'employee_monthly_report',
+    label: 'Employee Monthly Report', desc: 'Monthly attendance summary per employee — menu, filters, export and print',
+    Icon: BarChart3, color: 'text-teal-600', iconBg: 'bg-teal-100 dark:bg-teal-950/50',
+    rows: [
+      { label: 'View All Employees', desc: 'Reports menu — pick any employee and month', view: 'employee_report.view_all' },
+      { label: 'View Own Report',    desc: 'Reports menu — own report only (employee locked)', view: 'employee_report.view_own' },
+      { label: 'Export & Print',     desc: 'Export Excel and print/PDF after loading report', update: 'employee_report.export' },
     ],
   },
   {
@@ -269,6 +279,20 @@ const PERMISSION_MODULES = [
     rows: [
       { label: 'View Sales',   desc: 'View outdoor sales team and data',        view:   'sales.view' },
       { label: 'Manage Sales', desc: 'Edit and manage all customer visits',     update: 'sales.manage' },
+    ],
+  },
+  {
+    key: 'payroll',
+    label: 'Payroll Management', desc: 'Salary setup, monthly payroll, approvals and payslips',
+    Icon: Wallet, color: 'text-emerald-600', iconBg: 'bg-emerald-100 dark:bg-emerald-950/50',
+    rows: [
+      { label: 'View All Payroll', desc: 'View payroll for all employees', view: 'payroll.view_all' },
+      { label: 'View Own Payslips', desc: 'View own salary slips only', view: 'payroll.view_own' },
+      { label: 'Generate Payroll', desc: 'Generate monthly payroll', create: 'payroll.create' },
+      { label: 'Update Payroll', desc: 'Edit salary setup and payroll records', update: 'payroll.update' },
+      { label: 'Approve Payroll', desc: 'Approve pending payroll', update: 'payroll.approve' },
+      { label: 'Mark Payroll Paid', desc: 'Mark approved payroll as paid', update: 'payroll.pay' },
+      { label: 'Export Payroll', desc: 'Download payslips and reports', update: 'payroll.export' },
     ],
   },
   {

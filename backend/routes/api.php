@@ -17,6 +17,8 @@ use App\Http\Controllers\Api\IpRestrictionController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PermissionController;
 use App\Http\Controllers\Api\PermissionRequestController;
+use App\Http\Controllers\Api\EmployeeMonthlyReportController;
+use App\Http\Controllers\Api\PermissionTypeController;
 use App\Http\Controllers\Api\PositionController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\RoleController;
@@ -119,7 +121,20 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/reports/export', [ReportController::class, 'export'])
         ->middleware('permission:reports.export');
 
+    // Permission Types
+    Route::apiResource('/permission-types', PermissionTypeController::class)
+        ->except(['show'])
+        ->middleware('permission:settings.manage');
+
+    // Employee Monthly Report
+    Route::get('/employee-monthly-report', [EmployeeMonthlyReportController::class, 'index'])
+        ->middleware('permission:employee_report.view_all,employee_report.view_own');
+    Route::get('/employee-monthly-report/export', [EmployeeMonthlyReportController::class, 'export'])
+        ->middleware('permission:employee_report.view_all,employee_report.view_own,employee_report.export');
+
     // Permission Requests
+    Route::get('/permission-requests/replacements', [PermissionRequestController::class, 'replacements'])
+        ->middleware('permission:requests.create,requests.view_all');
     Route::get('/permission-requests', [PermissionRequestController::class, 'index'])
         ->middleware('permission:requests.view_all,requests.view_own');
     Route::post('/permission-requests', [PermissionRequestController::class, 'store'])
@@ -169,6 +184,32 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('permission:settings.manage');
     Route::patch('/employee-bonuses/{employeeBonus}/status', [\App\Http\Controllers\Api\EmployeeBonusController::class, 'updateStatus'])
         ->middleware('permission:settings.manage,requests.approve');
+
+    // Payroll
+    Route::get('/payroll', [\App\Http\Controllers\Api\PayrollController::class, 'index'])
+        ->middleware('permission:payroll.view_all,payroll.view_own');
+    Route::post('/payroll/generate', [\App\Http\Controllers\Api\PayrollController::class, 'generate'])
+        ->middleware('permission:payroll.create');
+    Route::patch('/payroll/{payroll}/status', [\App\Http\Controllers\Api\PayrollController::class, 'updateStatus'])
+        ->middleware('permission:payroll.update,payroll.approve,payroll.pay');
+    Route::get('/payroll-items/{payrollItem}', [\App\Http\Controllers\Api\PayrollController::class, 'showItem'])
+        ->middleware('permission:payroll.view_all,payroll.view_own');
+    Route::get('/payroll-items/{payrollItem}/payslip', [\App\Http\Controllers\Api\PayrollController::class, 'payslip'])
+        ->middleware('permission:payroll.view_all,payroll.view_own,payroll.export');
+    Route::post('/salary-setups', [\App\Http\Controllers\Api\PayrollController::class, 'storeSalarySetup'])
+        ->middleware('permission:payroll.create,payroll.update');
+    Route::delete('/salary-setups/{salarySetup}', [\App\Http\Controllers\Api\PayrollController::class, 'destroySalarySetup'])
+        ->middleware('permission:payroll.update');
+    Route::post('/deduction-rules', [\App\Http\Controllers\Api\PayrollController::class, 'storeDeductionRule'])
+        ->middleware('permission:payroll.create,payroll.update');
+    Route::put('/deduction-rules/{deductionRule}', [\App\Http\Controllers\Api\PayrollController::class, 'updateDeductionRule'])
+        ->middleware('permission:payroll.update');
+    Route::delete('/deduction-rules/{deductionRule}', [\App\Http\Controllers\Api\PayrollController::class, 'destroyDeductionRule'])
+        ->middleware('permission:payroll.update');
+    Route::post('/salary-advances', [\App\Http\Controllers\Api\PayrollController::class, 'storeAdvance'])
+        ->middleware('permission:payroll.view_all,payroll.view_own,payroll.create');
+    Route::patch('/salary-advances/{salaryAdvance}/status', [\App\Http\Controllers\Api\PayrollController::class, 'updateAdvanceStatus'])
+        ->middleware('permission:payroll.approve');
 
     // Work Schedules
     Route::get('/work-schedules', [WorkScheduleController::class, 'index'])

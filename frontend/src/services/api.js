@@ -42,10 +42,24 @@ export const dashboardService = {
 
 export const permissionRequestService = {
   list: () => api.get('/permission-requests').then((response) => response.data.data || []),
+  replacements: () => api.get('/permission-requests/replacements').then((response) => response.data.data || []),
   create: (payload) => api.post('/permission-requests', payload).then((response) => response.data),
-  update: (id, payload) => api.patch(`/permission-requests/${id}`, payload).then((response) => response.data),
+  update: (id, payload) => {
+    if (payload instanceof FormData) {
+      payload.append('_method', 'PATCH')
+      return api.post(`/permission-requests/${id}`, payload).then((response) => response.data)
+    }
+    return api.patch(`/permission-requests/${id}`, payload).then((response) => response.data)
+  },
   updateStatus: (id, payload) => api.patch(`/permission-requests/${id}/status`, payload).then((response) => response.data),
   remove: (id) => api.delete(`/permission-requests/${id}`),
+}
+
+export const employeeMonthlyReportService = {
+  fetch: (params) =>
+    api.get('/employee-monthly-report', { params }).then((r) => r.data),
+  exportCsv: (params) =>
+    api.get('/employee-monthly-report/export', { params, responseType: 'blob' }).then((r) => r.data),
 }
 
 /** Load every employee page from GET /employees (directory, dropdowns, etc.). */
