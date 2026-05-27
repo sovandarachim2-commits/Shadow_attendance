@@ -574,7 +574,14 @@ function AppShell({ isLoaded, initialBranding = {} }) {
             {data.loading && <FloatingSpinner message="Refreshing live data..." />}
             {pages[active]}
           </section>
-          <MobileNav active={active} setActive={setActive} user={user} onAttendanceAction={openAttendanceAction} todayAttendance={data.todayAttendance} />
+          <MobileNav
+            active={active}
+            setActive={setActive}
+            user={user}
+            onAttendanceAction={openAttendanceAction}
+            todayAttendance={data.todayAttendance}
+            onOpenMenu={() => setSidebarOpen(true)}
+          />
         </main>
       </div>
 

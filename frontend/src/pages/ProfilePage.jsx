@@ -51,7 +51,7 @@ export default function ProfilePage({ user, appData, setActive, onLogout, onProf
   /* ── Mobile view ──────────────────────────────────────────────── */
   return (
     <>
-      <div className="mx-auto w-full max-w-md space-y-4 pb-24 sm:hidden">
+      <div className="mx-auto w-full max-w-md space-y-4 p-3 pb-28 sm:hidden">
 
         {/* ── Profile card ── */}
         <div className="relative rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -104,14 +104,20 @@ export default function ProfilePage({ user, appData, setActive, onLogout, onProf
               </button>
 
               <div className="mt-2 space-y-1 text-sm text-slate-600 dark:text-slate-400">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <Mail size={13} className="shrink-0 text-slate-400" />
+                  <span className="truncate">{user.email || '-'}</span>
+                </div>
                 <div className="flex items-center gap-1.5">
                   <Phone size={13} className="shrink-0 text-slate-400" />
                   <span>{employee?.phone || '-'}</span>
                 </div>
-                <div className="flex min-w-0 items-center gap-1.5">
-                  <UserRound size={13} className="shrink-0 text-slate-400" />
-                  <span className="truncate">{user.name || '-'}</span>
-                </div>
+                {employee?.department?.name && (
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <Building2 size={13} className="shrink-0 text-slate-400" />
+                    <span className="truncate">{employee.department.name}</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -223,7 +229,58 @@ export default function ProfilePage({ user, appData, setActive, onLogout, onProf
               </div>
             )}
           </div>
+          {latestLoc && (
+            <button
+              type="button"
+              className="mt-3 w-full rounded-xl border border-emerald-200 py-2.5 text-sm font-semibold text-emerald-700 dark:border-emerald-900 dark:text-emerald-400"
+              onClick={() => setActive('Route Map')}
+            >
+              View on Map
+            </button>
+          )}
         </div>
+
+        {/* ── Work details ── */}
+        {employee && (
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <h4 className="mb-3 font-bold text-slate-900 dark:text-slate-100">Work Information</h4>
+            <div className="space-y-2.5 text-sm">
+              <MobileDetail label="Department" value={employee.department?.name} />
+              <MobileDetail label="Branch" value={employee.branch?.name} />
+              <MobileDetail label="Role" value={roleName} />
+              <MobileDetail label="Join Date" value={formatDate(employee.hire_date)} />
+            </div>
+          </div>
+        )}
+
+        {/* ── Recent attendance (mobile cards) ── */}
+        {attendanceRows.length > 0 && (
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex items-center justify-between px-4 py-3">
+              <h4 className="font-bold text-slate-900 dark:text-slate-100">Recent Attendance</h4>
+              <button
+                type="button"
+                className="text-sm font-semibold text-emerald-600"
+                onClick={() => setActive('My Attendance Reports')}
+              >
+                View all
+              </button>
+            </div>
+            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+              {attendanceRows.map((row) => (
+                <div key={row.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{formatDate(row.attendance_date)}</p>
+                    <p className="text-xs text-slate-500">
+                      In {formatTime(row.check_in_at)} · Out {formatTime(row.check_out_at)}
+                    </p>
+                  </div>
+                  <StatusPill status={titleCase(row.status)} />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* ── Logout ── */}
         <button
@@ -427,6 +484,15 @@ function LocationLink({ attendance, type }) {
 }
 
 /* ── Shared sub-components ────────────────────────────────────── */
+
+function MobileDetail({ label, value }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-slate-500 dark:text-slate-400">{label}</span>
+      <span className="truncate font-semibold text-slate-800 dark:text-slate-200">{value || '–'}</span>
+    </div>
+  )
+}
 
 function TodayRow({ icon: Icon, iconColor, iconBg, label, time, date }) {
   return (
