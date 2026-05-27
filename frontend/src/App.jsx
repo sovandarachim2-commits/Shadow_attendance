@@ -580,7 +580,6 @@ function AppShell({ isLoaded, initialBranding = {} }) {
             user={user}
             onAttendanceAction={openAttendanceAction}
             todayAttendance={data.todayAttendance}
-            onOpenMenu={() => setSidebarOpen(true)}
           />
         </main>
       </div>

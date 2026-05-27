@@ -1,8 +1,8 @@
 import clsx from 'clsx'
-import { CalendarCheck, CheckCircle2, FileCheck2, Hand, Home, Menu, UserRound } from 'lucide-react'
+import { CalendarCheck, CheckCircle2, FileCheck2, Hand, Home, UserRound } from 'lucide-react'
 import { canAccess } from '../../utils/format'
 
-export default function MobileNav({ active, setActive, user, onAttendanceAction, todayAttendance, onOpenMenu }) {
+export default function MobileNav({ active, setActive, user, onAttendanceAction, todayAttendance }) {
   const checkedIn = Boolean(todayAttendance?.check_in_at)
   const completed = Boolean(todayAttendance?.check_out_at)
   const nextAction = checkedIn && !completed ? 'check-out' : 'check-in'
@@ -22,19 +22,10 @@ export default function MobileNav({ active, setActive, user, onAttendanceAction,
 
   const isAttendanceActive = active === 'My Attendance Reports'
 
-  const slotItems = [
-    {
-      key: 'menu',
-      label: 'Menu',
-      icon: Menu,
-      isActive: false,
-      show: Boolean(onOpenMenu),
-      onClick: onOpenMenu,
-    },
+  const leftItems = [
     {
       key: 'home',
       label: 'Home',
-      target: 'Dashboard',
       icon: Home,
       isActive: active === 'Dashboard',
       show: canAccess(user, ['dashboard.admin', 'dashboard.employee']),
@@ -43,17 +34,17 @@ export default function MobileNav({ active, setActive, user, onAttendanceAction,
     {
       key: 'attendance',
       label: 'Attendance',
-      target: 'My Attendance Reports',
       icon: CalendarCheck,
       isActive: isAttendanceActive,
       show: canAccess(user, ['reports.attendance.view_own', 'attendance.view_own']),
       onClick: () => setActive('My Attendance Reports'),
     },
-    null,
+  ]
+
+  const rightItems = [
     {
       key: 'requests',
       label: 'Requests',
-      target: 'Permission Requests',
       icon: FileCheck2,
       isActive: active === 'Permission Requests',
       show: canAccess(user, ['requests.view_all', 'requests.view_own', 'requests.create', 'requests.approve']),
@@ -62,16 +53,12 @@ export default function MobileNav({ active, setActive, user, onAttendanceAction,
     {
       key: 'profile',
       label: 'Profile',
-      target: 'Profile',
       icon: UserRound,
       isActive: active === 'Profile',
       show: canAccess(user, ['profile.update_own', 'profile.update_all', 'dashboard.admin', 'dashboard.employee']),
       onClick: () => setActive('Profile'),
     },
   ]
-
-  const leftSlots = [slotItems[0], slotItems[1], slotItems[2]]
-  const rightSlots = [slotItems[4], slotItems[5]]
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-30 lg:hidden" aria-label="Mobile navigation">
@@ -80,9 +67,11 @@ export default function MobileNav({ active, setActive, user, onAttendanceAction,
           className="grid grid-cols-5 items-end gap-0 px-1 pt-2"
           style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}
         >
-          {leftSlots.map((item, i) => (
-            <NavSlot key={item?.key || `left-empty-${i}`} item={item} />
-          ))}
+          <div className="col-span-2 grid grid-cols-2">
+            {leftItems.map((item) => (
+              <NavSlot key={item.key} item={item} />
+            ))}
+          </div>
 
           <div className="flex flex-col items-center justify-end pb-1">
             <button
@@ -107,9 +96,11 @@ export default function MobileNav({ active, setActive, user, onAttendanceAction,
             </button>
           </div>
 
-          {rightSlots.map((item, i) => (
-            <NavSlot key={item?.key || `right-empty-${i}`} item={item} />
-          ))}
+          <div className="col-span-2 grid grid-cols-2">
+            {rightItems.map((item) => (
+              <NavSlot key={item.key} item={item} />
+            ))}
+          </div>
         </div>
       </div>
     </nav>
