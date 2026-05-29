@@ -103,6 +103,50 @@ async function imageFileToBitmap(file) {
   })
 }
 
+function validFacesFromResult(result, image) {
+  const imageArea = (image.width || image.videoWidth || image.naturalWidth || 1) * (image.height || image.videoHeight || image.naturalHeight || 1)
+
+  return (result.face || []).filter((face) => {
+    const score = face.faceScore || face.boxScore || 0
+    const box = face.box || [0, 0, 0, 0]
+    const boxRatio = (box[2] * box[3]) / imageArea
+    return score >= HUMAN_MIN_FACE_SCORE && boxRatio >= HUMAN_MIN_BOX_RATIO
+  })
+}
+
+function faceMetrics(face, image) {
+  const imageWidth = image.width || image.videoWidth || image.naturalWidth || 1
+  const imageHeight = image.height || image.videoHeight || image.naturalHeight || 1
+  const box = face?.box || [0, 0, 0, 0]
+  const boxRatio = (box[2] * box[3]) / (imageWidth * imageHeight)
+
+  return {
+    box,
+    boxRatio,
+    centerX: (box[0] + (box[2] / 2)) / imageWidth,
+    centerY: (box[1] + (box[3] / 2)) / imageHeight,
+  }
+}
+
+export async function detectFaceInLiveFrame(video) {
+  if (!video) return { detected: false, method: 'none' }
+
+  try {
+    const human = await withTimeout(getHumanDetector(), FACE_DETECTION_TIMEOUT_MS, 'Face detector did not load in time.')
+    const result = await withTimeout(human.detect(video), FACE_DETECTION_TIMEOUT_MS, 'Face detection took too long.')
+    const validFaces = validFacesFromResult(result, video)
+
+    return {
+      detected: validFaces.length === 1,
+      method: 'human',
+      faces: validFaces,
+      metrics: validFaces.length === 1 ? faceMetrics(validFaces[0], video) : null,
+      reason: validFaces.length > 1 ? 'multiple_faces' : validFaces.length === 0 ? 'no_face' : null,
+    }
+  } catch {
+    return { detected: false, method: 'unavailable' }
+  }
+}
 
 export async function detectFaceInPhoto(file) {
   if (!file) return { detected: false, method: 'none' }
@@ -112,13 +156,7 @@ export async function detectFaceInPhoto(file) {
     image = await imageFileToBitmap(file)
     const human = await withTimeout(getHumanDetector(), FACE_DETECTION_TIMEOUT_MS, 'Face detector did not load in time.')
     const result = await withTimeout(human.detect(image), FACE_DETECTION_TIMEOUT_MS, 'Face detection took too long.')
-    const imageArea = (image.width || image.naturalWidth || 1) * (image.height || image.naturalHeight || 1)
-    const validFaces = (result.face || []).filter((face) => {
-      const score = face.faceScore || face.boxScore || 0
-      const box = face.box || [0, 0, 0, 0]
-      const boxRatio = (box[2] * box[3]) / imageArea
-      return score >= HUMAN_MIN_FACE_SCORE && boxRatio >= HUMAN_MIN_BOX_RATIO
-    })
+    const validFaces = validFacesFromResult(result, image)
 
     return {
       detected: validFaces.length === 1,

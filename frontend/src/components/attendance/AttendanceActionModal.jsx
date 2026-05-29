@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Camera, CheckCircle2, Clock, Loader2, LogOut, MapPin, Navigation, RefreshCw, ShieldCheck, SwitchCamera, X, XCircle } from 'lucide-react'
+import { Camera, CheckCircle2, Clock, Loader2, LogOut, MapPin, Navigation, RefreshCw, ShieldCheck, X, XCircle } from 'lucide-react'
 import clsx from 'clsx'
 import { attendanceService } from '../../services/api'
 import { reverseGeocode } from '../../utils/geocode'
@@ -7,6 +7,7 @@ import { coordsFromPosition, geolocationErrorMessage, isGeolocationSupported, is
 import { DEFAULT_ATTENDANCE_REQUIREMENTS, mergeRequirements } from '../../utils/attendanceRequirements'
 import { detectFaceInPhoto } from '../../utils/faceDetection'
 import { compressImageForUpload } from '../../utils/imageCapture'
+import { detectPhonePhotoSpoof } from '../../utils/selfieSpoofDetection'
 import CameraCaptureModal from '../shared/CameraCaptureModal'
 import NoticeAlertCard from '../shared/NoticeAlertCard'
 
@@ -136,6 +137,15 @@ export default function AttendanceActionModal({ action, user, onClose, onSaved }
     setCameraOpen(false)
     setFaceStatus('checking')
 
+    const spoofResult = await detectPhonePhotoSpoof(nextFile)
+    if (spoofResult.suspicious) {
+      setSelfieFile(null)
+      setSelfiePreview('')
+      setFaceStatus('failed')
+      openNotice('warning', 'Phone photo detected', 'Please take a real live selfie. Do not capture a face from another phone or screen.')
+      return
+    }
+
     let result
     try {
       result = await detectFaceInPhoto(nextFile)
@@ -160,7 +170,7 @@ export default function AttendanceActionModal({ action, user, onClose, onSaved }
     }
 
     setSelfieFile(nextFile)
-    setSelfiePreview(URL.createObjectURL(nextFile))
+    setSelfiePreview('')
     setFaceStatus('verified')
   }
 
@@ -311,34 +321,28 @@ export default function AttendanceActionModal({ action, user, onClose, onSaved }
                 label="Selfie Verification"
                 status={faceStatus === 'checking' ? 'requesting' : selfieFile && faceStatus === 'verified' ? 'granted' : faceStatus === 'failed' ? 'denied' : 'idle'}
                 desc={faceStatus === 'checking' ? 'Detecting face...'
-                  : selfieFile && faceStatus === 'verified' ? 'Face detected'
+                  : selfieFile && faceStatus === 'verified' ? 'Human verified'
                     : faceStatus === 'failed' ? 'Face not detected'
                       : 'Tap to take a selfie'}
                 onTap={() => setCameraOpen(true)}
               />
-              {selfiePreview && (
-                <div className="overflow-hidden rounded-2xl border-2 border-emerald-200 bg-white shadow-sm dark:border-emerald-800/50 dark:bg-slate-900">
-                  {/* Photo */}
-                  <div className="relative">
-                    <img
-                      src={selfiePreview}
-                      alt="Attendance selfie"
-                      className="w-full object-cover"
-                      style={{ maxHeight: '260px' }}
-                    />
-                    {/* Verified badge overlay */}
-                    <div className="absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full bg-emerald-500/90 px-3 py-1.5 backdrop-blur-sm">
-                      <ShieldCheck size={13} className="text-white" />
-                      <span className="text-xs font-bold text-white">Face Verified</span>
+              {selfieFile && faceStatus === 'verified' && (
+                <div className="rounded-2xl border-2 border-emerald-200 bg-emerald-50 p-3 shadow-sm dark:border-emerald-800/50 dark:bg-emerald-950/20">
+                  <div className="flex items-center gap-3">
+                    <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-emerald-500 text-white shadow-sm shadow-emerald-500/30">
+                      <ShieldCheck size={19} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold text-emerald-800 dark:text-emerald-300">Human verified</p>
+                      <p className="mt-0.5 text-xs text-emerald-700 dark:text-emerald-400">Selfie captured automatically. Photo preview is hidden.</p>
                     </div>
                   </div>
 
-                  {/* Actions */}
-                  <div className="flex items-center gap-2 px-3 py-2.5">
+                  <div className="mt-3 flex items-center gap-2">
                     <button
                       type="button"
                       onClick={() => handleSelfie(null)}
-                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-slate-200 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-white/70 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-white dark:border-emerald-800/60 dark:bg-slate-950/20 dark:text-emerald-300"
                     >
                       <RefreshCw size={12} />
                       Retake
@@ -346,10 +350,10 @@ export default function AttendanceActionModal({ action, user, onClose, onSaved }
                     <button
                       type="button"
                       onClick={() => setCameraOpen(true)}
-                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-50 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400 dark:hover:bg-emerald-950/50"
+                      className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700"
                     >
-                      <SwitchCamera size={12} />
-                      Change Photo
+                      <Camera size={12} />
+                      New Selfie
                     </button>
                   </div>
                 </div>
@@ -390,6 +394,7 @@ export default function AttendanceActionModal({ action, user, onClose, onSaved }
         <CameraCaptureModal
           title="Take Selfie"
           facingMode="user"
+          autoCaptureOnFace
           onClose={() => setCameraOpen(false)}
           onCapture={(file) => handleSelfie(file, false)}
         />
