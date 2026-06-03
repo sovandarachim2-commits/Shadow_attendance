@@ -10,6 +10,8 @@ class PermissionType extends Model
         'name',
         'allowed_times',
         'limit_type',
+        'duration_control',
+        'max_hours',
         'deduction_amount',
         'color',
         'description',
@@ -17,6 +19,7 @@ class PermissionType extends Model
 
     protected $casts = [
         'allowed_times'    => 'integer',
+        'max_hours'        => 'decimal:2',
         'deduction_amount' => 'decimal:2',
     ];
 }

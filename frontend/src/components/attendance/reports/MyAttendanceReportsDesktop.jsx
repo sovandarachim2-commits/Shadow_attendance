@@ -51,8 +51,13 @@ export default function MyAttendanceReportsDesktop({
 
   const statCards = [
     { label: 'Present Days', value: summary.present ?? 0, pct: pct(summary.present), trend: 'In selected period', trendUp: true, icon: Users, tone: 'emerald' },
-    { label: 'Late Days', value: summary.late ?? 0, pct: pct(summary.late), trend: 'In selected period', trendUp: false, icon: Clock, tone: 'amber' },
+    { label: 'Late Check In', value: summary.late ?? 0, pct: pct(summary.late), trend: 'In selected period', trendUp: false, icon: Clock, tone: 'orange' },
     { label: 'Absent Days', value: summary.absent ?? 0, pct: pct(summary.absent), trend: 'In selected period', trendUp: false, icon: UserMinus, tone: 'rose' },
+    { label: 'Early Check Out', value: summary.early_checkout ?? 0, pct: pct(summary.early_checkout), trend: 'In selected period', trendUp: false, icon: AlertCircle, tone: 'yellow' },
+    { label: 'Day Off', value: summary.day_off ?? 0, pct: pct(summary.day_off), trend: 'In selected period', trendUp: true, icon: Calendar, tone: 'sky' },
+    { label: 'Missing Check In', value: summary.missing_checkin ?? summary.missing_attendance ?? 0, pct: pct(summary.missing_checkin ?? summary.missing_attendance), trend: 'In selected period', trendUp: false, icon: AlertCircle, tone: 'violet' },
+    { label: 'Missing Check Out', value: summary.missing_checkout ?? 0, pct: pct(summary.missing_checkout), trend: 'In selected period', trendUp: false, icon: AlertCircle, tone: 'fuchsia' },
+    { label: 'Personal Request', value: summary.personal_request ?? summary.on_leave ?? 0, pct: pct(summary.personal_request ?? summary.on_leave), trend: 'In selected period', trendUp: true, icon: AlertCircle, tone: 'blue' },
     { label: 'Total Working Hours', value: formatWorkHours(summary.total_work_minutes), pct: null, trend: `${summary.total_records ?? 0} days logged`, trendUp: true, icon: Timer, tone: 'sky' },
     { label: 'Overtime Hours', value: formatWorkHours(summary.overtime_minutes), pct: null, trend: 'In selected period', trendUp: true, icon: AlertCircle, tone: 'violet' },
   ]
@@ -85,7 +90,7 @@ export default function MyAttendanceReportsDesktop({
               {exporting ? 'Exporting…' : 'Download Report'}
             </button>
           )}
-          <button type="button" onClick={() => openPermissionRequest?.('Attendance Edit')} className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900">
+          <button type="button" onClick={() => openPermissionRequest?.('Missing Check In')} className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900">
             <RefreshCw size={16} />
             Request Correction
           </button>
@@ -107,9 +112,13 @@ export default function MyAttendanceReportsDesktop({
             <select className={inputCls} value={draft.status ?? ''} onChange={(e) => setDraft((d) => ({ ...d, status: e.target.value }))}>
               <option value="">All Status</option>
               <option value="present">Present</option>
-              <option value="late">Late</option>
+              <option value="late">Late Check In</option>
+              <option value="early_checkout">Early Check Out</option>
+              <option value="day_off">Day Off</option>
+              <option value="missing_checkin">Missing Check In</option>
+              <option value="missing_checkout">Missing Check Out</option>
+              <option value="personal_request">Personal Request</option>
               <option value="absent">Absent</option>
-              <option value="on_leave">Leave</option>
             </select>
           </FilterSelect>
           <FilterSelect label="Attendance Type">
@@ -149,7 +158,7 @@ export default function MyAttendanceReportsDesktop({
                   <table className="w-full min-w-[900px] text-left text-sm">
                     <thead>
                       <tr className="border-b bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:bg-slate-950/50">
-                        {['Date', 'Day', 'Check In', 'Break Out', 'Break In', 'Check Out', 'Working Hours', 'Status', 'Late', 'Action'].map((h) => (
+                        {['Date', 'Day', 'Check In', 'Break Out', 'Break In', 'Check Out', 'Working Hours', 'Status', 'Late Check In', 'Action'].map((h) => (
                           <th key={h} className="whitespace-nowrap px-4 py-3.5">{h}</th>
                         ))}
                       </tr>
@@ -237,9 +246,13 @@ export default function MyAttendanceReportsDesktop({
             </div>
             <div className="mt-3 flex flex-wrap gap-3 text-[10px] text-slate-500">
               <LegendDot color="bg-emerald-500" label="Present" />
-              <LegendDot color="bg-amber-500" label="Late" />
+              <LegendDot color="bg-orange-500" label="Late Check In" />
+              <LegendDot color="bg-yellow-500" label="Early Check Out" />
               <LegendDot color="bg-rose-500" label="Absent" />
-              <LegendDot color="bg-sky-500" label="Leave" />
+              <LegendDot color="bg-sky-500" label="Day Off" />
+              <LegendDot color="bg-violet-500" label="Missing Check In" />
+              <LegendDot color="bg-fuchsia-500" label="Missing Check Out" />
+              <LegendDot color="bg-blue-500" label="Personal Request" />
             </div>
           </div>
 
@@ -275,7 +288,7 @@ export default function MyAttendanceReportsDesktop({
                 <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
                   <DetailCell label="Working Hours" value={formatWorkHours(selected.work_minutes)} />
                   <DetailCell label="Overtime Hours" value={formatWorkHours(Math.max(0, (selected.work_minutes || 0) - 8 * 60))} />
-                  <DetailCell label="Late Minutes" value={`${selected.late_minutes ?? 0} min`} />
+                  <DetailCell label="Late Check In Minutes" value={`${selected.late_minutes ?? 0} min`} />
                   <DetailCell label="Attendance Type" value={<TypeBadge type={selected.type} />} />
                 </dl>
               </>
@@ -293,9 +306,13 @@ function ReportStatCard({ label, value, pct, trend, trendUp, icon: Icon, tone })
   const tones = {
     emerald: 'bg-emerald-100 text-emerald-600',
     amber: 'bg-amber-100 text-amber-600',
+    orange: 'bg-orange-100 text-orange-600',
+    yellow: 'bg-yellow-100 text-yellow-700',
     rose: 'bg-rose-100 text-rose-600',
     sky: 'bg-sky-100 text-sky-600',
     violet: 'bg-violet-100 text-violet-600',
+    fuchsia: 'bg-fuchsia-100 text-fuchsia-600',
+    blue: 'bg-blue-100 text-blue-600',
   }
   return (
     <div className="rounded-xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -412,9 +429,13 @@ function formatDayShort(dateStr) {
 
 function statusDotClass(row) {
   const s = row.display_status || row.status
-  if (s === 'late') return 'bg-amber-500'
+  if (s === 'late') return 'bg-orange-500'
+  if (s === 'early_checkout') return 'bg-yellow-500'
   if (s === 'absent') return 'bg-rose-500'
-  if (s === 'on_leave' || s === 'half_day' || s === 'leave') return 'bg-sky-500'
+  if (s === 'day_off') return 'bg-sky-500'
+  if (s === 'missing_checkin' || s === 'missing_attendance') return 'bg-violet-500'
+  if (s === 'missing_checkout') return 'bg-fuchsia-500'
+  if (s === 'personal_request' || s === 'on_leave' || s === 'half_day' || s === 'leave') return 'bg-blue-500'
   return 'bg-emerald-500'
 }
 

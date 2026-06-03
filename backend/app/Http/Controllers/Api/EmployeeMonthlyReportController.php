@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
 use App\Models\Employee;
+use App\Models\PermissionRequest;
 use App\Services\WorkScheduleService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -15,13 +16,17 @@ class EmployeeMonthlyReportController extends Controller
     public function __construct(private WorkScheduleService $workSchedules) {}
     private const STATUS_LABELS = [
         'present'          => 'Present',
-        'late'             => 'Late',
+        'late'             => 'Late Check In',
+        'early_checkout'   => 'Early Check Out',
         'absent'           => 'Absent',
+        'missing_checkin'  => 'Missing Check In',
         'missing_checkout' => 'Missing Check Out',
+        'missing_attendance' => 'Missing Check In',
         'day_off'          => 'Day Off',
-        'on_leave'         => 'Leave',
-        'leave'            => 'Leave',
-        'half_day'         => 'Half Day',
+        'personal_request' => 'Personal Request',
+        'on_leave'         => 'Personal Request',
+        'leave'            => 'Personal Request',
+        'half_day'         => 'Personal Request',
         'holiday'          => 'Holiday',
     ];
 
@@ -165,11 +170,23 @@ class EmployeeMonthlyReportController extends Controller
 
         $allDays = [];
         $cursor  = $from->copy();
+        $approvedRequests = PermissionRequest::query()
+            ->where('employee_id', $employeeId)
+            ->where('status', 'approved')
+            ->whereIn('type', ['Late Check In', 'Early Check Out', 'Day Off', 'Missing Check In', 'Missing Attendance', 'Personal Request'])
+            ->whereDate('request_date', '<=', $to->toDateString())
+            ->where(function ($dateQuery) use ($from) {
+                $dateQuery
+                    ->whereDate('request_date_end', '>=', $from->toDateString())
+                    ->orWhereNull('request_date_end');
+            })
+            ->get();
 
         while ($cursor->lte($to)) {
             $dateStr  = $cursor->toDateString();
             $record   = $records->get($dateStr);
             $dayInfo = $this->workSchedules->dayInfoForEmployeeOnDate($employeeId, $cursor);
+            $requestStatus = $this->requestStatusForDate($approvedRequests, $dateStr);
 
             if ($record) {
                 $isMissing = $record->check_in_at
@@ -184,6 +201,10 @@ class EmployeeMonthlyReportController extends Controller
                     $status = 'late';
                 }
 
+                if ($requestStatus && ! in_array($status, ['late', 'missing_checkout'], true)) {
+                    $status = $requestStatus;
+                }
+
                 $allDays[] = [
                     'date'         => $dateStr,
                     'day'          => $cursor->format('D'),
@@ -196,7 +217,7 @@ class EmployeeMonthlyReportController extends Controller
                     'id'           => $record->id,
                 ];
             } else {
-                $offStatus = $dayInfo['is_working_day'] ? 'absent' : 'day_off';
+                $offStatus = $requestStatus ?: ($dayInfo['is_working_day'] ? 'absent' : 'day_off');
                 $allDays[] = [
                     'date'         => $dateStr,
                     'day'          => $cursor->format('D'),
@@ -217,8 +238,8 @@ class EmployeeMonthlyReportController extends Controller
 
         foreach ($allDays as $d) {
             $s = $d['status'];
-            if (in_array($s, ['on_leave', 'leave', 'half_day'], true)) {
-                $summary['on_leave']++;
+            if (in_array($s, ['on_leave', 'leave', 'half_day', 'personal_request'], true)) {
+                $summary['personal_request']++;
             } elseif (array_key_exists($s, $summary)) {
                 $summary[$s]++;
             }
@@ -260,10 +281,12 @@ class EmployeeMonthlyReportController extends Controller
         return [
             'present'          => 0,
             'late'             => 0,
+            'early_checkout'   => 0,
             'absent'           => 0,
+            'missing_checkin'  => 0,
             'missing_checkout' => 0,
             'day_off'          => 0,
-            'on_leave'         => 0,
+            'personal_request' => 0,
         ];
     }
 
@@ -275,9 +298,11 @@ class EmployeeMonthlyReportController extends Controller
 
         return match ($status) {
             'late'             => $lateMinutes > 0 ? "Late check in {$lateMinutes}m" : 'Late arrival',
-            'missing_checkout' => 'Forgot to check out',
+            'early_checkout'   => 'Approved early check out',
+            'missing_checkin', 'missing_attendance' => 'Missing check-in request approved',
+            'missing_checkout' => 'Missing check-out',
             'day_off'          => $this->dayOffNote($dayInfo),
-            'on_leave', 'leave', 'half_day' => 'On leave',
+            'personal_request', 'on_leave', 'leave', 'half_day' => 'Personal request approved',
             'holiday'          => 'Public holiday',
             'absent'           => $dayInfo && $dayInfo['is_working_day']
                 ? 'No attendance record (scheduled work day)'
@@ -296,5 +321,36 @@ class EmployeeMonthlyReportController extends Controller
         }
 
         return 'Scheduled day off';
+    }
+
+    private function requestStatusForDate($requests, string $date): ?string
+    {
+        $priority = [
+            'Late Check In' => 'late',
+            'Early Check Out' => 'early_checkout',
+            'Day Off' => 'day_off',
+            'Missing Check In' => 'missing_checkin',
+            'Missing Attendance' => 'missing_checkin',
+            'Personal Request' => 'personal_request',
+        ];
+
+        foreach ($priority as $type => $status) {
+            $match = $requests->first(function (PermissionRequest $request) use ($date, $type) {
+                if ($request->type !== $type) {
+                    return false;
+                }
+
+                $start = $request->request_date?->toDateString();
+                $end = $request->request_date_end?->toDateString() ?: $start;
+
+                return $start <= $date && $end >= $date;
+            });
+
+            if ($match) {
+                return $status;
+            }
+        }
+
+        return null;
     }
 }

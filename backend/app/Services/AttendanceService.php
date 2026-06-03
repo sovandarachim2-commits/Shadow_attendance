@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Attendance;
 use App\Models\Employee;
 use App\Models\GpsLocation;
+use App\Models\PermissionRequest;
 use App\Models\User;
 use App\Repositories\AttendanceRepository;
 use Illuminate\Support\Carbon;
@@ -123,6 +124,15 @@ class AttendanceService
         $this->assertIpAllowed($user);
         $this->workSchedules->assertCanCheckInToday($user);
 
+        if (! $this->workSchedules->canOverrideSchedule($user)) {
+            $workEnd = $this->attendanceRules->workEndToday($user);
+            if ($workEnd && now()->greaterThan($workEnd)) {
+                throw ValidationException::withMessages([
+                    'attendance' => "Work has already ended for today ({$workEnd->format('h:i A')}). You cannot check in.",
+                ]);
+            }
+        }
+
         $employee = $user->employee()->with(['branch', 'position', 'department'])->firstOrFail();
         $attendanceType = $employee->employment_type === 'outdoor_sales' ? 'outdoor' : ($data['type'] ?? 'office');
         $existing = $this->attendanceRepository->todayForEmployee($employee->id);
@@ -162,6 +172,7 @@ class AttendanceService
 
         $now = now();
         $lateEval = $this->lateRules->evaluate($now, $employee->id);
+        $lateEval = $this->applyApprovedLateCheckInRequests($employee->id, $now, $lateEval);
 
         $attendance = Attendance::create([
             'employee_id' => $employee->id,
@@ -268,9 +279,11 @@ class AttendanceService
                 . "💰 កាត់ប្រាក់: {$deduction}\n\n"
                 . "ស្ថានភាព: មកយឺត";
 
-            $department = $employee->department?->name ?? 'N/A';
-            $branch     = $employee->branch?->name ?? 'N/A';
-            $photoUrl   = $this->images->url($attendance->check_in_photo_path);
+            $department    = $employee->department?->name ?? 'N/A';
+            $branch        = $employee->branch?->name ?? 'N/A';
+            $profilePhoto  = $this->images->url($employee->photo_path);
+            $selfiePhoto   = $this->images->url($attendance->check_in_photo_path);
+            $photoUrl      = $profilePhoto ?: $selfiePhoto;
 
             $ruleMessage = "⚠️ <b>ជូនដំណឹងមកយឺត</b>\n\n"
                 . "👤 បុគ្គលិក: {$employeeName}\n"
@@ -285,12 +298,16 @@ class AttendanceService
                 . "ស្ថានភាព: មកយឺត";
 
             $this->sendTelegramSafely(function () use ($employee, $lateMessage, $ruleMessage, $rule, $photoUrl, $lateEventKey) {
-                $this->telegram->send($lateMessage, $lateEventKey);
+                $this->telegram->sendWithPhoto($lateMessage, $photoUrl, $lateEventKey);
 
                 // Send richer profile message to the rule's own group if configured.
                 $ruleChatId = trim((string) ($rule->telegram_chat_id ?? ''));
                 if ($ruleChatId !== '') {
-                    $this->telegram->sendRaw($ruleChatId, $ruleMessage, $rule->telegram_topic_id ?? null);
+                    if ($photoUrl) {
+                        $this->telegram->sendPhotoRaw($ruleChatId, $photoUrl, $ruleMessage, $rule->telegram_topic_id ?? null);
+                    } else {
+                        $this->telegram->sendRaw($ruleChatId, $ruleMessage, $rule->telegram_topic_id ?? null);
+                    }
                 }
 
                 if ($this->shouldNotifyEmployeeLate()) {
@@ -302,6 +319,108 @@ class AttendanceService
         }
 
         return $attendance->fresh(['employee', 'branch']);
+    }
+
+    public function applyLateCheckInApproval(PermissionRequest $request): void
+    {
+        if ($request->type !== 'Late Check In') {
+            return;
+        }
+
+        $attendance = Attendance::query()
+            ->where('employee_id', $request->employee_id)
+            ->whereDate('attendance_date', $request->request_date)
+            ->where('status', 'late')
+            ->first();
+
+        if (! $attendance || ! $attendance->check_in_at) {
+            return;
+        }
+
+        $lateEval = $this->lateRules->evaluate($attendance->check_in_at, $attendance->employee_id);
+        $lateEval = $this->applyApprovedLateCheckInRequests($attendance->employee_id, $attendance->check_in_at, $lateEval);
+
+        $attendance->forceFill([
+            'deduction_amount' => $lateEval['deduction_amount'],
+            'deduction_reason' => $lateEval['deduction_reason'],
+        ])->save();
+    }
+
+    private function applyApprovedLateCheckInRequests(int $employeeId, Carbon $checkInAt, array $lateEval): array
+    {
+        if (! ($lateEval['is_late'] ?? false)) {
+            return $lateEval;
+        }
+
+        $requests = PermissionRequest::query()
+            ->where('employee_id', $employeeId)
+            ->where('type', 'Late Check In')
+            ->where('status', 'approved')
+            ->whereDate('request_date', $checkInAt->toDateString())
+            ->orderByDesc('reviewed_at')
+            ->get();
+
+        if ($requests->isEmpty()) {
+            return $lateEval;
+        }
+
+        $approvedMinutes = $requests->sum(fn (PermissionRequest $request) => $this->approvedLateMinutes($request, $checkInAt, $lateEval['work_start']));
+        $approvedMinutes = min((int) $lateEval['late_minutes'], (int) $approvedMinutes);
+
+        if ($approvedMinutes <= 0) {
+            return $lateEval;
+        }
+
+        $chargeableMinutes = max(0, (int) $lateEval['late_minutes'] - $approvedMinutes);
+        $requestCodes = $requests
+            ->filter(fn (PermissionRequest $request) => $this->approvedLateMinutes($request, $checkInAt, $lateEval['work_start']) > 0)
+            ->pluck('request_code')
+            ->implode(', ');
+
+        if ($chargeableMinutes <= 0) {
+            $lateEval['deduction_amount'] = 0.0;
+            $lateEval['deduction_reason'] = "Excused {$approvedMinutes}m by approved Late Check In request {$requestCodes}";
+            $lateEval['approved_late_minutes'] = $approvedMinutes;
+            $lateEval['chargeable_late_minutes'] = 0;
+
+            return $lateEval;
+        }
+
+        $deduction = $this->lateRules->deductionForLateMinutes($chargeableMinutes, $employeeId);
+        $lateEval['applied_rule'] = $deduction['applied_rule'];
+        $lateEval['deduction_amount'] = $deduction['deduction_amount'];
+        $lateEval['deduction_reason'] = trim(
+            "Approved {$approvedMinutes}m by Late Check In request {$requestCodes}; charged {$chargeableMinutes}m"
+            . ($deduction['deduction_reason'] ? ": {$deduction['deduction_reason']}" : '')
+        );
+        $lateEval['approved_late_minutes'] = $approvedMinutes;
+        $lateEval['chargeable_late_minutes'] = $chargeableMinutes;
+
+        return $lateEval;
+    }
+
+    private function approvedLateMinutes(PermissionRequest $request, Carbon $checkInAt, Carbon $workStart): int
+    {
+        if ($request->request_date?->toDateString() !== $checkInAt->toDateString()) {
+            return 0;
+        }
+
+        if (! $request->start_time || ! $request->end_time) {
+            return max(0, (int) ceil($workStart->diffInSeconds($checkInAt) / 60));
+        }
+
+        $date = $checkInAt->toDateString();
+        $start = Carbon::parse("{$date} {$request->start_time}");
+        $end = Carbon::parse("{$date} {$request->end_time}");
+
+        $overlapStart = $start->greaterThan($workStart) ? $start : $workStart;
+        $overlapEnd = $end->lessThan($checkInAt) ? $end : $checkInAt;
+
+        if ($overlapEnd->lessThanOrEqualTo($overlapStart)) {
+            return 0;
+        }
+
+        return (int) ceil($overlapStart->diffInSeconds($overlapEnd) / 60);
     }
 
     private function shouldSendLateTelegram(): bool

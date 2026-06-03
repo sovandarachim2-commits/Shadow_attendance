@@ -46,6 +46,15 @@ function limitLabel(limitType) {
   return limitType ?? '—'
 }
 
+function durationControlLabel(control) {
+  if (control === 'single_day') return 'Single Day'
+  if (control === 'multiple_day') return 'Multiple Day'
+  if (control === 'hours') return 'Hours'
+  return 'Any Duration'
+}
+
+const CORE_TYPES = ['Late Check In', 'Early Check Out', 'Day Off', 'Missing Check In', 'Personal Request']
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function PermissionTypesPage() {
   const [types, setTypes]       = useState([])
@@ -269,8 +278,11 @@ export default function PermissionTypesPage() {
 
 // ── Desktop card ──────────────────────────────────────────────────────────────
 function PermissionTypeCard({ item, onEdit, onDelete }) {
+  const isCore  = CORE_TYPES.includes(item.name)
   const allowed = item.allowedTimes ?? item.allowed_times ?? 0
   const limit   = item.limitType   ?? item.limit_type   ?? 'per_month'
+  const control = item.durationControl ?? item.duration_control ?? 'any'
+  const maxHours = item.maxHours ?? item.max_hours ?? null
   const deduct  = item.deductionAmount ?? item.deduction_amount ?? 0
 
   return (
@@ -305,6 +317,13 @@ function PermissionTypeCard({ item, onEdit, onDelete }) {
             Deduct: ${Number(deduct).toFixed(2)}
           </span>
         </div>
+        <div className="rounded-xl bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
+          {durationControlLabel(control)}
+          {control === 'hours' && maxHours ? `, max ${Number(maxHours).toFixed(2)} hour(s)` : ''}
+        </div>
+        <div className="rounded-xl bg-amber-50 px-4 py-2.5 text-xs font-semibold text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
+          Approval Required
+        </div>
 
         {/* Actions */}
         <div className="mt-auto flex gap-2">
@@ -315,13 +334,19 @@ function PermissionTypeCard({ item, onEdit, onDelete }) {
           >
             <Pencil size={14} /> Edit
           </button>
-          <button
-            type="button"
-            onClick={onDelete}
-            className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-rose-200 py-2.5 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 dark:border-rose-900 dark:text-rose-400 dark:hover:bg-rose-950/20"
-          >
-            <Trash2 size={14} /> Delete
-          </button>
+          {isCore ? (
+            <div className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 py-2.5 text-sm font-semibold text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500">
+              <HardDrive size={14} /> Core
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={onDelete}
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-rose-200 py-2.5 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 dark:border-rose-900 dark:text-rose-400 dark:hover:bg-rose-950/20"
+            >
+              <Trash2 size={14} /> Delete
+            </button>
+          )}
         </div>
       </div>
     </div>
@@ -330,8 +355,11 @@ function PermissionTypeCard({ item, onEdit, onDelete }) {
 
 // ── Mobile row ────────────────────────────────────────────────────────────────
 function MobilePermissionTypeRow({ item, onEdit, onDelete }) {
+  const isCore  = CORE_TYPES.includes(item.name)
   const allowed = item.allowedTimes ?? item.allowed_times ?? 0
   const limit   = item.limitType   ?? item.limit_type   ?? 'per_month'
+  const control = item.durationControl ?? item.duration_control ?? 'any'
+  const maxHours = item.maxHours ?? item.max_hours ?? null
   const deduct  = item.deductionAmount ?? item.deduction_amount ?? 0
 
   return (
@@ -353,6 +381,10 @@ function MobilePermissionTypeRow({ item, onEdit, onDelete }) {
             <CircleDollarSign size={11} /> ${Number(deduct).toFixed(2)}
           </span>
         </div>
+        <p className="mt-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+          {durationControlLabel(control)}{control === 'hours' && maxHours ? `, max ${Number(maxHours).toFixed(2)}h` : ''}
+        </p>
+        <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">Approval Required</p>
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
@@ -363,13 +395,19 @@ function MobilePermissionTypeRow({ item, onEdit, onDelete }) {
         >
           <Pencil size={15} />
         </button>
-        <button
-          type="button"
-          onClick={onDelete}
-          className="grid h-9 w-9 place-items-center rounded-xl border border-rose-200 text-rose-500 transition hover:bg-rose-50 dark:border-rose-900 dark:hover:bg-rose-950/30"
-        >
-          <Trash2 size={15} />
-        </button>
+        {isCore ? (
+          <div className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 bg-slate-50 text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500">
+            <HardDrive size={15} />
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={onDelete}
+            className="grid h-9 w-9 place-items-center rounded-xl border border-rose-200 text-rose-500 transition hover:bg-rose-50 dark:border-rose-900 dark:hover:bg-rose-950/30"
+          >
+            <Trash2 size={15} />
+          </button>
+        )}
       </div>
     </div>
   )
@@ -382,6 +420,8 @@ function DesktopPermissionTypeForm({ initialData, onClose, onSave }) {
       name:            initialData.name            || '',
       allowedTimes:    initialData.allowedTimes    ?? initialData.allowed_times    ?? 1,
       limitType:       initialData.limitType       ?? initialData.limit_type       ?? 'per_month',
+      durationControl: initialData.durationControl ?? initialData.duration_control ?? 'any',
+      maxHours:        initialData.maxHours        ?? initialData.max_hours        ?? '',
       deductionAmount: initialData.deductionAmount ?? initialData.deduction_amount ?? 0,
       color:           initialData.color           || '#f59e0b',
       description:     initialData.description     || '',
@@ -523,6 +563,59 @@ function DesktopPermissionTypeForm({ initialData, onClose, onSave }) {
             <Helper text="Choose whether the allowed times limit resets daily or monthly." />
           </div>
 
+          <div>
+            <label className="mb-2 block text-sm font-bold text-slate-900 dark:text-white">
+              Request Duration Control
+            </label>
+            <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+              {[
+                { id: 'any', label: 'Any' },
+                { id: 'single_day', label: 'Single Day' },
+                { id: 'multiple_day', label: 'Multiple Day' },
+                { id: 'hours', label: 'Hours' },
+              ].map((opt) => {
+                const sel = form.durationControl === opt.id
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => set('durationControl', opt.id)}
+                    className={clsx(
+                      'rounded-2xl border-2 px-4 py-3.5 text-left text-sm font-bold transition',
+                      sel
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:border-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-300'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300',
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                )
+              })}
+            </div>
+            <Helper text="For Late Check In, choose Hours so employees must submit a start and end time." />
+          </div>
+
+          {form.durationControl === 'hours' && (
+            <div>
+              <label className="mb-2 block text-sm font-bold text-slate-900 dark:text-white">
+                Max Hours
+              </label>
+              <IconField icon={Clock} badge="Hour(s)">
+                <input
+                  type="number"
+                  min="0.25"
+                  max="24"
+                  step="0.25"
+                  value={form.maxHours}
+                  onChange={(e) => set('maxHours', e.target.value)}
+                  className="flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none dark:text-white"
+                  placeholder="e.g. 2"
+                />
+              </IconField>
+              <Helper text="Example: set 2 to block late requests longer than 2 hours." />
+            </div>
+          )}
+
           {/* Deduction Amount */}
           <div>
             <label className="mb-2 block text-sm font-bold text-slate-900 dark:text-white">
@@ -630,6 +723,10 @@ function DesktopPermissionTypeForm({ initialData, onClose, onSave }) {
                   <CircleDollarSign size={13} className="text-emerald-500" />
                   ${Number(form.deductionAmount || 0).toFixed(2)}
                 </span>
+              </div>
+              <div className="mt-3 rounded-xl bg-emerald-50 px-4 py-2.5 text-xs font-semibold text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
+                {durationControlLabel(form.durationControl)}
+                {form.durationControl === 'hours' && form.maxHours ? `, max ${Number(form.maxHours).toFixed(2)} hour(s)` : ''}
               </div>
             </div>
           </div>

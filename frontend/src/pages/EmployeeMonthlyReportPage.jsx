@@ -33,9 +33,15 @@ const STATUS_META = {
     row: '',
   },
   late: {
-    label: 'Late',
-    badge: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400',
-    dot: 'bg-amber-500',
+    label: 'Late Check In',
+    badge: 'bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-400',
+    dot: 'bg-orange-500',
+    row: '',
+  },
+  early_checkout: {
+    label: 'Early Check Out',
+    badge: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950/60 dark:text-yellow-300',
+    dot: 'bg-yellow-500',
     row: '',
   },
   absent: {
@@ -44,34 +50,52 @@ const STATUS_META = {
     dot: 'bg-rose-500',
     row: 'bg-rose-50/40 dark:bg-rose-950/10',
   },
+  missing_checkin: {
+    label: 'Missing Check In',
+    badge: 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-400',
+    dot: 'bg-violet-500',
+    row: '',
+  },
   missing_checkout: {
     label: 'Missing Check Out',
+    badge: 'bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-950/60 dark:text-fuchsia-400',
+    dot: 'bg-fuchsia-500',
+    row: '',
+  },
+  missing_attendance: {
+    label: 'Missing Check In',
     badge: 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-400',
     dot: 'bg-violet-500',
     row: '',
   },
   day_off: {
     label: 'Day Off',
-    badge: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
-    dot: 'bg-slate-400',
-    row: 'bg-slate-50/70 dark:bg-slate-800/20',
-  },
-  on_leave: {
-    label: 'Leave',
     badge: 'bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-400',
     dot: 'bg-sky-500',
+    row: 'bg-sky-50/40 dark:bg-sky-950/10',
+  },
+  on_leave: {
+    label: 'Personal Request',
+    badge: 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400',
+    dot: 'bg-blue-500',
     row: '',
   },
   leave: {
-    label: 'Leave',
-    badge: 'bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-400',
-    dot: 'bg-sky-500',
+    label: 'Personal Request',
+    badge: 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400',
+    dot: 'bg-blue-500',
     row: '',
   },
   half_day: {
-    label: 'Half Day',
-    badge: 'bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-400',
-    dot: 'bg-sky-500',
+    label: 'Personal Request',
+    badge: 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400',
+    dot: 'bg-blue-500',
+    row: '',
+  },
+  personal_request: {
+    label: 'Personal Request',
+    badge: 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400',
+    dot: 'bg-blue-500',
     row: '',
   },
   holiday: {
@@ -84,49 +108,63 @@ const STATUS_META = {
 
 const CARDS_CONFIG = [
   { key: 'present', label: 'Present Days', icon: CheckCircle2, tone: 'emerald' },
-  { key: 'late', label: 'Late Days', icon: Clock, tone: 'amber' },
+  { key: 'late', label: 'Late Check In', icon: Clock, tone: 'orange' },
   { key: 'absent', label: 'Absent Days', icon: UserX, tone: 'rose' },
-  { key: 'missing_checkout', label: 'Missing Check Out', icon: AlertCircle, tone: 'violet' },
-  { key: 'day_off', label: 'Day Off', icon: Calendar, tone: 'slate' },
-  { key: 'on_leave', label: 'Leave Days', icon: XCircle, tone: 'sky' },
+  { key: 'early_checkout', label: 'Early Check Out', icon: XCircle, tone: 'yellow' },
+  { key: 'missing_checkin', label: 'Missing Check In', icon: AlertCircle, tone: 'violet' },
+  { key: 'missing_checkout', label: 'Missing Check Out', icon: AlertCircle, tone: 'fuchsia' },
+  { key: 'day_off', label: 'Day Off', icon: Calendar, tone: 'sky' },
+  { key: 'personal_request', label: 'Personal Request', icon: XCircle, tone: 'blue' },
 ]
 
 const TONE_ICON = {
   emerald: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400',
   amber: 'bg-amber-100 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400',
+  orange: 'bg-orange-100 text-orange-600 dark:bg-orange-950/40 dark:text-orange-400',
+  yellow: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950/40 dark:text-yellow-300',
   rose: 'bg-rose-100 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400',
   violet: 'bg-violet-100 text-violet-600 dark:bg-violet-950/40 dark:text-violet-400',
+  fuchsia: 'bg-fuchsia-100 text-fuchsia-600 dark:bg-fuchsia-950/40 dark:text-fuchsia-400',
   slate: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
   sky: 'bg-sky-100 text-sky-600 dark:bg-sky-950/40 dark:text-sky-400',
+  blue: 'bg-blue-100 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400',
 }
 
 const TONE_VALUE = {
   emerald: 'text-emerald-700 dark:text-emerald-300',
   amber: 'text-amber-700 dark:text-amber-300',
+  orange: 'text-orange-700 dark:text-orange-300',
+  yellow: 'text-yellow-700 dark:text-yellow-300',
   rose: 'text-rose-700 dark:text-rose-300',
   violet: 'text-violet-700 dark:text-violet-300',
+  fuchsia: 'text-fuchsia-700 dark:text-fuchsia-300',
   slate: 'text-slate-600 dark:text-slate-300',
   sky: 'text-sky-700 dark:text-sky-300',
+  blue: 'text-blue-700 dark:text-blue-300',
 }
 
 const STATUS_FILTER_OPTIONS = [
   { value: '', label: 'All Status' },
   { value: 'present', label: 'Present' },
-  { value: 'late', label: 'Late' },
+  { value: 'late', label: 'Late Check In' },
+  { value: 'early_checkout', label: 'Early Check Out' },
   { value: 'absent', label: 'Absent' },
-  { value: 'missing_checkout', label: 'Missing Checkout' },
-  { value: 'on_leave', label: 'Leave' },
+  { value: 'missing_checkin', label: 'Missing Check In' },
+  { value: 'missing_checkout', label: 'Missing Check Out' },
+  { value: 'personal_request', label: 'Personal Request' },
   { value: 'day_off', label: 'Day Off' },
   { value: 'holiday', label: 'Holiday' },
 ]
 
 const LEGEND_ITEMS = [
   { dot: 'bg-emerald-500', label: 'Present' },
-  { dot: 'bg-amber-500', label: 'Late' },
+  { dot: 'bg-orange-500', label: 'Late Check In' },
+  { dot: 'bg-yellow-500', label: 'Early Check Out' },
+  { dot: 'bg-sky-500', label: 'Day Off' },
+  { dot: 'bg-violet-500', label: 'Missing Check In' },
+  { dot: 'bg-fuchsia-500', label: 'Missing Check Out' },
+  { dot: 'bg-blue-500', label: 'Personal Request' },
   { dot: 'bg-rose-500', label: 'Absent' },
-  { dot: 'bg-violet-500', label: 'Missing Check Out' },
-  { dot: 'bg-slate-400', label: 'Day Off' },
-  { dot: 'bg-sky-500', label: 'Leave' },
   { dot: 'bg-cyan-500', label: 'Holiday' },
 ]
 
@@ -136,13 +174,17 @@ const MOBILE_PAGE_SIZE = 10
 
 const MOBILE_STATUS_LABELS = {
   present: 'Present',
-  late: 'Late',
+  late: 'Late In',
+  early_checkout: 'Early Out',
   absent: 'Absent',
+  missing_checkin: 'Missing In',
   missing_checkout: 'Missing Out',
+  missing_attendance: 'Missing In',
   day_off: 'Day Off',
-  on_leave: 'Leave',
-  leave: 'Leave',
-  half_day: 'Half Day',
+  on_leave: 'Personal',
+  leave: 'Personal',
+  half_day: 'Personal',
+  personal_request: 'Personal',
   holiday: 'Holiday',
 }
 

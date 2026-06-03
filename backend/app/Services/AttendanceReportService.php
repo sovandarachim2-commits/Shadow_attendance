@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Attendance;
+use App\Models\PermissionRequest;
 use App\Services\ImageUploadService;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -30,7 +31,46 @@ class AttendanceReportService
             return 'missing_checkout';
         }
 
+        if (($row->status ?? null) === 'late' || (int) ($row->late_minutes ?? 0) > 0) {
+            return 'late';
+        }
+
+        $requestStatus = $this->approvedRequestStatus($row);
+        if ($requestStatus) {
+            return $requestStatus;
+        }
+
         return $row->status ?? 'present';
+    }
+
+    private function approvedRequestStatus(Attendance $row): ?string
+    {
+        if (! $row->employee_id || ! $row->attendance_date) {
+            return null;
+        }
+
+        $date = $row->attendance_date->toDateString();
+        $request = PermissionRequest::query()
+            ->where('employee_id', $row->employee_id)
+            ->where('status', 'approved')
+            ->whereIn('type', ['Early Check Out', 'Day Off', 'Missing Check In', 'Missing Attendance', 'Personal Request'])
+            ->whereDate('request_date', '<=', $date)
+            ->where(function ($dateQuery) use ($date) {
+                $dateQuery
+                    ->whereDate('request_date_end', '>=', $date)
+                    ->orWhereNull('request_date_end');
+            })
+            ->orderByRaw("FIELD(type, 'Early Check Out', 'Day Off', 'Missing Check In', 'Missing Attendance', 'Personal Request')")
+            ->first();
+
+        return match ($request?->type) {
+            'Early Check Out' => 'early_checkout',
+            'Day Off' => 'day_off',
+            'Missing Check In' => 'missing_checkin',
+            'Missing Attendance' => 'missing_checkin',
+            'Personal Request' => 'personal_request',
+            default => null,
+        };
     }
 
     public function locationLabel(Attendance $row): string
@@ -131,13 +171,21 @@ class AttendanceReportService
 
     public function summaryForCollection(Collection $records): array
     {
-        $present = $records->where('status', 'present')->count();
-        $late = $records->where('status', 'late')->count();
-        $absent = $records->where('status', 'absent')->count();
-        $onLeave = $records->whereIn('status', ['on_leave', 'half_day'])->count();
-        $missingCheckout = $records->filter(
-            fn ($row) => $row->check_in_at && ! $row->check_out_at && $row->status !== 'absent'
-        )->count();
+        $displayStatuses = $records->map(fn ($row) => $this->displayStatus($row));
+        $present = $displayStatuses->filter(fn ($status) => $status === 'present')->count();
+        $late = $displayStatuses->filter(fn ($status) => $status === 'late')->count();
+        $absent = $displayStatuses->filter(fn ($status) => $status === 'absent')->count();
+        $earlyCheckout = $displayStatuses->filter(fn ($status) => $status === 'early_checkout')->count();
+        $dayOff = $displayStatuses->filter(fn ($status) => $status === 'day_off')->count();
+        $personalRequest = $displayStatuses
+            ->filter(fn ($status) => in_array($status, ['personal_request', 'on_leave', 'leave', 'half_day'], true))
+            ->count();
+        $missingCheckin = $displayStatuses
+            ->filter(fn ($status) => in_array($status, ['missing_checkin', 'missing_attendance'], true))
+            ->count();
+        $missingCheckout = $displayStatuses
+            ->filter(fn ($status) => $status === 'missing_checkout')
+            ->count();
         $outdoor = $records->where('type', 'outdoor')->count();
         $totalWork = (int) $records->sum('work_minutes');
         $overtimeMinutes = max(0, $totalWork - ($records->count() * 8 * 60));
@@ -147,8 +195,13 @@ class AttendanceReportService
             'present' => $present,
             'late' => $late,
             'absent' => $absent,
-            'on_leave' => $onLeave,
+            'early_checkout' => $earlyCheckout,
+            'day_off' => $dayOff,
+            'personal_request' => $personalRequest,
+            'on_leave' => $personalRequest,
+            'missing_checkin' => $missingCheckin,
             'missing_checkout' => $missingCheckout,
+            'missing_attendance' => $missingCheckin,
             'outdoor' => $outdoor,
             'total_work_minutes' => $totalWork,
             'total_late_minutes' => (int) $records->sum('late_minutes'),

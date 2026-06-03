@@ -304,9 +304,6 @@ export default function AttendanceActionModal({ action, user, onClose, onSaved }
                       ) : (
                         <p className="mt-1 leading-relaxed text-emerald-700 dark:text-emerald-400">{address || 'Address unavailable'}</p>
                       )}
-                      <p className="mt-2 font-mono text-[10px] text-emerald-600/80 dark:text-emerald-500">
-                        {coords.latitude.toFixed(6)}, {coords.longitude.toFixed(6)} - +/-{Math.round(coords.accuracy || 0)} m
-                      </p>
                     </div>
                   </div>
                 </div>
@@ -334,7 +331,6 @@ export default function AttendanceActionModal({ action, user, onClose, onSaved }
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-bold text-emerald-800 dark:text-emerald-300">Human verified</p>
-                      <p className="mt-0.5 text-xs text-emerald-700 dark:text-emerald-400">Selfie captured automatically. Photo preview is hidden.</p>
                     </div>
                   </div>
 

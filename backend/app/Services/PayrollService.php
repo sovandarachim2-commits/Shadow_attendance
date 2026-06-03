@@ -234,7 +234,7 @@ class PayrollService
 
         foreach ($rules as $rule) {
             $count = match ($rule->deduction_type) {
-                'late' => $attendances->filter(fn ($row) => (int) $row->late_minutes > (int) ($rule->threshold_minutes ?? 0))->count(),
+                'late' => $attendances->filter(fn ($row) => $this->chargeableLateMinutes($row) > (int) ($rule->threshold_minutes ?? 0))->count(),
                 'absent' => $attendances->where('status', 'absent')->count(),
                 'missing_checkout' => $attendances->filter(fn ($row) => $row->check_in_at && ! $row->check_out_at && $row->status !== 'absent')->count(),
                 default => 0,
@@ -259,6 +259,21 @@ class PayrollService
         }
 
         return [round($total, 2), $breakdown];
+    }
+
+    private function chargeableLateMinutes(Attendance $attendance): int
+    {
+        $reason = (string) $attendance->deduction_reason;
+
+        if (preg_match('/charged\s+(\d+)m/i', $reason, $matches)) {
+            return (int) $matches[1];
+        }
+
+        if (str_contains($reason, 'approved Late Check In request')) {
+            return 0;
+        }
+
+        return (int) $attendance->late_minutes;
     }
 
     private function advancesForEmployee(Employee $employee, Carbon $month): array

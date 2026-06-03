@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\Employee;
 use App\Models\Notification;
 use App\Models\PermissionRequest;
+use App\Models\PermissionType;
 use App\Models\User;
+use App\Services\AttendanceService;
 use App\Services\TelegramNotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -16,22 +18,11 @@ use Illuminate\Validation\ValidationException;
 class PermissionRequestController extends Controller
 {
     private const TYPES = [
-        'Personal Permission',
         'Late Check In',
         'Early Check Out',
-        'Leave Request',
-        'Sick Leave',
-        'Emergency Leave',
-        'Outdoor Work',
-        'Work From Home',
-        'Overtime',
-        'Request Permission',
-        'Early Leave',
-        'Attendance Edit',
-        'Manual Check In',
-        'Missing Check Out',
         'Day Off',
-        'Custom Request',
+        'Missing Check In',
+        'Personal Request',
     ];
 
     private const EVENT_KEY = 'permission_request';
@@ -145,7 +136,7 @@ class PermissionRequestController extends Controller
         return $permissionRequest->fresh(['employee', 'replacementEmployee', 'reviewer']);
     }
 
-    public function updateStatus(Request $request, PermissionRequest $permissionRequest, TelegramNotificationService $telegram)
+    public function updateStatus(Request $request, PermissionRequest $permissionRequest, TelegramNotificationService $telegram, AttendanceService $attendance)
     {
         if ($permissionRequest->status !== 'pending') {
             throw ValidationException::withMessages(['status' => 'Only pending requests can be reviewed.']);
@@ -164,6 +155,7 @@ class PermissionRequestController extends Controller
         ]);
 
         $updated = $permissionRequest->fresh(['employee', 'replacementEmployee', 'reviewer']);
+        $attendance->applyLateCheckInApproval($updated);
         $employeeUserId = optional($updated->employee->user)->id;
         $statusLabel = ucfirst($updated->status);
         $adminName = $request->user()->name ?? 'Admin';
@@ -215,7 +207,7 @@ class PermissionRequestController extends Controller
         $required = $partial ? 'sometimes' : 'required';
 
         return $request->validate([
-            'type' => [$required, 'string', Rule::in(self::TYPES)],
+            'type' => [$required, 'string', 'max:100'],
             'replacement_employee_id' => ['nullable', 'exists:employees,id'],
             'request_date' => [$required, 'date'],
             'request_date_end' => ['nullable', 'date', 'after_or_equal:request_date'],
@@ -287,7 +279,40 @@ class PermissionRequestController extends Controller
             $data['day_part'] = $data['day_part'] ?? 'Full Day';
         }
 
+        $this->enforcePermissionTypeDuration($data);
+
         return $data;
+    }
+
+    private function enforcePermissionTypeDuration(array $data): void
+    {
+        $type = PermissionType::query()->where('name', $data['type'])->first();
+
+        if (! $type) {
+            return;
+        }
+
+        if ($type->duration_control !== 'any' && $data['duration_type'] !== $type->duration_control) {
+            throw ValidationException::withMessages([
+                'duration_type' => "{$type->name} must use {$this->durationControlLabel($type->duration_control)}.",
+            ]);
+        }
+
+        if ($type->duration_control === 'hours' && $type->max_hours !== null && (float) ($data['total_hours'] ?? 0) > (float) $type->max_hours) {
+            throw ValidationException::withMessages([
+                'total_hours' => "{$type->name} cannot be more than {$type->max_hours} hour(s).",
+            ]);
+        }
+    }
+
+    private function durationControlLabel(string $control): string
+    {
+        return match ($control) {
+            'single_day' => 'Single Day',
+            'multiple_day' => 'Multiple Day',
+            'hours' => 'Hours',
+            default => 'Any Duration',
+        };
     }
 
     private function storeAttachment(Request $request): ?array

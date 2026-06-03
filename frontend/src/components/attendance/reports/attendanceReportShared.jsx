@@ -2,12 +2,17 @@ import clsx from 'clsx'
 
 export const STATUS_META = {
   present: { label: 'Present', cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400', dot: 'bg-emerald-500' },
-  late: { label: 'Late', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400', dot: 'bg-amber-500' },
+  late: { label: 'Late Check In', cls: 'bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-400', dot: 'bg-orange-500' },
+  early_checkout: { label: 'Early Check Out', cls: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950/60 dark:text-yellow-300', dot: 'bg-yellow-500' },
   absent: { label: 'Absent', cls: 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400', dot: 'bg-rose-500' },
-  on_leave: { label: 'Leave', cls: 'bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-400', dot: 'bg-sky-500' },
-  half_day: { label: 'Half Day', cls: 'bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-400', dot: 'bg-sky-500' },
-  missing_checkout: { label: 'Missing Check Out', cls: 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-400', dot: 'bg-violet-500' },
-  leave: { label: 'Leave', cls: 'bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-400', dot: 'bg-sky-500' },
+  on_leave: { label: 'Personal Request', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400', dot: 'bg-blue-500' },
+  half_day: { label: 'Personal Request', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400', dot: 'bg-blue-500' },
+  missing_checkin: { label: 'Missing Check In', cls: 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-400', dot: 'bg-violet-500' },
+  missing_checkout: { label: 'Missing Check Out', cls: 'bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-950/60 dark:text-fuchsia-400', dot: 'bg-fuchsia-500' },
+  missing_attendance: { label: 'Missing Check In', cls: 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-400', dot: 'bg-violet-500' },
+  day_off: { label: 'Day Off', cls: 'bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-400', dot: 'bg-sky-500' },
+  personal_request: { label: 'Personal Request', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400', dot: 'bg-blue-500' },
+  leave: { label: 'Personal Request', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400', dot: 'bg-blue-500' },
 }
 
 export const GPS_META = {
@@ -19,8 +24,10 @@ export const GPS_META = {
 export const TIMELINE_TONE = {
   green: 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30',
   orange: 'border-amber-500 bg-amber-50 dark:bg-amber-950/30',
+  yellow: 'border-yellow-500 bg-yellow-50 dark:bg-yellow-950/30',
   red: 'border-rose-500 bg-rose-50 dark:bg-rose-950/30',
   blue: 'border-sky-500 bg-sky-50 dark:bg-sky-950/30',
+  violet: 'border-violet-500 bg-violet-50 dark:bg-violet-950/30',
 }
 
 export const inputCls = 'h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white'
@@ -188,8 +195,12 @@ export function SummaryCard({ label, value, pct, trend, icon: Icon, tone = 'emer
   const tones = {
     emerald: 'bg-emerald-100 text-emerald-600',
     amber: 'bg-amber-100 text-amber-600',
+    orange: 'bg-orange-100 text-orange-600',
+    yellow: 'bg-yellow-100 text-yellow-700',
     rose: 'bg-rose-100 text-rose-600',
     violet: 'bg-violet-100 text-violet-600',
+    fuchsia: 'bg-fuchsia-100 text-fuchsia-600',
+    blue: 'bg-blue-100 text-blue-600',
     sky: 'bg-sky-100 text-sky-600',
     slate: 'bg-slate-100 text-slate-600',
   }

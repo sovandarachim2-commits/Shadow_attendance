@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\EmployeeSchedule;
+use App\Models\PermissionRequest;
 use App\Models\WorkSchedule;
 use App\Models\User;
 use DateTimeInterface;
@@ -105,6 +106,25 @@ class WorkScheduleService
     {
         if ($this->canOverrideSchedule($user) || ! $user->employee_id) {
             return;
+        }
+
+        $today = Carbon::today()->toDateString();
+
+        $blockedRequest = PermissionRequest::query()
+            ->where('employee_id', $user->employee_id)
+            ->whereIn('type', ['Day Off', 'Personal Request'])
+            ->where('status', 'approved')
+            ->where('request_date', '<=', $today)
+            ->where(function ($q) use ($today) {
+                $q->whereNull('request_date_end')
+                  ->orWhere('request_date_end', '>=', $today);
+            })
+            ->first(['type']);
+
+        if ($blockedRequest) {
+            throw ValidationException::withMessages([
+                'schedule' => "You have an approved {$blockedRequest->type} request for today. You cannot check in.",
+            ]);
         }
 
         $info = $this->todayInfoForEmployee($user->employee_id);

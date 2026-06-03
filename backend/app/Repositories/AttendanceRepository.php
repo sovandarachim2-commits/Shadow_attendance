@@ -3,6 +3,7 @@
 namespace App\Repositories;
 
 use App\Models\Attendance;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 
 class AttendanceRepository
@@ -71,7 +72,15 @@ class AttendanceRepository
                     ->whereNull('check_out_at')
                     ->where('status', '!=', 'absent');
             })
-            ->when(($filters['status'] ?? null) && ($filters['status'] ?? null) !== 'missing_checkout', fn ($query, $status) => $query->where('status', $status))
+            ->when(($filters['status'] ?? null) === 'early_checkout', fn ($query) => $this->whereApprovedRequestType($query, ['Early Check Out']))
+            ->when(($filters['status'] ?? null) === 'day_off', fn ($query) => $this->whereApprovedRequestType($query, ['Day Off']))
+            ->when(($filters['status'] ?? null) === 'missing_checkin', fn ($query) => $this->whereApprovedRequestType($query, ['Missing Check In', 'Missing Attendance']))
+            ->when(($filters['status'] ?? null) === 'personal_request', fn ($query) => $this->whereApprovedRequestType($query, ['Personal Request']))
+            ->when(
+                ($filters['status'] ?? null)
+                    && ! in_array(($filters['status'] ?? null), ['missing_checkout', 'early_checkout', 'day_off', 'missing_checkin', 'personal_request'], true),
+                fn ($query) => $query->where('status', $filters['status'])
+            )
             ->when($filters['gps_status'] ?? null, function ($query, $gps) {
                 if ($gps === 'verified') {
                     $query->whereNotNull('check_in_latitude')->whereNotNull('check_in_longitude')
@@ -93,5 +102,22 @@ class AttendanceRepository
                     $query->whereNull('check_in_latitude')->whereNull('check_out_latitude');
                 }
             });
+    }
+
+    private function whereApprovedRequestType(Builder $query, array $types): void
+    {
+        $query->whereExists(function ($subquery) use ($types) {
+            $subquery->selectRaw('1')
+                ->from('permission_requests')
+                ->whereColumn('permission_requests.employee_id', 'attendances.employee_id')
+                ->where('permission_requests.status', 'approved')
+                ->whereIn('permission_requests.type', $types)
+                ->whereColumn('permission_requests.request_date', '<=', 'attendances.attendance_date')
+                ->where(function ($dateQuery) {
+                    $dateQuery
+                        ->whereColumn('permission_requests.request_date_end', '>=', 'attendances.attendance_date')
+                        ->orWhereNull('permission_requests.request_date_end');
+                });
+        });
     }
 }

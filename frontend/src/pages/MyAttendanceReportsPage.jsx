@@ -144,7 +144,7 @@ export default function MyAttendanceReportsPage({ user, openPermissionRequest })
               canExport={canExport}
               exporting={exporting}
               onExport={exportCsv}
-              onCorrection={() => openPermissionRequest?.('Attendance Edit')}
+              onCorrection={() => openPermissionRequest?.('Missing Check In')}
             />
 
             <section>
@@ -284,8 +284,13 @@ function MobileReportActions({ canExport, exporting, onExport, onCorrection }) {
 function MobileStatsGrid({ summary, loading }) {
   const stats = [
     { label: 'Present Days', value: loading ? '-' : (summary.present ?? 0), help: 'from this month', icon: Users, tone: 'emerald' },
-    { label: 'Late Days', value: loading ? '-' : (summary.late ?? 0), help: 'from this month', icon: Clock, tone: 'amber', down: true },
+    { label: 'Late Check In', value: loading ? '-' : (summary.late ?? 0), help: 'from this month', icon: Clock, tone: 'orange', down: true },
     { label: 'Absent Days', value: loading ? '-' : (summary.absent ?? 0), help: 'from this month', icon: UserMinus, tone: 'rose', down: true },
+    { label: 'Early Check Out', value: loading ? '-' : (summary.early_checkout ?? 0), help: 'from this month', icon: Timer, tone: 'yellow', down: true },
+    { label: 'Day Off', value: loading ? '-' : (summary.day_off ?? 0), help: 'from this month', icon: Calendar, tone: 'sky' },
+    { label: 'Missing Check In', value: loading ? '-' : (summary.missing_checkin ?? summary.missing_attendance ?? 0), help: 'from this month', icon: ClipboardList, tone: 'violet', down: true },
+    { label: 'Missing Check Out', value: loading ? '-' : (summary.missing_checkout ?? 0), help: 'from this month', icon: ClipboardList, tone: 'fuchsia', down: true },
+    { label: 'Personal Request', value: loading ? '-' : (summary.personal_request ?? summary.on_leave ?? 0), help: 'from this month', icon: ClipboardList, tone: 'blue' },
     { label: 'Total Working Hours', value: loading ? '-' : formatHoursCompact(summary.total_work_minutes), help: 'from this month', icon: Timer, tone: 'sky' },
     { label: 'Overtime Hours', value: loading ? '-' : formatHoursCompact(summary.overtime_minutes), help: 'from this month', icon: Clock, tone: 'violet' },
   ]
@@ -301,9 +306,13 @@ function MobileStatTile({ label, value, help, icon: Icon, tone, down }) {
   const tones = {
     emerald: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300',
     amber: 'bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-300',
+    orange: 'bg-orange-100 text-orange-600 dark:bg-orange-950/50 dark:text-orange-300',
+    yellow: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950/50 dark:text-yellow-300',
     rose: 'bg-rose-100 text-rose-600 dark:bg-rose-950/50 dark:text-rose-300',
     sky: 'bg-sky-100 text-sky-600 dark:bg-sky-950/50 dark:text-sky-300',
     violet: 'bg-violet-100 text-violet-600 dark:bg-violet-950/50 dark:text-violet-300',
+    fuchsia: 'bg-fuchsia-100 text-fuchsia-600 dark:bg-fuchsia-950/50 dark:text-fuchsia-300',
+    blue: 'bg-blue-100 text-blue-600 dark:bg-blue-950/50 dark:text-blue-300',
   }
 
   return (
@@ -352,9 +361,13 @@ function MobileFilters({ open, setOpen, month, draft, setDraft, allRecords, onAp
             <select className="h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold dark:border-slate-700 dark:bg-slate-950" value={draft.status ?? ''} onChange={(event) => setDraft((current) => ({ ...current, status: event.target.value }))}>
               <option value="">All Status</option>
               <option value="present">Present</option>
-              <option value="late">Late</option>
+              <option value="late">Late Check In</option>
+              <option value="early_checkout">Early Check Out</option>
+              <option value="day_off">Day Off</option>
+              <option value="missing_checkin">Missing Check In</option>
+              <option value="missing_checkout">Missing Check Out</option>
+              <option value="personal_request">Personal Request</option>
               <option value="absent">Absent</option>
-              <option value="on_leave">Leave</option>
             </select>
           </MobileFilterField>
           <MobileFilterField label="Type">
@@ -392,7 +405,7 @@ function MobileFilterField({ label, children }) {
 
 function MobileDayCard({ row, onTap }) {
   const displayStatus = row.display_status || row.status
-  const statusTone = displayStatus === 'late' ? 'orange' : displayStatus === 'absent' ? 'red' : 'green'
+  const statusTone = mobileStatusTone(displayStatus)
 
   return (
     <article
@@ -405,13 +418,23 @@ function MobileDayCard({ row, onTap }) {
       <span className={clsx('absolute inset-y-0 left-0 w-1.5', {
         'bg-emerald-500': statusTone === 'green',
         'bg-amber-500': statusTone === 'orange',
+        'bg-yellow-500': statusTone === 'yellow',
         'bg-rose-500': statusTone === 'red',
+        'bg-sky-500': statusTone === 'sky',
+        'bg-violet-500': statusTone === 'violet',
+        'bg-fuchsia-500': statusTone === 'fuchsia',
+        'bg-blue-500': statusTone === 'blue',
       })} />
       <div className="flex items-center gap-4 px-4 py-3 pl-5">
         <div className={clsx('grid h-20 w-20 shrink-0 place-items-center rounded-2xl text-center', {
           'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40': statusTone === 'green',
           'bg-amber-50 text-amber-700 dark:bg-amber-950/40': statusTone === 'orange',
+          'bg-yellow-50 text-yellow-700 dark:bg-yellow-950/40': statusTone === 'yellow',
           'bg-rose-50 text-rose-700 dark:bg-rose-950/40': statusTone === 'red',
+          'bg-sky-50 text-sky-700 dark:bg-sky-950/40': statusTone === 'sky',
+          'bg-violet-50 text-violet-700 dark:bg-violet-950/40': statusTone === 'violet',
+          'bg-fuchsia-50 text-fuchsia-700 dark:bg-fuchsia-950/40': statusTone === 'fuchsia',
+          'bg-blue-50 text-blue-700 dark:bg-blue-950/40': statusTone === 'blue',
         })}>
           <div>
             <p className="text-sm font-bold">{monthShort(row.attendance_date)}</p>
@@ -431,7 +454,7 @@ function MobileDayCard({ row, onTap }) {
               <p className="mt-0.5 font-extrabold text-slate-900 dark:text-white">{formatWorkHours(row.work_minutes)}</p>
             </div>
             <div>
-              <p className="text-xs font-semibold text-slate-500">Late</p>
+              <p className="text-xs font-semibold text-slate-500">Late Check In</p>
               <p className={clsx('mt-0.5 font-extrabold', row.late_minutes > 0 ? 'text-rose-500' : 'text-slate-900 dark:text-white')}>
                 {row.late_minutes > 0 ? `${row.late_minutes}m` : '0m'}
               </p>
@@ -615,7 +638,7 @@ function MobileDetailCard({ record }) {
         <div className="mt-5 grid grid-cols-2 gap-x-4 gap-y-5 border-t border-slate-100 pt-5 dark:border-slate-800">
           <DetailMetric label="Working Hours" value={formatWorkHours(record.work_minutes)} />
           <DetailMetric label="Overtime Hours" value={formatWorkHours(Math.max(0, record.overtime_minutes ?? ((record.work_minutes || 0) - 480)))} />
-          <DetailMetric label="Late Minutes" value={`${record.late_minutes ?? 0}m`} />
+          <DetailMetric label="Late Check In Minutes" value={`${record.late_minutes ?? 0}m`} />
           <DetailMetric label="Attendance Type" value={record.type === 'outdoor' ? 'Outdoor' : 'Office'} />
         </div>
       </div>
@@ -667,9 +690,13 @@ function DetailMetric({ label, value }) {
 function MobileAttendanceSummary({ summary }) {
   const rows = [
     { label: 'Total Present Days', value: summary.present ?? 0, icon: Users, tone: 'emerald' },
-    { label: 'Total Late Days', value: summary.late ?? 0, icon: Clock, tone: 'amber' },
+    { label: 'Total Late Check In', value: summary.late ?? 0, icon: Clock, tone: 'orange' },
     { label: 'Total Absent Days', value: summary.absent ?? 0, icon: UserMinus, tone: 'rose' },
-    { label: 'Total Leave Days', value: summary.leave ?? summary.on_leave ?? 0, icon: Calendar, tone: 'sky' },
+    { label: 'Total Early Check Out', value: summary.early_checkout ?? 0, icon: Timer, tone: 'yellow' },
+    { label: 'Total Day Off', value: summary.day_off ?? 0, icon: Calendar, tone: 'sky' },
+    { label: 'Total Missing Check In', value: summary.missing_checkin ?? summary.missing_attendance ?? 0, icon: ClipboardList, tone: 'violet' },
+    { label: 'Total Missing Check Out', value: summary.missing_checkout ?? 0, icon: ClipboardList, tone: 'fuchsia' },
+    { label: 'Total Personal Request', value: summary.personal_request ?? summary.on_leave ?? 0, icon: ClipboardList, tone: 'blue' },
     { label: 'Total Working Hours', value: formatHoursCompact(summary.total_work_minutes), icon: Timer, tone: 'sky' },
     { label: 'Overtime Hours', value: formatHoursCompact(summary.overtime_minutes), icon: Clock, tone: 'violet' },
   ]
@@ -700,9 +727,13 @@ function SummaryIcon({ Icon, tone }) {
   const tones = {
     emerald: 'bg-emerald-100 text-emerald-600',
     amber: 'bg-amber-100 text-amber-600',
+    orange: 'bg-orange-100 text-orange-600',
+    yellow: 'bg-yellow-100 text-yellow-700',
     rose: 'bg-rose-100 text-rose-600',
     sky: 'bg-sky-100 text-sky-600',
     violet: 'bg-violet-100 text-violet-600',
+    fuchsia: 'bg-fuchsia-100 text-fuchsia-600',
+    blue: 'bg-blue-100 text-blue-600',
   }
 
   return (
@@ -765,10 +796,25 @@ function shortTime(value) {
 
 function statusDotClass(row) {
   const status = row.display_status || row.status
-  if (status === 'late') return 'bg-amber-500'
+  if (status === 'late') return 'bg-orange-500'
+  if (status === 'early_checkout') return 'bg-yellow-500'
   if (status === 'absent') return 'bg-rose-500'
-  if (status === 'on_leave' || status === 'half_day' || status === 'leave') return 'bg-sky-500'
+  if (status === 'day_off') return 'bg-sky-500'
+  if (status === 'missing_checkin' || status === 'missing_attendance') return 'bg-violet-500'
+  if (status === 'missing_checkout') return 'bg-fuchsia-500'
+  if (status === 'personal_request' || status === 'on_leave' || status === 'half_day' || status === 'leave') return 'bg-blue-500'
   return 'bg-emerald-500'
+}
+
+function mobileStatusTone(status) {
+  if (status === 'late') return 'orange'
+  if (status === 'early_checkout') return 'yellow'
+  if (status === 'absent') return 'red'
+  if (status === 'day_off') return 'sky'
+  if (status === 'missing_checkin' || status === 'missing_attendance') return 'violet'
+  if (status === 'missing_checkout') return 'fuchsia'
+  if (status === 'personal_request' || status === 'on_leave' || status === 'half_day' || status === 'leave') return 'blue'
+  return 'green'
 }
 
 function shiftMonth(monthStr, delta, onChange) {

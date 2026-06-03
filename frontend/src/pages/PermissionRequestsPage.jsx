@@ -45,6 +45,22 @@ function calcHours(start, end) {
   return Math.round((((eh * 60 + em) - (sh * 60 + sm)) / 60) * 100) / 100
 }
 
+function durationControlOf(type) {
+  return type?.durationControl ?? type?.duration_control ?? 'any'
+}
+
+function maxHoursOf(type) {
+  const value = type?.maxHours ?? type?.max_hours
+  return value === null || value === undefined || value === '' ? null : Number(value)
+}
+
+function durationControlLabel(control) {
+  if (control === 'single_day') return 'Single Day'
+  if (control === 'multiple_day') return 'Multiple Day'
+  if (control === 'hours') return 'Hours'
+  return 'Any Duration'
+}
+
 function fmtSubmittedAt(iso) {
   if (!iso) return { date: '-', time: '-' }
   const dt = new Date(iso)
@@ -106,20 +122,15 @@ function groupByMonth(requests) {
 }
 
 const TYPE_COLORS = {
-  'Leave Request':      { bg: 'bg-emerald-100 dark:bg-emerald-950/40', text: 'text-emerald-600 dark:text-emerald-400', dot: 'bg-emerald-500' },
-  'Sick Leave':         { bg: 'bg-rose-100 dark:bg-rose-950/40',       text: 'text-rose-600 dark:text-rose-400',       dot: 'bg-rose-500' },
-  'Request Permission': { bg: 'bg-orange-100 dark:bg-orange-950/40',   text: 'text-orange-600 dark:text-orange-400',   dot: 'bg-orange-500' },
-  'Outdoor Work':       { bg: 'bg-blue-100 dark:bg-blue-950/40',       text: 'text-blue-600 dark:text-blue-400',       dot: 'bg-blue-500' },
-  'Early Leave':        { bg: 'bg-amber-100 dark:bg-amber-950/40',     text: 'text-amber-600 dark:text-amber-400',     dot: 'bg-amber-500' },
-  'Attendance Edit':    { bg: 'bg-violet-100 dark:bg-violet-950/40',   text: 'text-violet-600 dark:text-violet-400',   dot: 'bg-violet-500' },
-  'Manual Check In':    { bg: 'bg-sky-100 dark:bg-sky-950/40',         text: 'text-sky-600 dark:text-sky-400',         dot: 'bg-sky-500' },
-  'Missing Check Out':  { bg: 'bg-amber-100 dark:bg-amber-950/40',     text: 'text-amber-600 dark:text-amber-400',     dot: 'bg-amber-500' },
+  'Late Check In':      { bg: 'bg-sky-100 dark:bg-sky-950/40',         text: 'text-sky-600 dark:text-sky-400',         dot: 'bg-sky-500' },
+  'Early Check Out':    { bg: 'bg-amber-100 dark:bg-amber-950/40',     text: 'text-amber-600 dark:text-amber-400',     dot: 'bg-amber-500' },
   'Day Off':            { bg: 'bg-violet-100 dark:bg-violet-950/40',   text: 'text-violet-600 dark:text-violet-400',   dot: 'bg-violet-500' },
-  'Custom Request':     { bg: 'bg-slate-100 dark:bg-slate-800',        text: 'text-slate-600 dark:text-slate-400',     dot: 'bg-slate-400' },
+  'Missing Check In':   { bg: 'bg-violet-100 dark:bg-violet-950/40',   text: 'text-violet-600 dark:text-violet-400',   dot: 'bg-violet-500' },
+  'Personal Request':   { bg: 'bg-orange-100 dark:bg-orange-950/40',   text: 'text-orange-600 dark:text-orange-400',   dot: 'bg-orange-500' },
 }
 
 function typeColor(type) {
-  return TYPE_COLORS[type] || TYPE_COLORS['Custom Request']
+  return TYPE_COLORS[type] || TYPE_COLORS['Personal Request']
 }
 
 const STATUS_STYLES = {
@@ -169,7 +180,7 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
   const [showForm, setShowForm]             = useState(false)
   const [editingId, setEditingId]           = useState(null)
   const [submitting, setSubmitting]         = useState(false)
-  const [form, setForm]               = useState(() => newRequestForm('Leave Request'))
+  const [form, setForm]               = useState(() => newRequestForm('Late Check In'))
   const [replacementOptions, setReplacementOptions] = useState([])
   const [permissionTypes, setPermissionTypes]       = useState([])
   const [showMobileDetail, setShowMobileDetail] = useState(false)
@@ -250,7 +261,7 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
 
   // ── actions ──────────────────────────────────────────────────────────────
 
-  const defaultType = () => permissionTypes[0]?.name || 'Personal Permission'
+  const defaultType = () => permissionTypes[0]?.name || 'Late Check In'
 
   const openForm = (type) => {
     setForm(newRequestForm(type || defaultType()))
@@ -299,6 +310,17 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
       notify('Please select a valid start and end time.', false)
       return
     }
+    const selectedType = permissionTypes.find((pt) => pt.name === form.type)
+    const durationControl = durationControlOf(selectedType)
+    const maxHours = maxHoursOf(selectedType)
+    if (durationControl !== 'any' && form.durationType !== durationControl) {
+      notify(`${form.type} must use ${durationControl.replace('_', ' ')} duration.`, false)
+      return
+    }
+    if (durationControl === 'hours' && maxHours && totalHours > maxHours) {
+      notify(`${form.type} cannot be more than ${maxHours} hour(s).`, false)
+      return
+    }
 
     const payload = new FormData()
     payload.append('type', form.type)
@@ -308,7 +330,7 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
     payload.append('duration_type', form.durationType)
     payload.append('reason', reason)
     payload.append('note', form.note || '')
-    payload.append('is_emergency', form.type === 'Emergency Leave' ? '1' : (form.emergency ? '1' : '0'))
+    payload.append('is_emergency', form.emergency ? '1' : '0')
 
     if (form.durationType === 'hours') {
       payload.append('request_time', form.time)
@@ -726,7 +748,22 @@ function DesktopFormView({ form, setForm, replacementOptions, permissionTypes = 
 
   const setType = (type) => {
     const next = newRequestForm(type)
-    setForm({ ...next, replacementEmployeeId: form.replacementEmployeeId, reasonType: form.reasonType, reason: form.reason, note: form.note, date: form.date, dateEnd: form.dateEnd, durationType: form.durationType, dayPart: form.dayPart, attachment: form.attachment })
+    const selectedType = permissionTypes.find((pt) => pt.name === type)
+    const control = durationControlOf(selectedType)
+    setForm({
+      ...next,
+      replacementEmployeeId: form.replacementEmployeeId,
+      reasonType: form.reasonType,
+      reason: form.reason,
+      note: form.note,
+      date: form.date,
+      dateEnd: form.dateEnd,
+      durationType: control === 'any' ? form.durationType : control,
+      dayPart: form.dayPart,
+      time: control === 'hours' ? (form.time || defaultTime()) : next.time,
+      timeTo: control === 'hours' ? (form.timeTo || defaultTime(60)) : next.timeTo,
+      attachment: form.attachment,
+    })
   }
 
   const setDurationType = (durationType) => {
@@ -738,6 +775,9 @@ function DesktopFormView({ form, setForm, replacementOptions, permissionTypes = 
         ? employeeFullName(replacementOptions.find((e) => String(e.id) === String(form.replacementEmployeeId)))
         : 'Selected')
     : 'No Cover'
+  const selectedType = permissionTypes.find((pt) => pt.name === form.type)
+  const durationControl = durationControlOf(selectedType)
+  const maxHours = maxHoursOf(selectedType)
 
   return (
     <div className="space-y-5">
@@ -747,8 +787,8 @@ function DesktopFormView({ form, setForm, replacementOptions, permissionTypes = 
           <ChevronRight size={24} className="rotate-180" />
         </button>
         <div>
-          <h2 className="text-2xl font-bold text-slate-950 dark:text-white">{isEdit ? 'Edit Request' : 'Request Permission'}</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Submit your permission or leave request.</p>
+          <h2 className="text-2xl font-bold text-slate-950 dark:text-white">{isEdit ? 'Edit Request' : 'New Request'}</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">Choose what you need, when you need it, then submit for approval.</p>
         </div>
       </div>
 
@@ -759,9 +799,16 @@ function DesktopFormView({ form, setForm, replacementOptions, permissionTypes = 
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <div className="space-y-6">
 
+            {/* Request Type */}
+            <PermissionTypePicker
+              permissionTypes={permissionTypes}
+              value={form.type}
+              onChange={setType}
+            />
+
             {/* Covered By */}
             <div>
-              <FieldLabel text="Covered By" />
+              <FieldLabel text="Cover Person" optional />
               <button
                 type="button"
                 onClick={() => setForm((f) => ({ ...f, replacementEmployeeId: '' }))}
@@ -777,14 +824,14 @@ function DesktopFormView({ form, setForm, replacementOptions, permissionTypes = 
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className={clsx('text-sm font-bold', !form.replacementEmployeeId ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-600 dark:text-slate-400')}>No Cover</p>
-                  <p className="text-xs text-slate-400">Not covered by anyone</p>
+                  <p className="text-xs text-slate-400">Skip this if nobody needs to cover your work</p>
                 </div>
                 <span className={clsx('grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 transition', !form.replacementEmployeeId ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300 dark:border-slate-600')}>
                   {!form.replacementEmployeeId && <Check size={11} className="text-white" />}
                 </span>
               </button>
               <div className={clsx('rounded-xl border-2 p-3 transition', form.replacementEmployeeId ? 'border-emerald-500 bg-emerald-50/50 dark:border-emerald-600 dark:bg-emerald-950/20' : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950')}>
-                <p className="mb-2 text-xs font-bold text-slate-500 dark:text-slate-400">Select who will cover</p>
+                <p className="mb-2 text-xs font-bold text-slate-500 dark:text-slate-400">Choose a cover person only if needed</p>
                 <div className="relative">
                   <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-emerald-600 dark:text-emerald-400"><UserRound size={17} /></span>
                   <select className="h-12 w-full appearance-none rounded-lg border border-slate-200 bg-white pl-10 pr-10 text-sm font-semibold text-slate-700 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-900 dark:text-white" value={form.replacementEmployeeId || ''} onChange={(e) => setForm((f) => ({ ...f, replacementEmployeeId: e.target.value }))}>
@@ -801,13 +848,6 @@ function DesktopFormView({ form, setForm, replacementOptions, permissionTypes = 
               </div>
             </div>
 
-            {/* Permission Type */}
-            <PermissionTypePicker
-              permissionTypes={permissionTypes}
-              value={form.type}
-              onChange={setType}
-            />
-
             {/* Duration Type */}
             <div>
               <FieldLabel text="Duration Type" required />
@@ -819,8 +859,9 @@ function DesktopFormView({ form, setForm, replacementOptions, permissionTypes = 
                 ].map((item) => {
                   const DIcon = item.icon
                   const sel = form.durationType === item.id
+                  const locked = durationControl !== 'any' && item.id !== durationControl
                   return (
-                    <button key={item.id} type="button" onClick={() => setDurationType(item.id)} className={clsx('flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition', sel ? 'border-emerald-500 bg-emerald-50 shadow-sm dark:border-emerald-600 dark:bg-emerald-950/30' : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950')}>
+                    <button key={item.id} type="button" disabled={locked} onClick={() => setDurationType(item.id)} className={clsx('flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-40', sel ? 'border-emerald-500 bg-emerald-50 shadow-sm dark:border-emerald-600 dark:bg-emerald-950/30' : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950')}>
                       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300"><DIcon size={17} /></span>
                       <span className="flex-1 text-sm font-bold text-slate-900 dark:text-white">{item.label}</span>
                       <span className={clsx('grid h-5 w-5 shrink-0 place-items-center rounded-full border-2', sel ? 'border-emerald-600' : 'border-slate-300 dark:border-slate-600')}>{sel && <span className="h-2.5 w-2.5 rounded-full bg-emerald-600" />}</span>
@@ -828,6 +869,11 @@ function DesktopFormView({ form, setForm, replacementOptions, permissionTypes = 
                   )
                 })}
               </div>
+              {durationControl !== 'any' && (
+                <p className="mt-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                  Admin rule: {form.type} uses {durationControl.replace('_', ' ')}{durationControl === 'hours' && maxHours ? `, max ${maxHours} hour(s)` : ''}.
+                </p>
+              )}
             </div>
 
             {/* Date / Time section */}
@@ -915,10 +961,9 @@ function DesktopFormView({ form, setForm, replacementOptions, permissionTypes = 
 
 function DesktopStatCard({ label, count, pending, total }) {
   const ICONS = {
-    'Leave Requests':      { icon: CalendarDays, bg: 'bg-blue-50 dark:bg-blue-950/40', text: 'text-blue-600 dark:text-blue-400' },
-    'Permission Requests': { icon: FileText,     bg: 'bg-orange-50 dark:bg-orange-950/40', text: 'text-orange-600 dark:text-orange-400' },
-    'Outdoor Work':        { icon: SlidersHorizontal, bg: 'bg-emerald-50 dark:bg-emerald-950/40', text: 'text-emerald-600 dark:text-emerald-400' },
-    'Sick Leave':          { icon: XCircle,      bg: 'bg-rose-50 dark:bg-rose-950/40', text: 'text-rose-600 dark:text-rose-400' },
+    'Attendance Requests': { icon: FileText,     bg: 'bg-sky-50 dark:bg-sky-950/40', text: 'text-sky-600 dark:text-sky-400' },
+    'Day Off':             { icon: CalendarDays, bg: 'bg-violet-50 dark:bg-violet-950/40', text: 'text-violet-600 dark:text-violet-400' },
+    'Personal Requests':   { icon: XCircle,      bg: 'bg-orange-50 dark:bg-orange-950/40', text: 'text-orange-600 dark:text-orange-400' },
     'Total Requests':      { icon: Check,        bg: 'bg-violet-50 dark:bg-violet-950/40', text: 'text-violet-600 dark:text-violet-400' },
   }
   const cfg = ICONS[label] || ICONS['Total Requests']
@@ -1096,12 +1141,11 @@ function MobileRequestRow({ req, showEmployee, onPress }) {
 // ─── Mobile: type picker sheet ───────────────────────────────────────────────
 
 const PICKER_TYPES = [
-  { id: 'Personal Permission', label: 'Personal Permission', desc: 'Fast request for personal matters.' },
   { id: 'Late Check In',       label: 'Late Check In',       desc: 'Request approval for late arrival.' },
   { id: 'Early Check Out',     label: 'Early Check Out',     desc: 'Request approval to leave early.' },
-  { id: 'Leave Request',       label: 'Leave Request',       desc: 'Request time off for vacation or personal reasons.' },
-  { id: 'Sick Leave',          label: 'Sick Leave',          desc: 'Request sick leave due to illness.' },
-  { id: 'Outdoor Work',        label: 'Outdoor Work',        desc: 'Request to work from an outdoor location.' },
+  { id: 'Day Off',             label: 'Day Off',             desc: 'Request approval for a day off.' },
+  { id: 'Missing Check In',    label: 'Missing Check In',    desc: 'Request approval for a missing check-in.' },
+  { id: 'Personal Request',    label: 'Personal Request',    desc: 'Request approval for personal matters.' },
 ]
 
 function TypePickerSheet({ onClose, onPick }) {
@@ -1272,10 +1316,28 @@ function RequestPermissionFormModal({ form, setForm, replacementOptions, permiss
   const totalDays = calcDays(form.date, form.dateEnd)
   const totalHours = calcHours(form.time, form.timeTo)
   const attachmentPreview = form.attachment ? URL.createObjectURL(form.attachment) : null
+  const selectedType = permissionTypes.find((pt) => pt.name === form.type)
+  const durationControl = durationControlOf(selectedType)
+  const maxHours = maxHoursOf(selectedType)
 
   const setType = (type) => {
     const next = newRequestForm(type)
-    setForm({ ...next, replacementEmployeeId: form.replacementEmployeeId, reasonType: form.reasonType, reason: form.reason, note: form.note, date: form.date, dateEnd: form.dateEnd, durationType: form.durationType, dayPart: form.dayPart, attachment: form.attachment })
+    const selectedType = permissionTypes.find((pt) => pt.name === type)
+    const control = durationControlOf(selectedType)
+    setForm({
+      ...next,
+      replacementEmployeeId: form.replacementEmployeeId,
+      reasonType: form.reasonType,
+      reason: form.reason,
+      note: form.note,
+      date: form.date,
+      dateEnd: form.dateEnd,
+      durationType: control === 'any' ? form.durationType : control,
+      dayPart: form.dayPart,
+      time: control === 'hours' ? (form.time || defaultTime()) : next.time,
+      timeTo: control === 'hours' ? (form.timeTo || defaultTime(60)) : next.timeTo,
+      attachment: form.attachment,
+    })
   }
 
   const setDurationType = (durationType) => {
@@ -1291,8 +1353,8 @@ function RequestPermissionFormModal({ form, setForm, replacementOptions, permiss
               <ChevronRight size={26} className="rotate-180" />
             </button>
             <div className="text-center">
-              <h3 className="text-2xl font-black text-slate-950 dark:text-white">{isEdit ? 'Edit Request' : 'Request Permission'}</h3>
-              <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">Submit your permission or leave request.</p>
+              <h3 className="text-2xl font-black text-slate-950 dark:text-white">{isEdit ? 'Edit Request' : 'New Request'}</h3>
+              <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">Choose what you need and send it for approval.</p>
             </div>
             <span />
           </div>
@@ -1301,9 +1363,15 @@ function RequestPermissionFormModal({ form, setForm, replacementOptions, permiss
         <div className="flex-1 space-y-5 px-4 py-5 pb-28 sm:px-8">
           <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xl shadow-slate-200/60 dark:border-slate-800 dark:bg-slate-900 dark:shadow-none sm:p-6">
             <div className="space-y-5">
+              <PermissionTypePicker
+                permissionTypes={permissionTypes}
+                value={form.type}
+                onChange={setType}
+              />
+
               {/* ── Covered By ───────────────────────────────────────────── */}
               <div>
-                <FieldLabel text="Covered By" />
+                <FieldLabel text="Cover Person" optional />
 
                 {/* No Cover card */}
                 <button
@@ -1328,7 +1396,7 @@ function RequestPermissionFormModal({ form, setForm, replacementOptions, permiss
                     <p className={clsx('text-sm font-bold', !form.replacementEmployeeId ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-600 dark:text-slate-400')}>
                       No Cover
                     </p>
-                    <p className="text-xs text-slate-400">Not covered by anyone</p>
+                    <p className="text-xs text-slate-400">Skip this if nobody needs to cover your work</p>
                   </div>
                   <span className={clsx(
                     'grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 transition',
@@ -1347,7 +1415,7 @@ function RequestPermissionFormModal({ form, setForm, replacementOptions, permiss
                     ? 'border-emerald-500 bg-emerald-50/50 dark:border-emerald-600 dark:bg-emerald-950/20'
                     : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950',
                 )}>
-                  <p className="mb-2 text-xs font-bold text-slate-500 dark:text-slate-400">Select who will cover</p>
+                  <p className="mb-2 text-xs font-bold text-slate-500 dark:text-slate-400">Choose a cover person only if needed</p>
                   <div className="relative">
                     <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-emerald-600 dark:text-emerald-400">
                       <UserRound size={17} />
@@ -1376,12 +1444,6 @@ function RequestPermissionFormModal({ form, setForm, replacementOptions, permiss
                 </div>
               </div>
 
-              <PermissionTypePicker
-                permissionTypes={permissionTypes}
-                value={form.type}
-                onChange={setType}
-              />
-
               <div>
                 <FieldLabel text="Duration Type" required />
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -1392,8 +1454,9 @@ function RequestPermissionFormModal({ form, setForm, replacementOptions, permiss
                   ].map((item) => {
                     const DIcon = item.icon
                     const selected = form.durationType === item.id
+                    const locked = durationControl !== 'any' && item.id !== durationControl
                     return (
-                      <button key={item.id} type="button" onClick={() => setDurationType(item.id)} className={clsx('flex min-h-16 items-center gap-3 rounded-xl border px-4 text-left transition duration-200', selected ? 'border-emerald-500 bg-emerald-50 shadow-sm shadow-emerald-100 dark:border-emerald-600 dark:bg-emerald-950/30 dark:shadow-none' : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950')}>
+                      <button key={item.id} type="button" disabled={locked} onClick={() => setDurationType(item.id)} className={clsx('flex min-h-16 items-center gap-3 rounded-xl border px-4 text-left transition duration-200 disabled:cursor-not-allowed disabled:opacity-40', selected ? 'border-emerald-500 bg-emerald-50 shadow-sm shadow-emerald-100 dark:border-emerald-600 dark:bg-emerald-950/30 dark:shadow-none' : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950')}>
                         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300"><DIcon size={19} /></span>
                         <span className="min-w-0 flex-1 text-sm font-bold text-slate-900 dark:text-white">{item.label}</span>
                         <span className={clsx('grid h-6 w-6 shrink-0 place-items-center rounded-full border-2', selected ? 'border-emerald-600' : 'border-slate-300 dark:border-slate-600')}>{selected && <span className="h-3 w-3 rounded-full bg-emerald-600" />}</span>
@@ -1401,6 +1464,11 @@ function RequestPermissionFormModal({ form, setForm, replacementOptions, permiss
                     )
                   })}
                 </div>
+                {durationControl !== 'any' && (
+                  <p className="mt-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                    Admin rule: {form.type} uses {durationControl.replace('_', ' ')}{durationControl === 'hours' && maxHours ? `, max ${maxHours} hour(s)` : ''}.
+                  </p>
+                )}
               </div>
 
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 dark:border-emerald-900/60 dark:bg-emerald-950/20">
@@ -1479,13 +1547,15 @@ function RequestPermissionFormModal({ form, setForm, replacementOptions, permiss
 function PermissionTypePicker({ permissionTypes, value, onChange }) {
   const selected = permissionTypes.find((pt) => pt.name === value)
   const color = selected?.color || '#9ca3af'
+  const control = durationControlOf(selected)
+  const maxHours = maxHoursOf(selected)
 
   return (
     <div>
-      <FieldLabel text="Permission Type" required />
+      <FieldLabel text="Request Type" required />
       {permissionTypes.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-200 py-4 text-center text-sm text-slate-400 dark:border-slate-700">
-          No permission types set up yet. Go to{' '}
+          No request types set up yet. Go to{' '}
           <span className="font-semibold text-emerald-600">Permission Management → Permission Types</span>{' '}
           to add some.
         </div>
@@ -1505,7 +1575,7 @@ function PermissionTypePicker({ permissionTypes, value, onChange }) {
             onChange={(e) => onChange(e.target.value)}
             required
           >
-            <option value="" disabled>Select permission type…</option>
+            <option value="" disabled>Select request type...</option>
             {permissionTypes.map((pt) => (
               <option key={pt.id} value={pt.name}>
                 {pt.name}
@@ -1518,6 +1588,16 @@ function PermissionTypePicker({ permissionTypes, value, onChange }) {
             className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"
           />
         </div>
+      )}
+      {selected && control !== 'any' && (
+        <p className="mt-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+          Admin rule: {durationControlLabel(control)}{control === 'hours' && maxHours ? `, max ${maxHours} hour(s)` : ''}.
+        </p>
+      )}
+      {selected && (
+        <p className="mt-1 text-xs font-semibold text-amber-600 dark:text-amber-400">
+          Approval Required
+        </p>
       )}
     </div>
   )

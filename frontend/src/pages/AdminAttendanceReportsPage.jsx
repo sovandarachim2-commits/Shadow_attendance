@@ -163,9 +163,13 @@ export default function AdminAttendanceReportsPage({ user, appData, isLoaded }) 
 
   const statCards = [
     { label: 'Present Employees', value: summary.present ?? 0, pct: pct(summary.present), trend: 'In selected period', icon: Users, tone: 'emerald' },
-    { label: 'Late Employees', value: summary.late ?? 0, pct: pct(summary.late), trend: 'In selected period', icon: Clock, tone: 'amber' },
+    { label: 'Late Check In', value: summary.late ?? 0, pct: pct(summary.late), trend: 'In selected period', icon: Clock, tone: 'orange' },
     { label: 'Absent Employees', value: summary.absent ?? 0, pct: pct(summary.absent), trend: 'In selected period', icon: AlertCircle, tone: 'rose' },
-    { label: 'Missing Check Out', value: summary.missing_checkout ?? 0, pct: pct(summary.missing_checkout), trend: 'In selected period', icon: LogOut, tone: 'violet' },
+    { label: 'Early Check Out', value: summary.early_checkout ?? 0, pct: pct(summary.early_checkout), trend: 'In selected period', icon: LogOut, tone: 'yellow' },
+    { label: 'Day Off', value: summary.day_off ?? 0, pct: pct(summary.day_off), trend: 'In selected period', icon: Calendar, tone: 'sky' },
+    { label: 'Missing Check In', value: summary.missing_checkin ?? summary.missing_attendance ?? 0, pct: pct(summary.missing_checkin ?? summary.missing_attendance), trend: 'In selected period', icon: AlertCircle, tone: 'violet' },
+    { label: 'Missing Check Out', value: summary.missing_checkout ?? 0, pct: pct(summary.missing_checkout), trend: 'In selected period', icon: LogOut, tone: 'fuchsia' },
+    { label: 'Personal Request', value: summary.personal_request ?? summary.on_leave ?? 0, pct: pct(summary.personal_request ?? summary.on_leave), trend: 'In selected period', icon: FileText, tone: 'blue' },
     { label: 'Outdoor Attendance', value: summary.outdoor ?? 0, pct: pct(summary.outdoor), trend: 'In selected period', icon: MapPinned, tone: 'sky' },
     { label: 'Total Working Hours', value: formatWorkHours(summary.total_work_minutes), pct: null, trend: `${summary.total_records ?? 0} records`, icon: Clock, tone: 'slate' },
   ]
@@ -243,11 +247,13 @@ export default function AdminAttendanceReportsPage({ user, appData, isLoaded }) 
             <select className={inputCls} value={draft.status ?? status} onChange={(e) => setDraft((d) => ({ ...d, status: e.target.value }))}>
               <option value="">All statuses</option>
               <option value="present">Present</option>
-              <option value="late">Late</option>
-              <option value="absent">Absent</option>
-              <option value="on_leave">Leave</option>
-              <option value="half_day">Half Day</option>
+              <option value="late">Late Check In</option>
+              <option value="early_checkout">Early Check Out</option>
+              <option value="day_off">Day Off</option>
+              <option value="missing_checkin">Missing Check In</option>
               <option value="missing_checkout">Missing Check Out</option>
+              <option value="personal_request">Personal Request</option>
+              <option value="absent">Absent</option>
             </select>
           </FilterField>
         </div>
@@ -285,7 +291,7 @@ export default function AdminAttendanceReportsPage({ user, appData, isLoaded }) 
                 <table className="w-full min-w-[1000px] text-left text-sm">
                   <thead>
                     <tr className="border-b border-slate-100 bg-slate-50/80 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:border-slate-800 dark:bg-slate-950/50">
-                      {['Employee', 'Employee ID', 'Department', 'Date', 'Check In', 'Check Out', 'Working Hours', 'Late', 'Status', 'Type', 'GPS', 'Photo', 'Action'].map((h) => (
+                      {['Employee', 'Employee ID', 'Department', 'Date', 'Check In', 'Check Out', 'Working Hours', 'Late Check In', 'Status', 'Type', 'GPS', 'Photo', 'Action'].map((h) => (
                         <th key={h} className="whitespace-nowrap px-4 py-3.5">{h}</th>
                       ))}
                     </tr>
@@ -492,9 +498,13 @@ function PhotoPreviewModal({ preview, onClose }) {
 function buildAnalytics(records, summary) {
   const donut = [
     { name: 'Present', value: summary.present ?? 0, color: '#10b981' },
-    { name: 'Late', value: summary.late ?? 0, color: '#f59e0b' },
+    { name: 'Late Check In', value: summary.late ?? 0, color: '#f97316' },
     { name: 'Absent', value: summary.absent ?? 0, color: '#ef4444' },
-    { name: 'Missing Out', value: summary.missing_checkout ?? 0, color: '#8b5cf6' },
+    { name: 'Early Check Out', value: summary.early_checkout ?? 0, color: '#eab308' },
+    { name: 'Day Off', value: summary.day_off ?? 0, color: '#0ea5e9' },
+    { name: 'Missing Check In', value: summary.missing_checkin ?? summary.missing_attendance ?? 0, color: '#8b5cf6' },
+    { name: 'Missing Check Out', value: summary.missing_checkout ?? 0, color: '#d946ef' },
+    { name: 'Personal Request', value: summary.personal_request ?? summary.on_leave ?? 0, color: '#2563eb' },
   ].filter((d) => d.value > 0)
 
   const dayMap = {}
@@ -503,15 +513,30 @@ function buildAnalytics(records, summary) {
     const d = new Date(today)
     d.setDate(d.getDate() - i)
     const key = d.toISOString().split('T')[0]
-    dayMap[key] = { date: d.toLocaleDateString(undefined, { weekday: 'short' }), present: 0, late: 0, absent: 0, missing: 0 }
+    dayMap[key] = {
+      date: d.toLocaleDateString(undefined, { weekday: 'short' }),
+      present: 0,
+      late: 0,
+      early: 0,
+      dayOff: 0,
+      missingIn: 0,
+      missingOut: 0,
+      personal: 0,
+      absent: 0,
+    }
   }
   records.forEach((r) => {
     const key = r.attendance_date
     if (!dayMap[key]) return
-    if (r.status === 'present') dayMap[key].present += 1
-    else if (r.status === 'late') dayMap[key].late += 1
-    else if (r.status === 'absent') dayMap[key].absent += 1
-    if (r.display_status === 'missing_checkout') dayMap[key].missing += 1
+    const status = r.display_status || r.status
+    if (status === 'present') dayMap[key].present += 1
+    else if (status === 'late') dayMap[key].late += 1
+    else if (status === 'early_checkout') dayMap[key].early += 1
+    else if (status === 'day_off') dayMap[key].dayOff += 1
+    else if (status === 'missing_checkin' || status === 'missing_attendance') dayMap[key].missingIn += 1
+    else if (status === 'missing_checkout') dayMap[key].missingOut += 1
+    else if (status === 'personal_request' || status === 'on_leave' || status === 'half_day' || status === 'leave') dayMap[key].personal += 1
+    else if (status === 'absent') dayMap[key].absent += 1
   })
   const trend = Object.values(dayMap)
 
@@ -578,9 +603,13 @@ function ReportTrendChart({ data }) {
             <Tooltip />
             <Legend wrapperStyle={{ fontSize: 11 }} />
             <Line type="monotone" dataKey="present" name="Present" stroke="#10b981" strokeWidth={2} dot={false} />
-            <Line type="monotone" dataKey="late" name="Late" stroke="#f59e0b" strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey="late" name="Late Check In" stroke="#f97316" strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey="early" name="Early Check Out" stroke="#eab308" strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey="dayOff" name="Day Off" stroke="#0ea5e9" strokeWidth={2} dot={false} />
             <Line type="monotone" dataKey="absent" name="Absent" stroke="#ef4444" strokeWidth={2} dot={false} />
-            <Line type="monotone" dataKey="missing" name="Missing Out" stroke="#8b5cf6" strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey="missingIn" name="Missing Check In" stroke="#8b5cf6" strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey="missingOut" name="Missing Check Out" stroke="#d946ef" strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey="personal" name="Personal Request" stroke="#2563eb" strokeWidth={2} dot={false} />
           </LineChart>
         </ResponsiveContainer>
       </div>

@@ -63,6 +63,23 @@ class LateRuleService
         ];
     }
 
+    /**
+     * @return array{applied_rule: ?LateDeductionRule, deduction_amount: ?float, deduction_reason: ?string}
+     */
+    public function deductionForLateMinutes(int $lateMinutes, ?int $employeeId = null): array
+    {
+        $settings = $this->settings();
+        $schedule = $employeeId ? $this->workSchedules->scheduleForEmployee($employeeId) : null;
+        $appliedRule = $lateMinutes > 0 ? $this->findMatchingRule($lateMinutes, $schedule?->id) : null;
+        $deduction = $this->resolveDeduction($appliedRule, $settings);
+
+        return [
+            'applied_rule' => $appliedRule,
+            'deduction_amount' => $deduction['amount'],
+            'deduction_reason' => $deduction['reason'],
+        ];
+    }
+
     public function formatLateDuration(int $seconds): string
     {
         $h = intdiv($seconds, 3600);

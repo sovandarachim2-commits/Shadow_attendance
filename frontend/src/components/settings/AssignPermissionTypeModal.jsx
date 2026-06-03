@@ -25,6 +25,8 @@ export const EMPTY_PERM_FORM = {
   name: '',
   allowedTimes: 1,
   limitType: 'per_month',
+  durationControl: 'any',
+  maxHours: '',
   deductionAmount: 0,
   color: '#f59e0b',
   description: '',
@@ -59,6 +61,8 @@ export default function AssignPermissionTypeModal({ onClose, onSave, initialData
       name:             initialData.name             || '',
       allowedTimes:     initialData.allowedTimes     ?? initialData.allowed_times     ?? 1,
       limitType:        initialData.limitType        ?? initialData.limit_type        ?? 'per_month',
+      durationControl:  initialData.durationControl  ?? initialData.duration_control  ?? 'any',
+      maxHours:         initialData.maxHours         ?? initialData.max_hours         ?? '',
       deductionAmount:  initialData.deductionAmount  ?? initialData.deduction_amount  ?? 0,
       color:            initialData.color            || '#f59e0b',
       description:      initialData.description      || '',
@@ -203,6 +207,55 @@ export default function AssignPermissionTypeModal({ onClose, onSave, initialData
               </div>
               <Helper text="Choose whether the allowed times limit resets daily or monthly." />
             </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-bold text-slate-900 dark:text-white">
+                Request Duration Control
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { id: 'any', label: 'Any' },
+                  { id: 'single_day', label: 'Single Day' },
+                  { id: 'multiple_day', label: 'Multiple Day' },
+                  { id: 'hours', label: 'Hours' },
+                ].map((opt) => {
+                  const sel = form.durationControl === opt.id
+                  return (
+                    <button key={opt.id} type="button" onClick={() => set('durationControl', opt.id)}
+                      className={clsx(
+                        'rounded-2xl border-2 px-4 py-3 text-left text-sm font-bold transition',
+                        sel
+                          ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:border-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-300'
+                          : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300',
+                      )}>
+                      {opt.label}
+                    </button>
+                  )
+                })}
+              </div>
+              <Helper text="For Late Check In, choose Hours so employees submit a time range." />
+            </div>
+
+            {form.durationControl === 'hours' && (
+              <div>
+                <label className="mb-2 block text-sm font-bold text-slate-900 dark:text-white">
+                  Max Hours
+                </label>
+                <IconField icon={Clock} badge="Hour(s)">
+                  <input
+                    type="number"
+                    min="0.25"
+                    max="24"
+                    step="0.25"
+                    value={form.maxHours}
+                    onChange={(e) => set('maxHours', e.target.value)}
+                    className="flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none dark:text-white"
+                    placeholder="e.g. 2"
+                  />
+                </IconField>
+                <Helper text="Example: set 2 to block requests longer than 2 hours." />
+              </div>
+            )}
 
             {/* Deduction Amount */}
             <div>
