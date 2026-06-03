@@ -890,7 +890,7 @@ function DesktopFormView({ form, setForm, replacementOptions, permissionTypes = 
               )}
               {form.durationType === 'multiple_day' && (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <FormField label="Start Date *"><IconInput icon={CalendarDays}><input type="date" className={mobileInputCls} value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value, dateEnd: f.dateEnd < e.target.value ? e.target.value : f.dateEnd }))} required /></IconInput></FormField>
                     <FormField label="End Date *"><IconInput icon={CalendarDays}><input type="date" className={mobileInputCls} value={form.dateEnd} min={form.date} onChange={(e) => setForm((f) => ({ ...f, dateEnd: e.target.value }))} required /></IconInput></FormField>
                   </div>
@@ -900,7 +900,7 @@ function DesktopFormView({ form, setForm, replacementOptions, permissionTypes = 
               {form.durationType === 'hours' && (
                 <div className="space-y-4">
                   <FormField label="Date *"><IconInput icon={CalendarDays}><input type="date" className={mobileInputCls} value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value, dateEnd: e.target.value }))} required /></IconInput></FormField>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <FormField label="Start Time *"><IconInput icon={Clock}><input type="time" className={mobileInputCls} value={form.time || ''} onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))} required /></IconInput></FormField>
                     <FormField label="End Time *"><IconInput icon={Clock}><input type="time" className={mobileInputCls} value={form.timeTo || ''} onChange={(e) => setForm((f) => ({ ...f, timeTo: e.target.value }))} required /></IconInput></FormField>
                   </div>
