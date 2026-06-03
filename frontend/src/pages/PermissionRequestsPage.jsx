@@ -880,7 +880,7 @@ function DesktopFormView({ form, setForm, replacementOptions, permissionTypes = 
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 dark:border-emerald-900/60 dark:bg-emerald-950/20">
               {form.durationType === 'single_day' && (
                 <div className="space-y-4">
-                  <FormField label="Date *"><IconInput icon={CalendarDays}><input type="date" className={mobileInputCls} value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value, dateEnd: e.target.value }))} required /></IconInput></FormField>
+                  <FormField label="Date *"><input type="date" className={mobileDateCls} value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value, dateEnd: e.target.value }))} required /></FormField>
                   <div className="grid grid-cols-2 gap-3">
                     {['Full Day', 'Half Day'].map((part) => (
                       <button key={part} type="button" onClick={() => setForm((f) => ({ ...f, dayPart: part }))} className={clsx('h-12 rounded-xl border text-sm font-bold transition', form.dayPart === part ? 'border-emerald-500 bg-white text-emerald-700 shadow-sm' : 'border-slate-200 bg-white/70 text-slate-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300')}>{part}</button>
@@ -891,18 +891,18 @@ function DesktopFormView({ form, setForm, replacementOptions, permissionTypes = 
               {form.durationType === 'multiple_day' && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <FormField label="Start Date *"><IconInput icon={CalendarDays}><input type="date" className={mobileInputCls} value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value, dateEnd: f.dateEnd < e.target.value ? e.target.value : f.dateEnd }))} required /></IconInput></FormField>
-                    <FormField label="End Date *"><IconInput icon={CalendarDays}><input type="date" className={mobileInputCls} value={form.dateEnd} min={form.date} onChange={(e) => setForm((f) => ({ ...f, dateEnd: e.target.value }))} required /></IconInput></FormField>
+                    <FormField label="Start Date *"><input type="date" className={mobileDateCls} value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value, dateEnd: f.dateEnd < e.target.value ? e.target.value : f.dateEnd }))} required /></FormField>
+                    <FormField label="End Date *"><input type="date" className={mobileDateCls} value={form.dateEnd} min={form.date} onChange={(e) => setForm((f) => ({ ...f, dateEnd: e.target.value }))} required /></FormField>
                   </div>
                   <ReadOnlyTotal label="Total Days" value={totalDays} suffix="Day(s)" />
                 </div>
               )}
               {form.durationType === 'hours' && (
                 <div className="space-y-4">
-                  <FormField label="Date *"><IconInput icon={CalendarDays}><input type="date" className={mobileInputCls} value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value, dateEnd: e.target.value }))} required /></IconInput></FormField>
+                  <FormField label="Date *"><input type="date" className={mobileDateCls} value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value, dateEnd: e.target.value }))} required /></FormField>
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <FormField label="Start Time *"><IconInput icon={Clock}><input type="time" className={mobileInputCls} value={form.time || ''} onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))} required /></IconInput></FormField>
-                    <FormField label="End Time *"><IconInput icon={Clock}><input type="time" className={mobileInputCls} value={form.timeTo || ''} onChange={(e) => setForm((f) => ({ ...f, timeTo: e.target.value }))} required /></IconInput></FormField>
+                    <FormField label="Start Time *"><input type="time" className={mobileDateCls} value={form.time || ''} onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))} required /></FormField>
+                    <FormField label="End Time *"><input type="time" className={mobileDateCls} value={form.timeTo || ''} onChange={(e) => setForm((f) => ({ ...f, timeTo: e.target.value }))} required /></FormField>
                   </div>
                   <ReadOnlyTotal label="Total Hours" value={totalHours} suffix="Hour(s)" invalid={form.time && form.timeTo && totalHours <= 0} />
                 </div>
@@ -1474,7 +1474,7 @@ function RequestPermissionFormModal({ form, setForm, replacementOptions, permiss
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 dark:border-emerald-900/60 dark:bg-emerald-950/20">
                 {form.durationType === 'single_day' && (
                   <div className="space-y-4">
-                    <FormField label="Date *"><IconInput icon={CalendarDays}><input type="date" className={mobileInputCls} value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value, dateEnd: e.target.value }))} required /></IconInput></FormField>
+                    <FormField label="Date *"><input type="date" className={mobileDateCls} value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value, dateEnd: e.target.value }))} required /></FormField>
                     <div className="grid grid-cols-2 gap-3">
                       {['Full Day', 'Half Day'].map((part) => (
                         <button key={part} type="button" onClick={() => setForm((f) => ({ ...f, dayPart: part }))} className={clsx('h-12 rounded-xl border text-sm font-bold transition', form.dayPart === part ? 'border-emerald-500 bg-white text-emerald-700 shadow-sm' : 'border-slate-200 bg-white/70 text-slate-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300')}>{part}</button>
@@ -1486,8 +1486,8 @@ function RequestPermissionFormModal({ form, setForm, replacementOptions, permiss
                 {form.durationType === 'multiple_day' && (
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <FormField label="Start Date *"><IconInput icon={CalendarDays}><input type="date" className={mobileInputCls} value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value, dateEnd: f.dateEnd < e.target.value ? e.target.value : f.dateEnd }))} required /></IconInput></FormField>
-                      <FormField label="End Date *"><IconInput icon={CalendarDays}><input type="date" className={mobileInputCls} value={form.dateEnd} min={form.date} onChange={(e) => setForm((f) => ({ ...f, dateEnd: e.target.value }))} required /></IconInput></FormField>
+                      <FormField label="Start Date *"><input type="date" className={mobileDateCls} value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value, dateEnd: f.dateEnd < e.target.value ? e.target.value : f.dateEnd }))} required /></FormField>
+                      <FormField label="End Date *"><input type="date" className={mobileDateCls} value={form.dateEnd} min={form.date} onChange={(e) => setForm((f) => ({ ...f, dateEnd: e.target.value }))} required /></FormField>
                     </div>
                     <ReadOnlyTotal label="Total Days" value={totalDays} suffix="Day(s)" />
                   </div>
@@ -1495,10 +1495,10 @@ function RequestPermissionFormModal({ form, setForm, replacementOptions, permiss
 
                 {form.durationType === 'hours' && (
                   <div className="space-y-4">
-                    <FormField label="Date *"><IconInput icon={CalendarDays}><input type="date" className={mobileInputCls} value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value, dateEnd: e.target.value }))} required /></IconInput></FormField>
+                    <FormField label="Date *"><input type="date" className={mobileDateCls} value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value, dateEnd: e.target.value }))} required /></FormField>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <FormField label="Start Time *"><IconInput icon={Clock}><input type="time" className={mobileInputCls} value={form.time || ''} onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))} required /></IconInput></FormField>
-                      <FormField label="End Time *"><IconInput icon={Clock}><input type="time" className={mobileInputCls} value={form.timeTo || ''} onChange={(e) => setForm((f) => ({ ...f, timeTo: e.target.value }))} required /></IconInput></FormField>
+                      <FormField label="Start Time *"><input type="time" className={mobileDateCls} value={form.time || ''} onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))} required /></FormField>
+                      <FormField label="End Time *"><input type="time" className={mobileDateCls} value={form.timeTo || ''} onChange={(e) => setForm((f) => ({ ...f, timeTo: e.target.value }))} required /></FormField>
                     </div>
                     <ReadOnlyTotal label="Total Hours" value={totalHours} suffix="Hour(s)" invalid={form.time && form.timeTo && totalHours <= 0} />
                   </div>
@@ -1819,3 +1819,4 @@ function FormField({ label, children }) {
 const filterInputCls = 'h-9 rounded-lg border border-slate-200 bg-white px-2 text-sm outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-950 dark:text-white'
 const fieldCls = 'h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white'
 const mobileInputCls = 'h-14 w-full rounded-xl border border-slate-200 bg-white pl-12 pr-4 text-base font-semibold text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white'
+const mobileDateCls = 'h-14 w-full rounded-xl border border-slate-200 bg-white px-4 text-base font-semibold text-slate-900 outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white'
