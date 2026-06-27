@@ -31,6 +31,11 @@ body.dark {
     size: auto;
   }
 
+  @page employee-dashboard {
+    margin: 10mm;
+    size: A4 landscape;
+  }
+
   body {
     background: #fff !important;
     color: #111 !important;
@@ -51,5 +56,47 @@ body.dark {
     top: 0;
     width: 100%;
     display: block !important;
+  }
+
+  .employee-dashboard-print,
+  .employee-dashboard-print * {
+    visibility: visible;
+  }
+
+  .employee-dashboard-print {
+    page: employee-dashboard;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    display: block !important;
+    background: #fff !important;
+    color: #111 !important;
+    font-size: 11px !important;
+  }
+
+  .employee-dashboard-print section {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    box-shadow: none !important;
+  }
+
+  .employee-dashboard-print .overflow-x-auto {
+    overflow: visible !important;
+  }
+
+  .employee-dashboard-print table {
+    width: 100% !important;
+    min-width: 0 !important;
+    font-size: 10px !important;
+  }
+
+  .employee-dashboard-print th,
+  .employee-dashboard-print td {
+    padding: 6px 5px !important;
+  }
+
+  .employee-dashboard-print .recharts-responsive-container {
+    min-width: 100% !important;
   }
 }

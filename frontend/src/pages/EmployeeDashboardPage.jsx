@@ -172,14 +172,15 @@ function EmployeeDrawer({ employee, onClose }) {
           </div>
 
           {activeTab === 'Late History' || activeTab === 'Overtime History' ? (
-            <div className="mt-4 overflow-hidden rounded-xl border border-slate-100 dark:border-slate-800">
-              <table className="w-full text-xs">
+            <div className="mt-4 overflow-x-auto rounded-xl border border-slate-100 dark:border-slate-800">
+              <table className="w-full min-w-[680px] text-xs">
                 <thead className="bg-slate-50 text-left text-slate-500 dark:bg-slate-800/60">
-                  <tr>{(isOvertime ? ['Date', 'Check In', 'Check Out', 'Work Hours', 'Overtime', 'Status'] : ['Date', 'Check In', 'Schedule In', 'Late', 'Status']).map((heading) => <th key={heading} className="px-3 py-3 font-bold">{heading}</th>)}</tr>
+                  <tr>{(isOvertime ? ['No.', 'Date', 'Check In', 'Check Out', 'Work Hours', 'Overtime', 'Status'] : ['No.', 'Date', 'Check In', 'Schedule In', 'Late', 'Deduction', 'Status']).map((heading) => <th key={heading} className="px-3 py-3 font-bold">{heading}</th>)}</tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {(employee.records || []).slice(0, 8).map((record) => (
+                  {(employee.records || []).map((record, index) => (
                     <tr key={record.id}>
+                      <td className="px-3 py-3 font-semibold text-slate-400">{index + 1}</td>
                       <td className="px-3 py-3 font-semibold">{record.attendance_date}</td>
                       <td className="px-3 py-3">{attendanceTime(record, 'check_in')}</td>
                       {isOvertime ? (
@@ -191,9 +192,10 @@ function EmployeeDrawer({ employee, onClose }) {
                         </>
                       ) : (
                         <>
-                      <td className="px-3 py-3">—</td>
-                      <td className="px-3 py-3 font-bold">{formatMinutesClock(record.late_minutes)}</td>
-                      <td className="px-3 py-3"><span className="rounded-full bg-orange-50 px-3 py-1 font-bold text-orange-600 dark:bg-orange-950/40">Late</span></td>
+                          <td className="px-3 py-3">—</td>
+                          <td className="px-3 py-3 font-bold">{formatMinutesClock(record.late_minutes)}</td>
+                          <td className="px-3 py-3 font-bold text-rose-500">${Number(record.deduction_amount || 0).toFixed(2)}</td>
+                          <td className="px-3 py-3"><span className="rounded-full bg-orange-50 px-3 py-1 font-bold text-orange-600 dark:bg-orange-950/40">Late</span></td>
                         </>
                       )}
                     </tr>
@@ -445,7 +447,11 @@ export default function EmployeeDashboardPage({ appData }) {
     link.click()
     URL.revokeObjectURL(url)
   }
-  const print = () => window.print()
+  const print = () => {
+    setStatusMenuOpen(false)
+    setSelectedEmployee(null)
+    setTimeout(() => window.print(), 100)
+  }
   const saveVisibleStatuses = () => {
     setEnabled(statusDraft)
     localStorage.setItem(STATUS_STORAGE_KEY, JSON.stringify(statusDraft))
@@ -453,7 +459,13 @@ export default function EmployeeDashboardPage({ appData }) {
   }
 
   return (
-    <div className="space-y-5 p-3 pb-24 sm:p-6 print:p-0">
+    <div className="employee-dashboard-print space-y-5 p-3 pb-24 sm:p-6 print:p-0">
+      <div className="hidden border-b-2 border-slate-900 pb-3 print:block">
+        <h1 className="text-2xl font-extrabold text-slate-950">Employee Attendance Dashboard</h1>
+        <p className="mt-1 text-sm text-slate-600">
+          Month: {appliedFilters.month || 'All months'} · Records: {totalRecords.toLocaleString()}
+        </p>
+      </div>
       <header className="flex flex-wrap justify-end gap-4 print:hidden">
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={print} className="inline-flex h-10 items-center gap-2 rounded-xl border border-rose-200 bg-white px-4 text-xs font-bold text-rose-600 shadow-sm dark:bg-slate-900"><FileText size={16} />Export PDF</button>
