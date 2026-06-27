@@ -15,11 +15,13 @@ class PermissionType extends Model
         'deduction_amount',
         'color',
         'description',
+        'is_active',
     ];
 
     protected $casts = [
         'allowed_times'    => 'integer',
         'max_hours'        => 'decimal:2',
         'deduction_amount' => 'decimal:2',
+        'is_active'        => 'boolean',
     ];
 }

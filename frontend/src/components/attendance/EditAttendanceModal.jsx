@@ -33,7 +33,7 @@ const STATUS_BADGE = {
 }
 
 const inputCls =
-  'w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none ' +
+  'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none ' +
   'transition placeholder:text-slate-400 ' +
   'focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 ' +
   'dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:placeholder:text-slate-600'
@@ -41,6 +41,9 @@ const inputCls =
 // ── Main component ────────────────────────────────────────────────────────────
 export default function EditAttendanceModal({ attendance, onClose, onSaved, isLoaded = false }) {
   const fileRef = useRef(null)
+  const dateInputRef = useRef(null)
+  const checkInInputRef = useRef(null)
+  const checkOutInputRef = useRef(null)
   const employee    = attendance?.employee || {}
   const employeeName = [employee.first_name, employee.last_name].filter(Boolean).join(' ') || 'Employee'
 
@@ -52,6 +55,8 @@ export default function EditAttendanceModal({ attendance, onClose, onSaved, isLo
   const [checkOut,    setCheckOut]    = useState(toTime(attendance?.check_out_at))
   const [status,      setStatus]      = useState(attendance?.status || 'present')
   const [type,        setType]        = useState(attendance?.type   || 'office')
+  const [deductionAmount, setDeductionAmount] = useState(attendance?.deduction_amount ?? '')
+  const [deductionReason, setDeductionReason] = useState(attendance?.deduction_reason || '')
   const [reason,      setReason]      = useState('')
   const [attachments, setAttachments] = useState([])
   const [saving,      setSaving]      = useState(false)
@@ -85,9 +90,49 @@ export default function EditAttendanceModal({ attendance, onClose, onSaved, isLo
   const addFiles = (e) => setAttachments((p) => [...p, ...Array.from(e.target.files || [])])
   const removeFile = (i) => setAttachments((p) => p.filter((_, idx) => idx !== i))
 
+  const openDatePicker = () => {
+    const input = dateInputRef.current
+    if (!input) return
+
+    if (typeof input.showPicker === 'function') {
+      try {
+        input.showPicker()
+        return
+      } catch {
+        // Fall back to focus/click for browsers that restrict showPicker.
+      }
+    }
+
+    input.focus()
+    input.click()
+  }
+
+  const openInputPicker = (input) => {
+    if (!input) return
+
+    if (typeof input.showPicker === 'function') {
+      try {
+        input.showPicker()
+        return
+      } catch {
+        // Fall back to focus/click for browsers that restrict showPicker.
+      }
+    }
+
+    input.focus()
+    input.click()
+  }
+
   // Submit
   const handleSave = async () => {
+    if (!date) { setError('Please select an attendance date.'); return }
     if (!reason.trim()) { setError('Please enter a reason for this attendance edit.'); return }
+    const parsedDeductionAmount = deductionAmount === '' ? null : Number(deductionAmount)
+    if (parsedDeductionAmount !== null && (!Number.isFinite(parsedDeductionAmount) || parsedDeductionAmount < 0)) {
+      setError('Please enter a valid deduction amount.')
+      return
+    }
+
     setSaving(true)
     setError('')
     try {
@@ -97,6 +142,8 @@ export default function EditAttendanceModal({ attendance, onClose, onSaved, isLo
         check_out_at: checkOut ? `${date} ${checkOut}:00` : null,
         status,
         type,
+        deduction_amount: parsedDeductionAmount,
+        deduction_reason: deductionReason.trim() || null,
       }
 
       await api.patch(`/attendance/${attendance?.id}/edit`, {
@@ -112,18 +159,18 @@ export default function EditAttendanceModal({ attendance, onClose, onSaved, isLo
   }
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/70 p-2 backdrop-blur-sm sm:p-4">
-      <div className="flex max-h-[95vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-slate-900">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-slate-950/70 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+      <div className="flex h-full w-full flex-col overflow-hidden bg-white shadow-2xl dark:bg-slate-900 sm:h-auto sm:max-h-[92vh] sm:max-w-4xl sm:rounded-2xl">
 
         {/* ── Modal header ── */}
-        <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-6 py-4 dark:border-slate-800">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800 sm:px-5">
           <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-100 dark:bg-emerald-900/30">
-              <Clock size={20} className="text-emerald-600 dark:text-emerald-400" />
+            <div className="grid h-9 w-9 place-items-center rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
+              <Clock size={18} className="text-emerald-600 dark:text-emerald-400" />
             </div>
-            <div>
+            <div className="min-w-0">
               <h2 className="text-base font-bold text-slate-900 dark:text-white">Edit Attendance</h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">All changes are permanently logged</p>
+              <p className="truncate text-xs text-slate-500 dark:text-slate-400">All changes are permanently logged</p>
             </div>
           </div>
           <button
@@ -135,11 +182,11 @@ export default function EditAttendanceModal({ attendance, onClose, onSaved, isLo
         </div>
 
         {/* ── Scrollable body ── */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-5">
 
           {/* Employee card */}
-          <div className="mx-6 mt-5 flex items-center gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/50">
-            <div className="relative grid h-14 w-14 shrink-0 place-items-center overflow-hidden rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-lg font-bold text-white ring-2 ring-white dark:ring-slate-700">
+          <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800/50 sm:flex-row sm:items-center">
+            <div className="relative grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-base font-bold text-white ring-2 ring-white dark:ring-slate-700">
               {employee.photo_url
                 ? <img src={employee.photo_url} alt={employeeName} className="h-full w-full object-cover" />
                 : initials(employeeName)}
@@ -150,7 +197,7 @@ export default function EditAttendanceModal({ attendance, onClose, onSaved, isLo
               <p className="text-xs text-slate-500 dark:text-slate-400">{employee.employee_id || 'EMP-???'}</p>
               <p className="text-xs text-slate-400 dark:text-slate-500">{employee.department?.name || '-'}</p>
             </div>
-            <div className="shrink-0 text-right">
+            <div className="shrink-0 text-left sm:text-right">
               <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Attendance Date</p>
               <p className="mt-0.5 text-sm font-bold text-slate-800 dark:text-slate-200">
                 {date ? new Date(date + 'T00:00:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' }) : '—'}
@@ -163,10 +210,26 @@ export default function EditAttendanceModal({ attendance, onClose, onSaved, isLo
 
           {/* ── Attendance Information ── */}
           <ModalSection title="Attendance Information" icon={Calendar}>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
 
               <Field label="Attendance Date" required>
-                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
+                <div className="relative">
+                  <input
+                    ref={dateInputRef}
+                    type="date"
+                    value={date}
+                    onChange={(e) => setDate(e.target.value)}
+                    className={clsx(inputCls, 'pr-11')}
+                  />
+                  <button
+                    type="button"
+                    onClick={openDatePicker}
+                    className="absolute right-2 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-emerald-600 dark:text-slate-400 dark:hover:bg-slate-800"
+                    aria-label="Open attendance date picker"
+                  >
+                    <Calendar size={16} />
+                  </button>
+                </div>
               </Field>
 
               <Field label="Working Hours">
@@ -178,11 +241,43 @@ export default function EditAttendanceModal({ attendance, onClose, onSaved, isLo
               </Field>
 
               <Field label="Check In Time" required>
-                <input type="time" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} className={inputCls} />
+                <div className="relative">
+                  <input
+                    ref={checkInInputRef}
+                    type="time"
+                    value={checkIn}
+                    onChange={(e) => setCheckIn(e.target.value)}
+                    className={clsx(inputCls, 'pr-11')}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => openInputPicker(checkInInputRef.current)}
+                    className="absolute right-2 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-emerald-600 dark:text-slate-400 dark:hover:bg-slate-800"
+                    aria-label="Open check in time picker"
+                  >
+                    <Clock size={16} />
+                  </button>
+                </div>
               </Field>
 
               <Field label="Check Out Time">
-                <input type="time" value={checkOut} onChange={(e) => setCheckOut(e.target.value)} className={inputCls} />
+                <div className="relative">
+                  <input
+                    ref={checkOutInputRef}
+                    type="time"
+                    value={checkOut}
+                    onChange={(e) => setCheckOut(e.target.value)}
+                    className={clsx(inputCls, 'pr-11')}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => openInputPicker(checkOutInputRef.current)}
+                    className="absolute right-2 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-md text-slate-500 transition hover:bg-slate-100 hover:text-emerald-600 dark:text-slate-400 dark:hover:bg-slate-800"
+                    aria-label="Open check out time picker"
+                  >
+                    <Clock size={16} />
+                  </button>
+                </div>
               </Field>
 
               <Field label="Attendance Status" required>
@@ -218,13 +313,35 @@ export default function EditAttendanceModal({ attendance, onClose, onSaved, isLo
                 </select>
               </Field>
 
+              <Field label="Deduction Amount">
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={deductionAmount}
+                  onChange={(e) => setDeductionAmount(e.target.value)}
+                  className={inputCls}
+                  placeholder="0.00"
+                />
+              </Field>
+
+              <Field label="Deduction Reason">
+                <input
+                  type="text"
+                  value={deductionReason}
+                  onChange={(e) => setDeductionReason(e.target.value)}
+                  className={inputCls}
+                  placeholder="Reason for deduction"
+                />
+              </Field>
+
             </div>
           </ModalSection>
 
           {/* ── GPS & Verification ── */}
           <ModalSection title="GPS & Verification" icon={MapPin}>
 
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               <GpsCard
                 icon={MapPin}
                 label="GPS Status"
@@ -251,7 +368,7 @@ export default function EditAttendanceModal({ attendance, onClose, onSaved, isLo
             )}
 
             {/* Mini map */}
-            <div className="mt-3 h-40 overflow-hidden rounded-xl border border-slate-200 bg-gradient-to-br from-emerald-50 to-blue-50 dark:border-slate-700 dark:from-slate-800 dark:to-slate-850">
+            <div className="mt-3 h-32 overflow-hidden rounded-xl border border-slate-200 bg-gradient-to-br from-emerald-50 to-blue-50 dark:border-slate-700 dark:from-slate-800 dark:to-slate-850 sm:h-36">
               {isLoaded && hasGps && import.meta.env.VITE_GOOGLE_MAPS_API_KEY ? (
                 <GoogleMap
                   mapContainerClassName="h-full w-full"
@@ -277,11 +394,11 @@ export default function EditAttendanceModal({ attendance, onClose, onSaved, isLo
             {attendance?.photo_url && (
               <div className="mt-3">
                 <p className="mb-2 text-xs font-semibold text-slate-500 dark:text-slate-400">Selfie Proof</p>
-                <div className="flex items-start gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
                   <img
                     src={attendance.photo_url}
                     alt="Check-in selfie"
-                    className="h-20 w-20 rounded-xl border border-slate-200 object-cover shadow-sm dark:border-slate-700"
+                    className="h-16 w-16 rounded-xl border border-slate-200 object-cover shadow-sm dark:border-slate-700"
                   />
                   <div className="flex-1 rounded-lg bg-emerald-50 px-3 py-2.5 dark:bg-emerald-900/20">
                     <div className="flex items-center gap-1.5">
@@ -417,7 +534,7 @@ export default function EditAttendanceModal({ attendance, onClose, onSaved, isLo
           </ModalSection>
 
           {/* ── Security warning ── */}
-          <div className="mx-6 mb-5 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/40 dark:bg-amber-950/20">
+          <div className="mb-4 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/40 dark:bg-amber-950/20">
             <Shield size={15} className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
             <div>
               <p className="text-xs font-bold text-amber-800 dark:text-amber-300">Security Notice</p>
@@ -429,7 +546,7 @@ export default function EditAttendanceModal({ attendance, onClose, onSaved, isLo
 
           {/* Error */}
           {error && (
-            <div className="mx-6 mb-4 flex items-start gap-2.5 rounded-xl bg-red-50 p-3.5 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-400">
+            <div className="mb-4 flex items-start gap-2.5 rounded-xl bg-red-50 p-3.5 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-400">
               <XCircle size={15} className="mt-0.5 shrink-0" />
               <span>{error}</span>
             </div>
@@ -437,17 +554,17 @@ export default function EditAttendanceModal({ attendance, onClose, onSaved, isLo
         </div>
 
         {/* ── Sticky footer ── */}
-        <div className="shrink-0 border-t border-slate-200 bg-white px-6 py-4 dark:border-slate-800 dark:bg-slate-900">
-          <div className="flex items-center justify-between gap-3">
+        <div className="shrink-0 border-t border-slate-200 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900 sm:px-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
               <ShieldCheck size={13} className="text-emerald-500" />
               Changes are audit logged
             </div>
-            <div className="flex items-center gap-3">
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:gap-3">
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                className="rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
               >
                 Cancel
               </button>
@@ -455,7 +572,7 @@ export default function EditAttendanceModal({ attendance, onClose, onSaved, isLo
                 type="button"
                 onClick={handleSave}
                 disabled={saving}
-                className="flex items-center gap-2 rounded-xl bg-emerald-600 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-600/25 transition hover:bg-emerald-700 disabled:opacity-60"
+                className="flex items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-600/25 transition hover:bg-emerald-700 disabled:opacity-60"
               >
                 {saving
                   ? <><Loader2 size={15} className="animate-spin" /> Saving…</>
@@ -475,14 +592,14 @@ export default function EditAttendanceModal({ attendance, onClose, onSaved, isLo
 
 function ModalSection({ title, icon: Icon, children }) {
   return (
-    <div className="mx-6 mb-5">
-      <div className="mb-3 flex items-center gap-2.5">
+    <div className="mt-4">
+      <div className="mb-2 flex items-center gap-2.5">
         <div className="grid h-7 w-7 place-items-center rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
           <Icon size={14} className="text-emerald-600 dark:text-emerald-400" />
         </div>
         <h3 className="text-sm font-bold text-slate-900 dark:text-white">{title}</h3>
       </div>
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800/30">
+      <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-800/30 sm:p-4">
         {children}
       </div>
     </div>
@@ -522,13 +639,13 @@ const GPS_COLORS = {
 function GpsCard({ icon: Icon, label, value, sub, color }) {
   const c = GPS_COLORS[color] || GPS_COLORS.slate
   return (
-    <div className={clsx('rounded-xl p-3', c.wrap)}>
+    <div className={clsx('rounded-xl p-3 sm:min-h-24', c.wrap)}>
       <div className={clsx('grid h-8 w-8 place-items-center rounded-lg', c.icon)}>
         <Icon size={15} />
       </div>
       <p className="mt-2 text-[11px] font-semibold text-slate-500 dark:text-slate-400">{label}</p>
-      <p className={clsx('text-sm font-bold', c.val)}>{value}</p>
-      <p className="text-[11px] text-slate-400 dark:text-slate-500">{sub}</p>
+      <p className={clsx('truncate text-sm font-bold', c.val)}>{value}</p>
+      <p className="truncate text-[11px] text-slate-400 dark:text-slate-500">{sub}</p>
     </div>
   )
 }

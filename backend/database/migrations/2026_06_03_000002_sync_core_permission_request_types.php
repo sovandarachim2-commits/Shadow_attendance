@@ -47,6 +47,16 @@ return new class extends Migration
             'description' => 'Request approval for missing check-in records.',
         ],
         [
+            'name' => 'Missing Check Out',
+            'allowed_times' => 1,
+            'limit_type' => 'per_month',
+            'duration_control' => 'hours',
+            'max_hours' => null,
+            'deduction_amount' => 0,
+            'color' => '#d946ef',
+            'description' => 'Request approval for missing check-out records.',
+        ],
+        [
             'name' => 'Personal Request',
             'allowed_times' => 1,
             'limit_type' => 'per_month',

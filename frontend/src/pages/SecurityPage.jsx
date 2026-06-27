@@ -40,6 +40,7 @@ import TelegramNotificationSettings from '../components/settings/TelegramNotific
 import LateRulesSettings from '../components/settings/LateRulesSettings'
 import BonusRulesSettings from '../components/settings/BonusRulesSettings'
 import AssignPermissionTypeModal, { PERM_COLORS, EMPTY_PERM_FORM } from '../components/settings/AssignPermissionTypeModal'
+import PermissionTypesPage from './PermissionTypesPage'
 
 const settingsSections = [
   { id: 'general', label: 'General Settings', icon: Settings },
@@ -211,7 +212,7 @@ function renderSettingsContent(section, notify, settings, updateSetting, refresh
     case 'locations':  return <OfficeLocations notify={notify} />
     case 'gps':        return <GpsTracking {...sp} />
     case 'qr':         return <QrAttendance notify={notify} />
-    case 'permission-types': return <PermissionTypesSettings />
+    case 'permission-types': return <PermissionTypesPage />
     case 'telegram':   return <TelegramNotificationSettings notify={notify} />
     case 'email':      return <EmailNotifications />
     case 'maps':       return <GoogleMapsSettings />

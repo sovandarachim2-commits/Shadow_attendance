@@ -119,6 +119,22 @@ class WorkScheduleService
                 $q->whereNull('request_date_end')
                   ->orWhere('request_date_end', '>=', $today);
             })
+            ->where(function ($q) {
+                $q->where('type', 'Day Off')
+                    ->orWhere(function ($personal) {
+                        $personal->where('type', 'Personal Request')
+                            ->where(function ($duration) {
+                                $duration->where('duration_type', 'multiple_day')
+                                    ->orWhere(function ($singleDay) {
+                                        $singleDay->where('duration_type', 'single_day')
+                                            ->where(function ($dayPart) {
+                                                $dayPart->whereNull('day_part')
+                                                    ->orWhere('day_part', 'Full Day');
+                                            });
+                                    });
+                            });
+                    });
+            })
             ->first(['type']);
 
         if ($blockedRequest) {

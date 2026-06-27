@@ -30,6 +30,20 @@ function fmtDuration(start, end) {
   return days === 1 ? '1 Day' : `${days} Days`
 }
 
+function fmtRequestDuration(row) {
+  if (row.duration_type === 'hours' && isSingleTimeRequest(row.type)) {
+    return row.request_time || row.start_time || '-'
+  }
+
+  if (row.duration_type === 'hours') {
+    const from = row.start_time || row.request_time || '-'
+    const to = row.end_time || '-'
+    return `${from} - ${to}`
+  }
+
+  return fmtDuration(row.request_date, row.request_date_end)
+}
+
 function calcDays(start, end) {
   if (!start || !end) return 1
   const a = new Date(`${start}T00:00:00`)
@@ -54,11 +68,60 @@ function maxHoursOf(type) {
   return value === null || value === undefined || value === '' ? null : Number(value)
 }
 
+function isSingleTimeRequest(type) {
+  return ['Late Check In', 'Early Check Out'].includes(type)
+}
+
 function durationControlLabel(control) {
   if (control === 'single_day') return 'Single Day'
   if (control === 'multiple_day') return 'Multiple Day'
   if (control === 'hours') return 'Hours'
   return 'Any Duration'
+}
+
+const CORE_PERMISSION_TYPES = PERMISSION_REQUEST_TYPES.map((type, index) => ({
+  id: type.id,
+  name: type.id,
+  color: {
+    'Late Check In': '#0ea5e9',
+    'Early Check Out': '#f59e0b',
+    'Day Off': '#8b5cf6',
+    'Missing Check In': '#8b5cf6',
+    'Missing Check Out': '#d946ef',
+    'Personal Request': '#f97316',
+  }[type.id] || '#10b981',
+  description: type.desc,
+  duration_control: type.id === 'Late Check In' || type.id === 'Early Check Out' || type.id === 'Missing Check In' || type.id === 'Missing Check Out'
+    ? 'hours'
+    : 'any',
+  max_hours: type.id === 'Late Check In' || type.id === 'Early Check Out' ? 2 : null,
+  is_active: true,
+  sort_order: index,
+}))
+
+function normalizePermissionTypes(rows = []) {
+  const byName = new Map(CORE_PERMISSION_TYPES.map((type) => [type.name, type]))
+
+  rows.forEach((row) => {
+    if (!row?.name) return
+    const existing = byName.get(row.name)
+    byName.set(row.name, {
+      ...existing,
+      ...row,
+      id: row.id ?? existing?.id ?? row.name,
+      name: row.name,
+      description: row.description || existing?.description || '',
+      duration_control: row.duration_control ?? existing?.duration_control ?? 'any',
+      max_hours: row.max_hours ?? existing?.max_hours ?? null,
+      color: row.color || existing?.color || '#10b981',
+      is_active: row.is_active ?? existing?.is_active ?? true,
+      sort_order: existing?.sort_order ?? rows.length,
+    })
+  })
+
+  return Array.from(byName.values())
+    .filter((type) => type.is_active !== false)
+    .sort((a, b) => (a.sort_order ?? 99) - (b.sort_order ?? 99))
 }
 
 function fmtSubmittedAt(iso) {
@@ -86,7 +149,7 @@ function mapApiRequest(row) {
     date: row.request_date,
     dateEnd: row.request_date_end || row.request_date,
     dateRange: fmtDateRange(row.request_date, row.request_date_end),
-    duration: fmtDuration(row.request_date, row.request_date_end),
+    duration: fmtRequestDuration(row),
     time: row.request_time || null,
     startTime: row.start_time || row.request_time || null,
     endTime: row.end_time || null,
@@ -158,6 +221,66 @@ function StatusBadge({ status }) {
   )
 }
 
+function StatusChoice({ value, onChange }) {
+  const options = [
+    { status: 'Pending', Icon: Clock, tone: 'amber', desc: 'Waiting for review' },
+    { status: 'Approved', Icon: Check, tone: 'emerald', desc: 'Request is allowed' },
+    { status: 'Rejected', Icon: XCircle, tone: 'rose', desc: 'Request is declined' },
+  ]
+
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      {options.map(({ status, Icon, tone, desc }) => {
+        const selected = value === status
+        return (
+          <button
+            key={status}
+            type="button"
+            onClick={() => onChange(status)}
+            className={clsx(
+              'group flex min-h-20 items-center gap-3 rounded-2xl border p-3 text-left transition',
+              selected && tone === 'emerald' && 'border-emerald-400 bg-emerald-50 shadow-sm shadow-emerald-100 dark:border-emerald-700 dark:bg-emerald-950/30 dark:shadow-none',
+              selected && tone === 'rose' && 'border-rose-400 bg-rose-50 shadow-sm shadow-rose-100 dark:border-rose-700 dark:bg-rose-950/30 dark:shadow-none',
+              selected && tone === 'amber' && 'border-amber-400 bg-amber-50 shadow-sm shadow-amber-100 dark:border-amber-700 dark:bg-amber-950/30 dark:shadow-none',
+              !selected && 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:hover:bg-slate-900',
+            )}
+          >
+            <span className={clsx(
+              'grid h-11 w-11 shrink-0 place-items-center rounded-xl transition',
+              tone === 'emerald' && (selected ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-300'),
+              tone === 'rose' && (selected ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-600 dark:bg-rose-950/60 dark:text-rose-300'),
+              tone === 'amber' && (selected ? 'bg-amber-500 text-white' : 'bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:text-amber-300'),
+            )}>
+              <Icon size={19} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className={clsx(
+                'block text-sm font-black',
+                selected && tone === 'emerald' && 'text-emerald-800 dark:text-emerald-200',
+                selected && tone === 'rose' && 'text-rose-800 dark:text-rose-200',
+                selected && tone === 'amber' && 'text-amber-800 dark:text-amber-200',
+                !selected && 'text-slate-700 dark:text-slate-200',
+              )}>
+                {status}
+              </span>
+              <span className="mt-0.5 block text-xs font-semibold text-slate-400 dark:text-slate-500">{desc}</span>
+            </span>
+            <span className={clsx(
+              'grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 transition',
+              selected && tone === 'emerald' && 'border-emerald-600 bg-emerald-600 text-white',
+              selected && tone === 'rose' && 'border-rose-600 bg-rose-600 text-white',
+              selected && tone === 'amber' && 'border-amber-500 bg-amber-500 text-white',
+              !selected && 'border-slate-300 bg-white text-transparent dark:border-slate-600 dark:bg-slate-900',
+            )}>
+              <Check size={12} />
+            </span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 // ─── main component ──────────────────────────────────────────────────────────
 
 export default function PermissionRequestsPage({ user, pendingRequestType, onClearPendingRequest }) {
@@ -180,9 +303,12 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
   const [showForm, setShowForm]             = useState(false)
   const [editingId, setEditingId]           = useState(null)
   const [submitting, setSubmitting]         = useState(false)
+  const [statusConfirm, setStatusConfirm]   = useState(null)
+  const [statusReason, setStatusReason]     = useState('')
+  const [statusSubmitting, setStatusSubmitting] = useState(false)
   const [form, setForm]               = useState(() => newRequestForm('Late Check In'))
   const [replacementOptions, setReplacementOptions] = useState([])
-  const [permissionTypes, setPermissionTypes]       = useState([])
+  const [permissionTypes, setPermissionTypes]       = useState(() => normalizePermissionTypes())
   const [showMobileDetail, setShowMobileDetail] = useState(false)
 
   const notify = (text, ok = true) => {
@@ -206,8 +332,8 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
 
   useEffect(() => {
     api.get('/permission-types')
-      .then((res) => setPermissionTypes(res.data?.data ?? res.data ?? []))
-      .catch(() => setPermissionTypes([]))
+      .then((res) => setPermissionTypes(normalizePermissionTypes(res.data?.data ?? res.data ?? [])))
+      .catch(() => setPermissionTypes(normalizePermissionTypes()))
   }, [])
 
   useEffect(() => {
@@ -285,6 +411,7 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
       totalHours: req.totalHours || calcHours(req.startTime || req.time, req.endTime),
       reason: req.reason,
       note: req.note || '',
+      status: req.status || 'Pending',
       attachment: null,
       gps: '',
       emergency: req.emergency,
@@ -300,13 +427,18 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
     const startDate = form.date
     const endDate = form.durationType === 'multiple_day' ? (form.dateEnd || form.date) : form.date
     const totalDays = form.durationType === 'multiple_day' ? calcDays(startDate, endDate) : 1
-    const totalHours = form.durationType === 'hours' ? calcHours(form.time, form.timeTo) : null
+    const singleTimeRequest = isSingleTimeRequest(form.type)
+    const totalHours = form.durationType === 'hours' && !singleTimeRequest ? calcHours(form.time, form.timeTo) : null
 
     if (!form.type || !reason || !startDate) {
       notify('Please complete all required fields.', false)
       return
     }
-    if (form.durationType === 'hours' && (!form.time || !form.timeTo || totalHours <= 0)) {
+    if (form.durationType === 'hours' && singleTimeRequest && !form.time) {
+      notify('Please select a request time.', false)
+      return
+    }
+    if (form.durationType === 'hours' && !singleTimeRequest && (!form.time || !form.timeTo || totalHours <= 0)) {
       notify('Please select a valid start and end time.', false)
       return
     }
@@ -317,26 +449,29 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
       notify(`${form.type} must use ${durationControl.replace('_', ' ')} duration.`, false)
       return
     }
-    if (durationControl === 'hours' && maxHours && totalHours > maxHours) {
+    if (durationControl === 'hours' && !singleTimeRequest && maxHours && totalHours > maxHours) {
       notify(`${form.type} cannot be more than ${maxHours} hour(s).`, false)
       return
     }
 
     const payload = new FormData()
     payload.append('type', form.type)
-    payload.append('replacement_employee_id', form.replacementEmployeeId || '')
+    payload.append('replacement_employee_id', '')
     payload.append('request_date', startDate)
     payload.append('request_date_end', endDate)
     payload.append('duration_type', form.durationType)
     payload.append('reason', reason)
     payload.append('note', form.note || '')
     payload.append('is_emergency', form.emergency ? '1' : '0')
+    if (editingId && canApprove && form.status) {
+      payload.append('status', form.status.toLowerCase())
+    }
 
     if (form.durationType === 'hours') {
       payload.append('request_time', form.time)
       payload.append('start_time', form.time)
-      payload.append('end_time', form.timeTo)
-      payload.append('total_hours', String(totalHours))
+      payload.append('end_time', singleTimeRequest ? '' : form.timeTo)
+      payload.append('total_hours', singleTimeRequest ? '' : String(totalHours))
     } else if (form.durationType === 'multiple_day') {
       payload.append('total_days', String(totalDays))
     } else {
@@ -378,15 +513,31 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
     }
   }
 
+  const requestStatusChange = (req, status) => {
+    setStatusConfirm({ req, status })
+    setStatusReason('')
+  }
+
   const updateStatus = async (req, status) => {
+    if (statusSubmitting) return
+    const adminNotes = statusReason.trim()
+    if (!adminNotes) {
+      notify(`Please enter the reason why HR ${status === 'Approved' ? 'approves' : 'rejects'} this request.`, false)
+      return
+    }
+    setStatusSubmitting(true)
     try {
-      const updated = await permissionRequestService.updateStatus(req.dbId, { status: status.toLowerCase() })
+      const updated = await permissionRequestService.updateStatus(req.dbId, { status: status.toLowerCase(), admin_notes: adminNotes })
       const mapped = mapApiRequest(updated)
       setSelected(mapped)
       notify(`Request ${status.toLowerCase()}.`)
+      setStatusConfirm(null)
+      setStatusReason('')
       await load()
     } catch (err) {
       notify(apiError(err), false)
+    } finally {
+      setStatusSubmitting(false)
     }
   }
 
@@ -400,6 +551,9 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
   }
 
   const applyFilters = () => {} // filters are reactive, nothing to do
+  const statusConfirmIsApproval = statusConfirm?.status === 'Approved'
+  const statusConfirmAction = statusConfirmIsApproval ? 'approve' : 'reject'
+  const statusConfirmEmployee = statusConfirm?.req?.employeeName || 'this employee'
 
   // ── render ───────────────────────────────────────────────────────────────
 
@@ -420,21 +574,8 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
       {/* ══════════════ DESKTOP ══════════════════════════════════════════════ */}
       <div className="hidden lg:block space-y-5">
         {/* ── Desktop inline form (replaces list when showForm=true) ───────── */}
-        {showForm && (
-          <DesktopFormView
-            form={form}
-            setForm={setForm}
-            replacementOptions={replacementOptions}
-            permissionTypes={permissionTypes}
-            isEdit={Boolean(editingId)}
-            submitting={submitting}
-            onClose={() => { setShowForm(false); setEditingId(null) }}
-            onSubmit={submitRequest}
-          />
-        )}
-
         {/* ── List view (hidden while form is open) ───────────────────────── */}
-        <div className={showForm ? 'hidden' : 'space-y-5'}>
+        <div className="space-y-5">
         {/* Header */}
         <div className="flex items-start justify-between">
           <div>
@@ -558,7 +699,8 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
                     const meta = requestTypeMeta(req.type)
                     const Icon = meta.icon
                     const isOwn = req.employeeId === employeeId
-                    const canEdit = canSubmit && isOwn && req.status === 'Pending'
+                    const canEdit = canViewAll || (canSubmit && isOwn && req.status === 'Pending')
+                    const canCancel = canSubmit && isOwn && req.status === 'Pending'
                     const isActive = selected?.dbId === req.dbId
                     return (
                       <tr
@@ -602,9 +744,15 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
                               View
                             </ActionBtn>
                             {canEdit && (
-                              <ActionBtn label="Delete" danger onClick={() => deleteRequest(req)}>
-                                <Trash2 size={13} />
+                              <ActionBtn label="Edit" success onClick={() => openEdit(req)}>
+                                <Pencil size={13} />
+                                Edit
                               </ActionBtn>
+                            )}
+                            {canCancel && (
+                                <ActionBtn label="Delete" danger onClick={() => deleteRequest(req)}>
+                                  <Trash2 size={13} />
+                                </ActionBtn>
                             )}
                           </div>
                         </td>
@@ -626,10 +774,11 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
             <DesktopDetailPanel
               req={selected}
               canApprove={canApprove}
+              canViewAll={canViewAll}
               canSubmit={canSubmit}
               employeeId={employeeId}
               onClose={() => setSelected(null)}
-              onStatus={updateStatus}
+              onStatus={requestStatusChange}
               onEdit={openEdit}
               onDelete={deleteRequest}
             />
@@ -639,16 +788,35 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
       </div>   {/* end hidden lg:block */}
 
       {/* ══════════════ MOBILE ═══════════════════════════════════════════════ */}
+      {showForm && (
+        <div className="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/50 p-6 backdrop-blur-sm lg:flex">
+          <div className="max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-950">
+            <DesktopFormView
+              form={form}
+              setForm={setForm}
+              replacementOptions={replacementOptions}
+              permissionTypes={permissionTypes}
+              isEdit={Boolean(editingId)}
+              canManageStatus={canApprove}
+              submitting={submitting}
+              onClose={() => { setShowForm(false); setEditingId(null) }}
+              onSubmit={submitRequest}
+            />
+          </div>
+        </div>
+      )}
+
       <div className="lg:hidden">
         {/* Mobile detail overlay */}
         {showMobileDetail && selected && (
           <MobileDetailSheet
             req={selected}
             canApprove={canApprove}
+            canViewAll={canViewAll}
             canSubmit={canSubmit}
             employeeId={employeeId}
             onClose={() => setShowMobileDetail(false)}
-            onStatus={updateStatus}
+            onStatus={requestStatusChange}
             onEdit={openEdit}
             onDelete={deleteRequest}
           />
@@ -730,10 +898,70 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
             replacementOptions={replacementOptions}
             permissionTypes={permissionTypes}
             isEdit={Boolean(editingId)}
+            canManageStatus={canApprove}
             submitting={submitting}
             onClose={() => { setShowForm(false); setEditingId(null) }}
             onSubmit={submitRequest}
           />
+        </div>
+      )}
+
+      {statusConfirm && (
+        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-slate-950/45 px-4 pb-6 backdrop-blur-sm sm:items-center sm:pb-0">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+            <div className={clsx(
+              'mx-auto grid h-12 w-12 place-items-center rounded-full',
+              statusConfirm.status === 'Approved'
+                ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300'
+                : 'bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-300',
+            )}>
+              {statusConfirm.status === 'Approved' ? <Check size={22} /> : <XCircle size={22} />}
+            </div>
+            <h4 className="mt-4 text-center text-lg font-black text-slate-950 dark:text-white">
+              {statusConfirmIsApproval ? 'Confirm approval?' : 'Confirm rejection?'}
+            </h4>
+            <p className="mt-2 text-center text-sm font-medium leading-6 text-slate-500 dark:text-slate-400">
+              Are you sure you want to {statusConfirmAction} this {statusConfirm.req.type} request for {statusConfirmEmployee}?
+            </p>
+            <div className="mt-4 text-left">
+              <label className="mb-2 block text-xs font-black uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                HR Reason <span className="text-rose-500">*</span>
+              </label>
+              <textarea
+                value={statusReason}
+                onChange={(event) => setStatusReason(event.target.value)}
+                placeholder={statusConfirmIsApproval ? 'Why is this request approved?' : 'Why is this request rejected?'}
+                maxLength={500}
+                className="min-h-24 w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+                disabled={statusSubmitting}
+                autoFocus
+              />
+              <p className="mt-1 text-right text-xs font-semibold text-slate-400">{statusReason.length}/500</p>
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => { setStatusConfirm(null); setStatusReason('') }}
+                className="h-12 rounded-xl border border-slate-200 bg-white text-sm font-black text-slate-600 transition hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                disabled={statusSubmitting}
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                onClick={() => updateStatus(statusConfirm.req, statusConfirm.status)}
+                className={clsx(
+                  'h-12 rounded-xl text-sm font-black text-white shadow-lg transition disabled:opacity-60',
+                  statusConfirm.status === 'Approved'
+                    ? 'bg-emerald-600 shadow-emerald-600/25 hover:bg-emerald-700'
+                    : 'bg-rose-600 shadow-rose-600/25 hover:bg-rose-700',
+                )}
+                disabled={statusSubmitting || !statusReason.trim()}
+              >
+                {statusSubmitting ? 'Confirming...' : (statusConfirmIsApproval ? 'Approve' : 'Reject')}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -742,26 +970,29 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
 
 // ─── Desktop: inline form view ───────────────────────────────────────────────
 
-function DesktopFormView({ form, setForm, replacementOptions, permissionTypes = [], isEdit, submitting, onClose, onSubmit }) {
+function DesktopFormView({ form, setForm, replacementOptions, permissionTypes = [], isEdit, canManageStatus, submitting, onClose, onSubmit }) {
   const totalDays = calcDays(form.date, form.dateEnd)
   const totalHours = calcHours(form.time, form.timeTo)
+  const singleTimeRequest = isSingleTimeRequest(form.type)
 
   const setType = (type) => {
     const next = newRequestForm(type)
     const selectedType = permissionTypes.find((pt) => pt.name === type)
     const control = durationControlOf(selectedType)
+    const singleTime = isSingleTimeRequest(type)
     setForm({
       ...next,
-      replacementEmployeeId: form.replacementEmployeeId,
+      replacementEmployeeId: '',
       reasonType: form.reasonType,
       reason: form.reason,
       note: form.note,
+      status: form.status,
       date: form.date,
       dateEnd: form.dateEnd,
       durationType: control === 'any' ? form.durationType : control,
       dayPart: form.dayPart,
       time: control === 'hours' ? (form.time || defaultTime()) : next.time,
-      timeTo: control === 'hours' ? (form.timeTo || defaultTime(60)) : next.timeTo,
+      timeTo: control === 'hours' && !singleTime ? (form.timeTo || defaultTime(60)) : '',
       attachment: form.attachment,
     })
   }
@@ -770,11 +1001,6 @@ function DesktopFormView({ form, setForm, replacementOptions, permissionTypes = 
     setForm((f) => ({ ...f, durationType, dateEnd: durationType === 'multiple_day' ? f.dateEnd : f.date, time: durationType === 'hours' ? (f.time || defaultTime()) : '', timeTo: durationType === 'hours' ? (f.timeTo || defaultTime(60)) : '', dayPart: durationType === 'single_day' ? (f.dayPart || 'Full Day') : 'Full Day' }))
   }
 
-  const coverName = form.replacementEmployeeId
-    ? (replacementOptions.find((e) => String(e.id) === String(form.replacementEmployeeId))
-        ? employeeFullName(replacementOptions.find((e) => String(e.id) === String(form.replacementEmployeeId)))
-        : 'Selected')
-    : 'No Cover'
   const selectedType = permissionTypes.find((pt) => pt.name === form.type)
   const durationControl = durationControlOf(selectedType)
   const maxHours = maxHoursOf(selectedType)
@@ -788,7 +1014,7 @@ function DesktopFormView({ form, setForm, replacementOptions, permissionTypes = 
         </button>
         <div>
           <h2 className="text-2xl font-bold text-slate-950 dark:text-white">{isEdit ? 'Edit Request' : 'New Request'}</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">Choose what you need, when you need it, then submit for approval.</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{isEdit ? 'Update request details and status.' : 'Choose what you need, when you need it, then submit for approval.'}</p>
         </div>
       </div>
 
@@ -806,6 +1032,7 @@ function DesktopFormView({ form, setForm, replacementOptions, permissionTypes = 
               onChange={setType}
             />
 
+            {false && (<>
             {/* Covered By */}
             <div>
               <FieldLabel text="Cover Person" optional />
@@ -848,6 +1075,8 @@ function DesktopFormView({ form, setForm, replacementOptions, permissionTypes = 
               </div>
             </div>
 
+            </>)}
+
             {/* Duration Type */}
             <div>
               <FieldLabel text="Duration Type" required />
@@ -856,12 +1085,11 @@ function DesktopFormView({ form, setForm, replacementOptions, permissionTypes = 
                   { id: 'single_day', label: 'Single Day', icon: CalendarDays },
                   { id: 'multiple_day', label: 'Multiple Day', icon: CalendarDays },
                   { id: 'hours', label: 'Hours', icon: Clock },
-                ].map((item) => {
+                ].filter((item) => durationControl === 'any' || item.id === durationControl).map((item) => {
                   const DIcon = item.icon
                   const sel = form.durationType === item.id
-                  const locked = durationControl !== 'any' && item.id !== durationControl
                   return (
-                    <button key={item.id} type="button" disabled={locked} onClick={() => setDurationType(item.id)} className={clsx('flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-40', sel ? 'border-emerald-500 bg-emerald-50 shadow-sm dark:border-emerald-600 dark:bg-emerald-950/30' : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950')}>
+                    <button key={item.id} type="button" onClick={() => setDurationType(item.id)} className={clsx('flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition', sel ? 'border-emerald-500 bg-emerald-50 shadow-sm dark:border-emerald-600 dark:bg-emerald-950/30' : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950')}>
                       <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300"><DIcon size={17} /></span>
                       <span className="flex-1 text-sm font-bold text-slate-900 dark:text-white">{item.label}</span>
                       <span className={clsx('grid h-5 w-5 shrink-0 place-items-center rounded-full border-2', sel ? 'border-emerald-600' : 'border-slate-300 dark:border-slate-600')}>{sel && <span className="h-2.5 w-2.5 rounded-full bg-emerald-600" />}</span>
@@ -869,11 +1097,6 @@ function DesktopFormView({ form, setForm, replacementOptions, permissionTypes = 
                   )
                 })}
               </div>
-              {durationControl !== 'any' && (
-                <p className="mt-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                  Admin rule: {form.type} uses {durationControl.replace('_', ' ')}{durationControl === 'hours' && maxHours ? `, max ${maxHours} hour(s)` : ''}.
-                </p>
-              )}
             </div>
 
             {/* Date / Time section */}
@@ -900,11 +1123,19 @@ function DesktopFormView({ form, setForm, replacementOptions, permissionTypes = 
               {form.durationType === 'hours' && (
                 <div className="space-y-4">
                   <FormField label="Date *"><input type="date" className={mobileDateCls} value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value, dateEnd: e.target.value }))} required /></FormField>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <FormField label="Start Time *"><input type="time" className={mobileDateCls} value={form.time || ''} onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))} required /></FormField>
-                    <FormField label="End Time *"><input type="time" className={mobileDateCls} value={form.timeTo || ''} onChange={(e) => setForm((f) => ({ ...f, timeTo: e.target.value }))} required /></FormField>
-                  </div>
-                  <ReadOnlyTotal label="Total Hours" value={totalHours} suffix="Hour(s)" invalid={form.time && form.timeTo && totalHours <= 0} />
+                  {singleTimeRequest ? (
+                    <FormField label={`${form.type === 'Late Check In' ? 'Approved Check In' : 'Approved Check Out'} Time *`}>
+                      <input type="time" className={mobileDateCls} value={form.time || ''} onChange={(e) => setForm((f) => ({ ...f, time: e.target.value, timeTo: '' }))} required />
+                    </FormField>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <FormField label="Start Time *"><input type="time" className={mobileDateCls} value={form.time || ''} onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))} required /></FormField>
+                        <FormField label="End Time *"><input type="time" className={mobileDateCls} value={form.timeTo || ''} onChange={(e) => setForm((f) => ({ ...f, timeTo: e.target.value }))} required /></FormField>
+                      </div>
+                      <ReadOnlyTotal label="Total Hours" value={totalHours} suffix="Hour(s)" invalid={form.time && form.timeTo && totalHours <= 0} />
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -914,6 +1145,12 @@ function DesktopFormView({ form, setForm, replacementOptions, permissionTypes = 
               <textarea className="min-h-28 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white" placeholder="Write reason..." value={form.reason || ''} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} maxLength={500} required />
               <p className="mt-1 text-right text-xs font-medium text-slate-500">{(form.reason || '').length}/500</p>
             </FormField>
+
+            {isEdit && canManageStatus && (
+              <FormField label="Request Status *">
+                <StatusChoice value={form.status || 'Pending'} onChange={(status) => setForm((f) => ({ ...f, status }))} />
+              </FormField>
+            )}
           </div>
         </div>
 
@@ -925,10 +1162,10 @@ function DesktopFormView({ form, setForm, replacementOptions, permissionTypes = 
             <div className="space-y-3 text-sm">
               {[
                 { label: 'Type',     value: form.type },
-                { label: 'Duration', value: form.durationType === 'hours' ? `${totalHours} hour(s)` : form.durationType === 'multiple_day' ? `${totalDays} day(s)` : `1 day (${form.dayPart})` },
+                ...(isEdit && canManageStatus ? [{ label: 'Status', value: form.status || 'Pending' }] : []),
+                { label: singleTimeRequest ? 'Time' : 'Duration', value: form.durationType === 'hours' ? (singleTimeRequest ? (form.time || '—') : `${totalHours} hour(s)`) : form.durationType === 'multiple_day' ? `${totalDays} day(s)` : `1 day (${form.dayPart})` },
                 { label: 'Date',     value: form.date ? fmtDate(form.date) : '—' },
                 ...(form.durationType === 'multiple_day' ? [{ label: 'End', value: form.dateEnd ? fmtDate(form.dateEnd) : '—' }] : []),
-                { label: 'Cover',    value: coverName },
               ].map(({ label, value }) => (
                 <div key={label} className="flex items-start justify-between gap-3">
                   <span className="shrink-0 text-slate-400">{label}</span>
@@ -989,12 +1226,13 @@ function DesktopStatCard({ label, count, pending, total }) {
 
 // ─── Desktop: detail panel ───────────────────────────────────────────────────
 
-function DesktopDetailPanel({ req, canApprove, canSubmit, employeeId, onClose, onStatus, onEdit, onDelete }) {
+function DesktopDetailPanel({ req, canApprove, canViewAll, canSubmit, employeeId, onClose, onStatus, onEdit, onDelete }) {
   const tc = typeColor(req.type)
   const meta = requestTypeMeta(req.type)
   const Icon = meta.icon
   const isOwn = req.employeeId === employeeId
-  const canEdit = canSubmit && isOwn && req.status === 'Pending'
+  const canEdit = canViewAll || (canSubmit && isOwn && req.status === 'Pending')
+  const canCancel = canSubmit && isOwn && req.status === 'Pending'
 
   return (
     <div className="w-80 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -1055,6 +1293,13 @@ function DesktopDetailPanel({ req, canApprove, canSubmit, employeeId, onClose, o
             <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-200">{req.reason}</p>
           </div>
 
+          {req.notes && req.status !== 'Pending' && (
+            <div className="rounded-xl border border-slate-100 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950">
+              <p className="mb-1.5 text-xs font-bold text-slate-500">HR Reason</p>
+              <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-200">{req.notes}</p>
+            </div>
+          )}
+
           {/* Approval flow */}
           {req.status !== 'Pending' && (
             <div>
@@ -1081,6 +1326,11 @@ function DesktopDetailPanel({ req, canApprove, canSubmit, employeeId, onClose, o
           </div>
         )}
         {canEdit && (
+          <button type="button" onClick={() => onEdit(req)} className="w-full h-10 rounded-lg border border-emerald-200 text-xs font-bold text-emerald-700 transition hover:bg-emerald-50 dark:border-emerald-900 dark:text-emerald-300 dark:hover:bg-emerald-950/20">
+            <Pencil size={13} className="inline mr-1" /> Edit Request
+          </button>
+        )}
+        {canCancel && (
           <button type="button" onClick={() => onDelete(req)} className="w-full h-10 rounded-lg border border-rose-200 text-xs font-bold text-rose-600 transition hover:bg-rose-50 dark:border-rose-900 dark:hover:bg-rose-950/20">
             Cancel Request
           </button>
@@ -1190,12 +1440,13 @@ function TypePickerSheet({ onClose, onPick }) {
 
 // ─── Mobile: detail sheet ────────────────────────────────────────────────────
 
-function MobileDetailSheet({ req, canApprove, canSubmit, employeeId, onClose, onStatus, onEdit, onDelete }) {
+function MobileDetailSheet({ req, canApprove, canViewAll, canSubmit, employeeId, onClose, onStatus, onEdit, onDelete }) {
   const tc = typeColor(req.type)
   const meta = requestTypeMeta(req.type)
   const Icon = meta.icon
   const isOwn = req.employeeId === employeeId
-  const canEdit = canSubmit && isOwn && req.status === 'Pending'
+  const canEdit = canViewAll || (canSubmit && isOwn && req.status === 'Pending')
+  const canCancel = canSubmit && isOwn && req.status === 'Pending'
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-slate-900">
@@ -1259,6 +1510,13 @@ function MobileDetailSheet({ req, canApprove, canSubmit, employeeId, onClose, on
           <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-200">{req.reason}</p>
         </div>
 
+        {req.notes && req.status !== 'Pending' && (
+          <div className="rounded-xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
+            <p className="mb-1.5 text-xs font-bold text-slate-500">HR Reason</p>
+            <p className="text-sm leading-relaxed text-slate-700 dark:text-slate-200">{req.notes}</p>
+          </div>
+        )}
+
         {/* Approval flow */}
         {req.status !== 'Pending' && (
           <div>
@@ -1280,6 +1538,11 @@ function MobileDetailSheet({ req, canApprove, canSubmit, employeeId, onClose, on
           </div>
         )}
         {canEdit && (
+          <button type="button" onClick={() => { onEdit(req); onClose() }} className="w-full h-12 rounded-xl border-2 border-emerald-200 text-sm font-bold text-emerald-700 dark:border-emerald-900 dark:text-emerald-300">
+            Edit Request
+          </button>
+        )}
+        {canCancel && (
           <button type="button" onClick={() => { onDelete(req); onClose() }} className="w-full h-12 rounded-xl border-2 border-rose-200 text-sm font-bold text-rose-600 dark:border-rose-900">
             Cancel Request
           </button>
@@ -1312,30 +1575,34 @@ function ApprovalStep({ step, label, reviewer, status }) {
 
 // ─── Request form modal ──────────────────────────────────────────────────────
 
-function RequestPermissionFormModal({ form, setForm, replacementOptions, permissionTypes = [], isEdit, submitting, onClose, onSubmit }) {
+function RequestPermissionFormModal({ form, setForm, replacementOptions, permissionTypes = [], isEdit, canManageStatus, submitting, onClose, onSubmit }) {
   const totalDays = calcDays(form.date, form.dateEnd)
   const totalHours = calcHours(form.time, form.timeTo)
+  const singleTimeRequest = isSingleTimeRequest(form.type)
   const attachmentPreview = form.attachment ? URL.createObjectURL(form.attachment) : null
   const selectedType = permissionTypes.find((pt) => pt.name === form.type)
   const durationControl = durationControlOf(selectedType)
   const maxHours = maxHoursOf(selectedType)
+  const [showConfirm, setShowConfirm] = useState(false)
 
   const setType = (type) => {
     const next = newRequestForm(type)
     const selectedType = permissionTypes.find((pt) => pt.name === type)
     const control = durationControlOf(selectedType)
+    const singleTime = isSingleTimeRequest(type)
     setForm({
       ...next,
-      replacementEmployeeId: form.replacementEmployeeId,
+      replacementEmployeeId: '',
       reasonType: form.reasonType,
       reason: form.reason,
       note: form.note,
+      status: form.status,
       date: form.date,
       dateEnd: form.dateEnd,
       durationType: control === 'any' ? form.durationType : control,
       dayPart: form.dayPart,
       time: control === 'hours' ? (form.time || defaultTime()) : next.time,
-      timeTo: control === 'hours' ? (form.timeTo || defaultTime(60)) : next.timeTo,
+      timeTo: control === 'hours' && !singleTime ? (form.timeTo || defaultTime(60)) : '',
       attachment: form.attachment,
     })
   }
@@ -1344,17 +1611,26 @@ function RequestPermissionFormModal({ form, setForm, replacementOptions, permiss
     setForm((f) => ({ ...f, durationType, dateEnd: durationType === 'multiple_day' ? f.dateEnd : f.date, time: durationType === 'hours' ? (f.time || defaultTime()) : '', timeTo: durationType === 'hours' ? (f.timeTo || defaultTime(60)) : '', dayPart: durationType === 'single_day' ? (f.dayPart || 'Full Day') : 'Full Day' }))
   }
 
+  const confirmSubmit = (event) => {
+    event.preventDefault()
+    setShowConfirm(true)
+  }
+
+  const submitConfirmed = () => {
+    setShowConfirm(false)
+    onSubmit({ preventDefault: () => {} })
+  }
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-50 dark:bg-slate-950">
-      <form className="mx-auto flex min-h-full w-full max-w-3xl flex-col" onSubmit={onSubmit}>
-        <div className="sticky top-0 z-20 bg-white/95 px-5 pb-5 pt-6 shadow-sm backdrop-blur dark:bg-slate-950/95 sm:px-8">
-          <div className="grid grid-cols-[44px_1fr_44px] items-center">
-            <button type="button" onClick={onClose} className="grid h-11 w-11 place-items-center rounded-full text-emerald-700 transition hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950/40">
-              <ChevronRight size={26} className="rotate-180" />
+      <form className="mx-auto flex min-h-full w-full max-w-3xl flex-col" onSubmit={confirmSubmit}>
+        <div className="sticky top-0 z-20 bg-white/95 px-4 py-3 shadow-sm backdrop-blur dark:bg-slate-950/95 sm:px-8">
+          <div className="grid grid-cols-[36px_1fr_36px] items-center">
+            <button type="button" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-full text-emerald-700 transition hover:bg-emerald-50 dark:text-emerald-300 dark:hover:bg-emerald-950/40">
+              <ChevronRight size={22} className="rotate-180" />
             </button>
             <div className="text-center">
-              <h3 className="text-2xl font-black text-slate-950 dark:text-white">{isEdit ? 'Edit Request' : 'New Request'}</h3>
-              <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">Choose what you need and send it for approval.</p>
+              <h3 className="text-xl font-black text-slate-950 dark:text-white">{isEdit ? 'Edit Request' : 'New Request'}</h3>
             </div>
             <span />
           </div>
@@ -1370,6 +1646,7 @@ function RequestPermissionFormModal({ form, setForm, replacementOptions, permiss
               />
 
               {/* ── Covered By ───────────────────────────────────────────── */}
+              {false && (
               <div>
                 <FieldLabel text="Cover Person" optional />
 
@@ -1443,6 +1720,7 @@ function RequestPermissionFormModal({ form, setForm, replacementOptions, permiss
                   )}
                 </div>
               </div>
+              )}
 
               <div>
                 <FieldLabel text="Duration Type" required />
@@ -1451,12 +1729,11 @@ function RequestPermissionFormModal({ form, setForm, replacementOptions, permiss
                     { id: 'single_day', label: 'Single Day', icon: CalendarDays },
                     { id: 'multiple_day', label: 'Multiple Day', icon: CalendarDays },
                     { id: 'hours', label: 'Hours', icon: Clock },
-                  ].map((item) => {
+                  ].filter((item) => durationControl === 'any' || item.id === durationControl).map((item) => {
                     const DIcon = item.icon
                     const selected = form.durationType === item.id
-                    const locked = durationControl !== 'any' && item.id !== durationControl
                     return (
-                      <button key={item.id} type="button" disabled={locked} onClick={() => setDurationType(item.id)} className={clsx('flex min-h-16 items-center gap-3 rounded-xl border px-4 text-left transition duration-200 disabled:cursor-not-allowed disabled:opacity-40', selected ? 'border-emerald-500 bg-emerald-50 shadow-sm shadow-emerald-100 dark:border-emerald-600 dark:bg-emerald-950/30 dark:shadow-none' : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950')}>
+                      <button key={item.id} type="button" onClick={() => setDurationType(item.id)} className={clsx('flex min-h-16 items-center gap-3 rounded-xl border px-4 text-left transition duration-200', selected ? 'border-emerald-500 bg-emerald-50 shadow-sm shadow-emerald-100 dark:border-emerald-600 dark:bg-emerald-950/30 dark:shadow-none' : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950')}>
                         <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300"><DIcon size={19} /></span>
                         <span className="min-w-0 flex-1 text-sm font-bold text-slate-900 dark:text-white">{item.label}</span>
                         <span className={clsx('grid h-6 w-6 shrink-0 place-items-center rounded-full border-2', selected ? 'border-emerald-600' : 'border-slate-300 dark:border-slate-600')}>{selected && <span className="h-3 w-3 rounded-full bg-emerald-600" />}</span>
@@ -1464,11 +1741,6 @@ function RequestPermissionFormModal({ form, setForm, replacementOptions, permiss
                     )
                   })}
                 </div>
-                {durationControl !== 'any' && (
-                  <p className="mt-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                    Admin rule: {form.type} uses {durationControl.replace('_', ' ')}{durationControl === 'hours' && maxHours ? `, max ${maxHours} hour(s)` : ''}.
-                  </p>
-                )}
               </div>
 
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 dark:border-emerald-900/60 dark:bg-emerald-950/20">
@@ -1496,11 +1768,19 @@ function RequestPermissionFormModal({ form, setForm, replacementOptions, permiss
                 {form.durationType === 'hours' && (
                   <div className="space-y-4">
                     <FormField label="Date *"><input type="date" className={mobileDateCls} value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value, dateEnd: e.target.value }))} required /></FormField>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <FormField label="Start Time *"><input type="time" className={mobileDateCls} value={form.time || ''} onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))} required /></FormField>
-                      <FormField label="End Time *"><input type="time" className={mobileDateCls} value={form.timeTo || ''} onChange={(e) => setForm((f) => ({ ...f, timeTo: e.target.value }))} required /></FormField>
-                    </div>
-                    <ReadOnlyTotal label="Total Hours" value={totalHours} suffix="Hour(s)" invalid={form.time && form.timeTo && totalHours <= 0} />
+                    {singleTimeRequest ? (
+                      <FormField label={`${form.type === 'Late Check In' ? 'Approved Check In' : 'Approved Check Out'} Time *`}>
+                        <input type="time" className={mobileDateCls} value={form.time || ''} onChange={(e) => setForm((f) => ({ ...f, time: e.target.value, timeTo: '' }))} required />
+                      </FormField>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                          <FormField label="Start Time *"><input type="time" className={mobileDateCls} value={form.time || ''} onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))} required /></FormField>
+                          <FormField label="End Time *"><input type="time" className={mobileDateCls} value={form.timeTo || ''} onChange={(e) => setForm((f) => ({ ...f, timeTo: e.target.value }))} required /></FormField>
+                        </div>
+                        <ReadOnlyTotal label="Total Hours" value={totalHours} suffix="Hour(s)" invalid={form.time && form.timeTo && totalHours <= 0} />
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -1509,6 +1789,12 @@ function RequestPermissionFormModal({ form, setForm, replacementOptions, permiss
                 <textarea className="min-h-28 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white" placeholder="Write reason..." value={form.reason || ''} onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} maxLength={500} required />
                 <p className="mt-1 text-right text-xs font-medium text-slate-500">{(form.reason || '').length}/500</p>
               </FormField>
+
+              {isEdit && canManageStatus && (
+                <FormField label="Request Status *">
+                  <StatusChoice value={form.status || 'Pending'} onChange={(status) => setForm((f) => ({ ...f, status }))} />
+                </FormField>
+              )}
 
               {false && (
               <div>
@@ -1532,11 +1818,44 @@ function RequestPermissionFormModal({ form, setForm, replacementOptions, permiss
         </div>
 
         <div className="fixed inset-x-0 bottom-0 z-20 border-t border-slate-200 bg-white/95 px-4 py-4 shadow-[0_-12px_28px_rgba(15,23,42,0.08)] backdrop-blur dark:border-slate-800 dark:bg-slate-950/95">
-          <div className="mx-auto grid max-w-3xl grid-cols-[1fr_1.5fr] gap-3">
-            <button type="button" onClick={onClose} className="inline-flex h-14 items-center justify-center gap-2 rounded-xl border border-rose-300 bg-white text-sm font-black text-rose-600 transition hover:bg-rose-50 disabled:opacity-60 dark:border-rose-900 dark:bg-slate-950" disabled={submitting}><XCircle size={19} />Cancel</button>
-            <button type="submit" className="inline-flex h-14 items-center justify-center gap-2 rounded-xl bg-emerald-600 text-sm font-black text-white shadow-lg shadow-emerald-600/25 transition hover:bg-emerald-700 disabled:opacity-60" disabled={submitting}><Send size={19} />{submitting ? (isEdit ? 'Saving...' : 'Requesting...') : (isEdit ? 'Save Changes' : 'Request')}</button>
+          <div className="mx-auto max-w-3xl">
+            <button type="submit" className="inline-flex h-14 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 text-sm font-black text-white shadow-lg shadow-emerald-600/25 transition hover:bg-emerald-700 disabled:opacity-60" disabled={submitting}><Send size={19} />{submitting ? (isEdit ? 'Saving...' : 'Requesting...') : (isEdit ? 'Save Changes' : 'Request')}</button>
           </div>
         </div>
+
+        {showConfirm && (
+          <div className="fixed inset-0 z-40 flex items-end justify-center bg-slate-950/45 px-4 pb-6 backdrop-blur-sm sm:items-center sm:pb-0">
+            <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+              <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300">
+                <Send size={22} />
+              </div>
+              <h4 className="mt-4 text-center text-lg font-black text-slate-950 dark:text-white">
+                {isEdit ? 'Save request?' : 'Submit request?'}
+              </h4>
+              <p className="mt-2 text-center text-sm font-medium leading-6 text-slate-500 dark:text-slate-400">
+                {isEdit ? 'Your changes will be saved.' : `${form.type} will be sent for approval.`}
+              </p>
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowConfirm(false)}
+                  className="h-12 rounded-xl border border-slate-200 bg-white text-sm font-black text-slate-600 transition hover:bg-slate-50 disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+                  disabled={submitting}
+                >
+                  Back
+                </button>
+                <button
+                  type="button"
+                  onClick={submitConfirmed}
+                  className="h-12 rounded-xl bg-emerald-600 text-sm font-black text-white shadow-lg shadow-emerald-600/25 transition hover:bg-emerald-700 disabled:opacity-60"
+                  disabled={submitting}
+                >
+                  Confirm
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </form>
     </div>
   )
@@ -1553,6 +1872,43 @@ function PermissionTypePicker({ permissionTypes, value, onChange }) {
   return (
     <div>
       <FieldLabel text="Request Type" required />
+      <div className="hidden">
+        {permissionTypes.map((pt) => {
+          const meta = requestTypeMeta(pt.name)
+          const Icon = meta.icon || FileText
+          const checked = pt.name === value
+          const ptControl = durationControlOf(pt)
+          const ptMaxHours = maxHoursOf(pt)
+
+          return (
+            <button
+              key={pt.id ?? pt.name}
+              type="button"
+              onClick={() => onChange(pt.name)}
+              className={clsx(
+                'flex min-h-[112px] w-full items-start gap-3 rounded-xl border p-4 text-left transition focus:outline-none focus:ring-4 focus:ring-emerald-500/15',
+                checked
+                  ? 'border-emerald-500 bg-emerald-50 shadow-sm dark:border-emerald-500 dark:bg-emerald-950/30'
+                  : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:hover:border-slate-600 dark:hover:bg-slate-900',
+              )}
+            >
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg text-white shadow-sm" style={{ backgroundColor: pt.color || color }}>
+                <Icon size={18} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-black text-slate-900 dark:text-white">{pt.name}</span>
+                <span className="mt-1 block text-xs font-medium leading-5 text-slate-500 dark:text-slate-400">{pt.description || meta.desc}</span>
+                <span className="mt-2 block text-[11px] font-bold uppercase text-slate-400 dark:text-slate-500">
+                  {durationControlLabel(ptControl)}{ptControl === 'hours' && ptMaxHours ? `, max ${ptMaxHours}h` : ''}
+                </span>
+              </span>
+              <span className={clsx('grid h-6 w-6 shrink-0 place-items-center rounded-full border-2 transition', checked ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300 dark:border-slate-600')}>
+                {checked && <Check size={13} className="text-white" />}
+              </span>
+            </button>
+          )
+        })}
+      </div>
       {permissionTypes.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-200 py-4 text-center text-sm text-slate-400 dark:border-slate-700">
           No request types set up yet. Go to{' '}
@@ -1588,16 +1944,6 @@ function PermissionTypePicker({ permissionTypes, value, onChange }) {
             className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500"
           />
         </div>
-      )}
-      {selected && control !== 'any' && (
-        <p className="mt-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-          Admin rule: {durationControlLabel(control)}{control === 'hours' && maxHours ? `, max ${maxHours} hour(s)` : ''}.
-        </p>
-      )}
-      {selected && (
-        <p className="mt-1 text-xs font-semibold text-amber-600 dark:text-amber-400">
-          Approval Required
-        </p>
       )}
     </div>
   )
@@ -1774,7 +2120,7 @@ function RequestFormModal({ form, setForm, isEdit, submitting, onClose, onSubmit
 
 // ─── Shared sub-components ───────────────────────────────────────────────────
 
-function ActionBtn({ label, onClick, danger, children }) {
+function ActionBtn({ label, onClick, danger, success, children }) {
   return (
     <button
       type="button"
@@ -1782,9 +2128,9 @@ function ActionBtn({ label, onClick, danger, children }) {
       title={label}
       className={clsx(
         'inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition',
-        danger
-          ? 'border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-900/60 dark:hover:bg-rose-950/30'
-          : 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800',
+        danger && 'border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-900/60 dark:hover:bg-rose-950/30',
+        success && 'border-emerald-200 text-emerald-700 hover:bg-emerald-50 dark:border-emerald-900/60 dark:text-emerald-300 dark:hover:bg-emerald-950/30',
+        !danger && !success && 'border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800',
       )}
     >
       {children}

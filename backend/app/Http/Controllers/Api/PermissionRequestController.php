@@ -22,6 +22,7 @@ class PermissionRequestController extends Controller
         'Early Check Out',
         'Day Off',
         'Missing Check In',
+        'Missing Check Out',
         'Personal Request',
     ];
 
@@ -100,16 +101,18 @@ class PermissionRequestController extends Controller
             ],
         ]);
 
-        $telegram->send($this->buildPermissionRequestMessage($record), $this->eventKeyForEmployee($employee));
+        $telegramResults = $telegram->sendWithResults($this->buildPermissionRequestMessage($record), $this->eventKeyForEmployee($employee));
+        $this->storeTelegramMessageReference($record, $telegramResults);
         $this->sendPrivateAdminTelegram($telegram, $this->buildPermissionRequestMessage($record));
         $telegram->sendToEmployee($employee, $this->buildEmployeeRequestSubmittedMessage($record), 'permission_request_submitted_private');
 
         return $record;
     }
 
-    public function update(Request $request, PermissionRequest $permissionRequest)
+    public function update(Request $request, PermissionRequest $permissionRequest, AttendanceService $attendance, TelegramNotificationService $telegram)
     {
-        $this->assertOwnPending($request, $permissionRequest);
+        $this->assertCanUpdateRequest($request, $permissionRequest);
+        $shouldRefreshLateApproval = $permissionRequest->type === 'Late Check In';
 
         $data = $this->validatedPayload($request, true);
         $data = $this->normalizeDurationFields(array_merge([
@@ -119,6 +122,23 @@ class PermissionRequestController extends Controller
             'duration_type' => $permissionRequest->duration_type ?: 'single_day',
             'replacement_employee_id' => $permissionRequest->replacement_employee_id,
         ], $data));
+        $shouldRefreshLateApproval = $shouldRefreshLateApproval || ($data['type'] ?? null) === 'Late Check In';
+
+        if (array_key_exists('status', $data)) {
+            if (! $request->user()->hasPermission('requests.approve')) {
+                abort(403, 'You do not have permission to change request status.');
+            }
+
+            if ($data['status'] === 'pending') {
+                $data['admin_notes'] = $data['admin_notes'] ?? 'Submitted and waiting for approval.';
+                $data['reviewed_by'] = null;
+                $data['reviewed_at'] = null;
+            } else {
+                $data['admin_notes'] = $data['admin_notes'] ?? ($data['status'] === 'approved' ? 'Approved.' : 'Rejected.');
+                $data['reviewed_by'] = $request->user()->id;
+                $data['reviewed_at'] = now();
+            }
+        }
 
         $this->assertNoDuplicateActiveRequest($permissionRequest->employee_id, $data, $permissionRequest->id);
 
@@ -133,7 +153,19 @@ class PermissionRequestController extends Controller
 
         $permissionRequest->update($data);
 
-        return $permissionRequest->fresh(['employee', 'replacementEmployee', 'reviewer']);
+        $updated = $permissionRequest->fresh(['employee', 'replacementEmployee', 'reviewer']);
+
+        if ($shouldRefreshLateApproval) {
+            $attendance->applyLateCheckInApproval($updated);
+        }
+
+        $this->replyToPermissionRequestMessage(
+            $telegram,
+            $updated,
+            $this->buildUpdatedReplyMessage($updated, $request->user()->name ?? 'Admin')
+        );
+
+        return $updated;
     }
 
     public function updateStatus(Request $request, PermissionRequest $permissionRequest, TelegramNotificationService $telegram, AttendanceService $attendance)
@@ -178,9 +210,16 @@ class PermissionRequestController extends Controller
         return $updated;
     }
 
-    public function destroy(Request $request, PermissionRequest $permissionRequest)
+    public function destroy(Request $request, PermissionRequest $permissionRequest, TelegramNotificationService $telegram)
     {
         $this->assertOwnPending($request, $permissionRequest);
+        $permissionRequest->loadMissing(['employee', 'replacementEmployee', 'reviewer']);
+
+        $this->replyToPermissionRequestMessage(
+            $telegram,
+            $permissionRequest,
+            $this->buildDeletedReplyMessage($permissionRequest, $request->user()->name ?? 'User')
+        );
 
         $permissionRequest->delete();
 
@@ -220,6 +259,8 @@ class PermissionRequestController extends Controller
             'duration_type' => ['nullable', Rule::in(['single_day', 'multiple_day', 'hours'])],
             'reason' => [$required, 'string', 'max:5000'],
             'note' => ['nullable', 'string', 'max:5000'],
+            'status' => ['sometimes', Rule::in(['pending', 'approved', 'rejected'])],
+            'admin_notes' => ['nullable', 'string', 'max:5000'],
             'attachment' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp,pdf', 'max:5120'],
             'is_emergency' => ['nullable', 'boolean'],
             'gps_location' => ['nullable', 'string', 'max:500'],
@@ -248,19 +289,32 @@ class PermissionRequestController extends Controller
         }
 
         if ($data['duration_type'] === 'hours') {
-            if (empty($data['start_time']) || empty($data['end_time'])) {
+            if ($this->usesSingleRequestTime($data['type'] ?? null)) {
+                $time = $data['request_time'] ?? $data['start_time'] ?? null;
+                if (empty($time)) {
+                    throw ValidationException::withMessages(['request_time' => 'Request time is required.']);
+                }
+
+                $data['request_date_end'] = $data['request_date'];
+                $data['request_time'] = $time;
+                $data['start_time'] = $time;
+                $data['end_time'] = null;
+                $data['total_days'] = 1;
+                $data['day_part'] = null;
+                $data['total_hours'] = null;
+            } elseif (empty($data['start_time']) || empty($data['end_time'])) {
                 throw ValidationException::withMessages(['start_time' => 'Start time and end time are required for hours requests.']);
-            }
+            } else {
+                if ($data['end_time'] <= $data['start_time']) {
+                    throw ValidationException::withMessages(['end_time' => 'End time must be after start time.']);
+                }
 
-            if ($data['end_time'] <= $data['start_time']) {
-                throw ValidationException::withMessages(['end_time' => 'End time must be after start time.']);
+                $data['request_date_end'] = $data['request_date'];
+                $data['request_time'] = $data['start_time'];
+                $data['total_days'] = 1;
+                $data['day_part'] = null;
+                $data['total_hours'] = $data['total_hours'] ?? round((strtotime($data['end_time']) - strtotime($data['start_time'])) / 3600, 2);
             }
-
-            $data['request_date_end'] = $data['request_date'];
-            $data['request_time'] = $data['start_time'];
-            $data['total_days'] = 1;
-            $data['day_part'] = null;
-            $data['total_hours'] = $data['total_hours'] ?? round((strtotime($data['end_time']) - strtotime($data['start_time'])) / 3600, 2);
         } elseif ($data['duration_type'] === 'multiple_day') {
             $data['start_time'] = null;
             $data['end_time'] = null;
@@ -305,6 +359,11 @@ class PermissionRequestController extends Controller
         }
     }
 
+    private function usesSingleRequestTime(?string $type): bool
+    {
+        return in_array($type, ['Late Check In', 'Early Check Out'], true);
+    }
+
     private function durationControlLabel(string $control): string
     {
         return match ($control) {
@@ -340,6 +399,37 @@ class PermissionRequestController extends Controller
             ->whereHas('employee', fn ($query) => $query->whereNotNull('telegram_chat_id')->where('telegram_chat_id', '!=', ''))
             ->get()
             ->each(fn (User $user) => $telegram->sendToEmployee($user->employee, $message, 'permission_request_admin_private'));
+    }
+
+    private function storeTelegramMessageReference(PermissionRequest $record, array $results): void
+    {
+        $sent = collect($results)->first(fn ($result) => ($result['ok'] ?? false) && ! empty($result['message_id']));
+
+        if (! $sent) {
+            return;
+        }
+
+        $record->forceFill([
+            'telegram_chat_id' => (string) ($sent['chat_id'] ?? ''),
+            'telegram_message_thread_id' => $sent['message_thread_id'] ?? null,
+            'telegram_message_id' => $sent['message_id'],
+        ])->save();
+    }
+
+    private function replyToPermissionRequestMessage(TelegramNotificationService $telegram, PermissionRequest $record, string $message): void
+    {
+        if ($record->telegram_chat_id && $record->telegram_message_id) {
+            $telegram->sendReply(
+                $record->telegram_chat_id,
+                $message,
+                $record->telegram_message_thread_id,
+                $record->telegram_message_id
+            );
+
+            return;
+        }
+
+        $telegram->send($message, $this->eventKeyForEmployee($record->employee));
     }
 
     private function eventKeyForEmployee($employee): string
@@ -383,6 +473,30 @@ class PermissionRequestController extends Controller
             ."📝 <b>Note:</b> {$record->admin_notes}";
     }
 
+    private function buildUpdatedReplyMessage(PermissionRequest $record, string $actorName): string
+    {
+        $status = ucfirst($record->status);
+
+        return "<b>PERMISSION REQUEST UPDATED</b>\n\n"
+            ."<b>Request:</b> {$record->request_code}\n"
+            ."<b>Employee:</b> {$record->employee->first_name} {$record->employee->last_name}\n"
+            ."<b>Type:</b> {$record->type}\n"
+            ."<b>Duration:</b> {$this->formatDuration($record)}\n"
+            ."<b>Status:</b> {$status}\n"
+            ."<b>Updated by:</b> {$actorName}\n"
+            ."<b>HR Reason:</b> {$record->admin_notes}";
+    }
+
+    private function buildDeletedReplyMessage(PermissionRequest $record, string $actorName): string
+    {
+        return "<b>PERMISSION REQUEST CANCELLED</b>\n\n"
+            ."<b>Request:</b> {$record->request_code}\n"
+            ."<b>Employee:</b> {$record->employee->first_name} {$record->employee->last_name}\n"
+            ."<b>Type:</b> {$record->type}\n"
+            ."<b>Duration:</b> {$this->formatDuration($record)}\n"
+            ."<b>Cancelled by:</b> {$actorName}";
+    }
+
     private function formatDuration(PermissionRequest $record): string
     {
         $start = $record->request_date->format('d M Y');
@@ -392,6 +506,9 @@ class PermissionRequestController extends Controller
         if ($record->duration_type === 'hours') {
             $from = $record->start_time ?: $record->request_time;
             $to = $record->end_time;
+            if ($this->usesSingleRequestTime($record->type)) {
+                return trim("{$start} {$from}");
+            }
             $hours = $record->total_hours ? " ({$record->total_hours} hour(s))" : '';
             return trim("{$start} {$from} - {$to}{$hours}");
         }
@@ -416,6 +533,15 @@ class PermissionRequestController extends Controller
         if (! $canManageAll && $permissionRequest->employee_id !== $request->user()->employee_id) {
             abort(403, 'You can only modify your own permission requests.');
         }
+    }
+
+    private function assertCanUpdateRequest(Request $request, PermissionRequest $permissionRequest): void
+    {
+        if ($request->user()->hasPermission('requests.view_all')) {
+            return;
+        }
+
+        $this->assertOwnPending($request, $permissionRequest);
     }
 
     private function assertNoDuplicateActiveRequest(int $employeeId, array $data, ?int $ignoreId = null): void

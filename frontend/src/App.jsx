@@ -46,6 +46,7 @@ import AttendanceHistoryPage from './pages/AttendanceHistoryPage'
 import AdminAttendanceReportsPage from './pages/AdminAttendanceReportsPage'
 import MyAttendanceReportsPage from './pages/MyAttendanceReportsPage'
 import EmployeeMonthlyReportPage from './pages/EmployeeMonthlyReportPage'
+import EmployeeDashboardPage from './pages/EmployeeDashboardPage'
 import PayrollPage from './pages/PayrollPage'
 import LoginPage from './pages/LoginPage'
 import MobileNav from './components/layout/MobileNav'
@@ -67,16 +68,16 @@ const sidebarMainItems = [
 ]
 
 const reportSubItems = [
-  { label: 'Daily Reports', target: 'Reports', activeTargets: ['Reports', 'Daily Reports'], permissions: ['reports.create', 'reports.view_own', 'reports.view_all', 'reports.export'] },
+  { label: 'Employee Dashboard', target: 'Employee Dashboard', activeTargets: ['Employee Dashboard', 'Attendance Dashboard'], permissions: ['employee_report.view_all', 'reports.attendance.view_all', 'attendance.view_all'] },
   { label: 'Employee Monthly Report', target: 'Employee Monthly Report', activeTargets: ['Employee Monthly Report', 'Monthly Report'], permissions: ['employee_report.view_all', 'employee_report.view_own'] },
 ]
 
-const REPORTS_TARGETS = new Set(['Reports', 'Daily Reports', 'Employee Monthly Report', 'Monthly Report'])
+const REPORTS_TARGETS = new Set(['Employee Dashboard', 'Attendance Dashboard', 'Employee Monthly Report', 'Monthly Report'])
 
 const attendanceSubItems = [
-  { label: 'All Attendance', target: 'Attendance History', activeTargets: ['Attendance History'], permissions: ['attendance.view_all'] },
-  { label: 'Attendance Reports', target: 'Admin Attendance Reports', activeTargets: ['Admin Attendance Reports'], permissions: ['reports.attendance.view_all', 'attendance.view_all'] },
-  { label: 'My Attendance Reports', target: 'My Attendance Reports', activeTargets: ['My Attendance Reports'], permissions: ['reports.attendance.view_own', 'attendance.view_own'] },
+  { label: 'Attendance Records', target: 'Attendance History', activeTargets: ['Attendance History'], permissions: ['attendance.view_all'] },
+  { label: 'Team Attendance Report', target: 'Admin Attendance Reports', activeTargets: ['Admin Attendance Reports'], permissions: ['reports.attendance.view_all', 'attendance.view_all'] },
+  { label: 'My Attendance Report', target: 'My Attendance Reports', activeTargets: ['My Attendance Reports'], permissions: ['reports.attendance.view_own', 'attendance.view_own'] },
 ]
 
 const ATTENDANCE_TARGETS = new Set(['Check In / Out', 'Attendance History', 'Admin Attendance Reports', 'My Attendance Reports'])
@@ -96,6 +97,7 @@ const rolePermissionSubItems = [
 ]
 
 const ROLE_PERMISSION_TARGETS = new Set(['Roles & Permissions', 'Users & Roles', 'Roles', 'Permissions', 'IP Access'])
+const ACTIVE_PAGE_KEY = 'attendance_active_page'
 
 const sidebarManageItems = [
   { label: 'Employees', target: 'Employees', icon: Users, permissions: ['employees.view'] },
@@ -117,7 +119,7 @@ function GoogleMapsApp({ apiKey, initialBranding }) {
 }
 
 function AppShell({ isLoaded, initialBranding = {} }) {
-  const [active, setActive] = useState('Dashboard')
+  const [active, setActive] = useState(() => localStorage.getItem(ACTIVE_PAGE_KEY) || 'Dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [attendanceOpen, setAttendanceOpen] = useState(false)
@@ -201,6 +203,12 @@ function AppShell({ isLoaded, initialBranding = {} }) {
   }, [dark])
 
   useEffect(() => {
+    if (user) {
+      localStorage.setItem(ACTIVE_PAGE_KEY, active)
+    }
+  }, [active, user])
+
+  useEffect(() => {
     applyDocumentBranding(data.appSettings || {})
   }, [data.appSettings?.company_icon_url, data.appSettings?.company_logo_url, data.appSettings?.company_name, data.appSettings?.site_title])
 
@@ -224,6 +232,7 @@ function AppShell({ isLoaded, initialBranding = {} }) {
 
   const handleLogout = async () => {
     await authService.logout()
+    localStorage.removeItem(ACTIVE_PAGE_KEY)
     setUser(null)
     setActive('Dashboard')
   }
@@ -284,6 +293,8 @@ function AppShell({ isLoaded, initialBranding = {} }) {
     'My Attendance Reports': <MyAttendanceReportsPage {...props} />,
     'Employee Monthly Report': <EmployeeMonthlyReportPage {...props} />,
     'Monthly Report': <EmployeeMonthlyReportPage {...props} />,
+    'Employee Dashboard': <EmployeeDashboardPage {...props} />,
+    'Attendance Dashboard': <EmployeeDashboardPage {...props} />,
     'Payroll Management': <PayrollPage {...props} />,
     'Permission Types': <PermissionTypesPage />,
     Employees: <EmployeesPage {...props} />,
@@ -480,35 +491,35 @@ function AppShell({ isLoaded, initialBranding = {} }) {
         {sidebarOpen && <div className="fixed inset-0 z-30 bg-slate-950/40 lg:hidden" onClick={() => setSidebarOpen(false)} />}
 
         <main className={clsx('transition-all duration-300', sidebarCollapsed ? 'lg:pl-0' : 'lg:pl-72')}>
-          <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-4 py-4 shadow-sm shadow-slate-200/30 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90 sm:px-6">
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex min-w-0 items-center gap-4">
-                <button className="rounded-lg p-2 text-slate-800 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-900 lg:hidden" onClick={() => setSidebarOpen(true)}>
-                  <Menu size={22} />
+          <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 px-3 py-2.5 shadow-sm shadow-slate-200/30 backdrop-blur dark:border-slate-800 dark:bg-slate-950/90 sm:px-5">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <button className="rounded-lg p-1.5 text-slate-800 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-900 lg:hidden" onClick={() => setSidebarOpen(true)}>
+                  <Menu size={19} />
                 </button>
-                <button className="hidden rounded-lg p-2 text-slate-800 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-900 lg:block" onClick={() => setSidebarCollapsed((v) => !v)} title="Toggle sidebar">
-                  <Menu size={22} />
+                <button className="hidden rounded-lg p-1.5 text-slate-800 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-900 lg:block" onClick={() => setSidebarCollapsed((v) => !v)} title="Toggle sidebar">
+                  <Menu size={19} />
                 </button>
                 <div className="min-w-0">
-                  <h2 className="truncate text-xl font-bold text-slate-950 dark:text-white">{pageTitle}</h2>
+                  <h2 className="truncate text-lg font-bold text-slate-950 dark:text-white">{pageTitle}</h2>
                 </div>
               </div>
 
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2.5">
                 {canSeeNotifications && (
-                  <button className="relative grid h-12 w-12 place-items-center rounded-full border border-slate-200 bg-white text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200" onClick={() => setActive('Notifications')}>
-                    <Bell size={20} />
-                    {unreadCount > 0 && <span className="absolute -right-0.5 -top-0.5 grid h-5 min-w-5 place-items-center rounded-full bg-red-500 px-1 text-[11px] font-bold text-white">{unreadCount}</span>}
+                  <button className="relative grid h-10 w-10 place-items-center rounded-full border border-slate-200 bg-white text-slate-800 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200" onClick={() => setActive('Notifications')}>
+                    <Bell size={17} />
+                    {unreadCount > 0 && <span className="absolute -right-0.5 -top-0.5 grid h-4 min-w-4 place-items-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">{unreadCount}</span>}
                   </button>
                 )}
                 <button
-                  className="grid h-12 w-12 place-items-center rounded-full border border-slate-200 bg-white text-slate-800 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                  className="grid h-10 w-10 place-items-center rounded-full border border-slate-200 bg-white text-slate-800 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
                   onClick={toggleTheme}
                   type="button"
                   title={dark ? 'Switch to light mode' : 'Switch to dark mode'}
                   aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
                 >
-                  {dark ? <Sun size={20} /> : <Moon size={20} />}
+                  {dark ? <Sun size={17} /> : <Moon size={17} />}
                 </button>
                 <div className="relative hidden sm:block">
                   <button

@@ -53,20 +53,21 @@ class AttendanceReportService
         $request = PermissionRequest::query()
             ->where('employee_id', $row->employee_id)
             ->where('status', 'approved')
-            ->whereIn('type', ['Early Check Out', 'Day Off', 'Missing Check In', 'Missing Attendance', 'Personal Request'])
+            ->whereIn('type', ['Early Check Out', 'Day Off', 'Missing Check In', 'Missing Check Out', 'Missing Attendance', 'Personal Request'])
             ->whereDate('request_date', '<=', $date)
             ->where(function ($dateQuery) use ($date) {
                 $dateQuery
                     ->whereDate('request_date_end', '>=', $date)
                     ->orWhereNull('request_date_end');
             })
-            ->orderByRaw("FIELD(type, 'Early Check Out', 'Day Off', 'Missing Check In', 'Missing Attendance', 'Personal Request')")
+            ->orderByRaw("FIELD(type, 'Early Check Out', 'Day Off', 'Missing Check In', 'Missing Check Out', 'Missing Attendance', 'Personal Request')")
             ->first();
 
         return match ($request?->type) {
             'Early Check Out' => 'early_checkout',
             'Day Off' => 'day_off',
             'Missing Check In' => 'missing_checkin',
+            'Missing Check Out' => 'missing_checkout',
             'Missing Attendance' => 'missing_checkin',
             'Personal Request' => 'personal_request',
             default => null,

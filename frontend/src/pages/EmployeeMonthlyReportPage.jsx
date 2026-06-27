@@ -11,19 +11,32 @@ import {
   FileSpreadsheet,
   FileText,
   Filter,
-  Home,
+  LogOut,
   Printer,
   RotateCcw,
   Search,
+  Umbrella,
   UserRound,
   UserX,
   XCircle,
 } from 'lucide-react'
 import clsx from 'clsx'
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
 import { employeeMonthlyReportService } from '../services/api'
 import { FloatingSpinner } from '../components/shared/UI'
 import { inputCls } from '../components/attendance/reports/attendanceReportShared'
-import { canAccess } from '../utils/format'
+import { canAccess, formatTime } from '../utils/format'
 
 const STATUS_META = {
   present: {
@@ -107,14 +120,14 @@ const STATUS_META = {
 }
 
 const CARDS_CONFIG = [
-  { key: 'present', label: 'Present Days', icon: CheckCircle2, tone: 'emerald' },
-  { key: 'late', label: 'Late Check In', icon: Clock, tone: 'orange' },
-  { key: 'absent', label: 'Absent Days', icon: UserX, tone: 'rose' },
-  { key: 'early_checkout', label: 'Early Check Out', icon: XCircle, tone: 'yellow' },
+  { key: 'working_days', label: 'Working Days', icon: Calendar, tone: 'blue', pct: false },
+  { key: 'present', label: 'Present', icon: CheckCircle2, tone: 'emerald' },
+  { key: 'late', label: 'Late', icon: Clock, tone: 'orange' },
+  { key: 'absent', label: 'Absent', icon: UserX, tone: 'rose' },
+  { key: 'personal_request', label: 'Leave', icon: XCircle, tone: 'violet' },
+  { key: 'day_off', label: 'Day Off', icon: Umbrella, tone: 'violet' },
   { key: 'missing_checkin', label: 'Missing Check In', icon: AlertCircle, tone: 'violet' },
-  { key: 'missing_checkout', label: 'Missing Check Out', icon: AlertCircle, tone: 'fuchsia' },
-  { key: 'day_off', label: 'Day Off', icon: Calendar, tone: 'sky' },
-  { key: 'personal_request', label: 'Personal Request', icon: XCircle, tone: 'blue' },
+  { key: 'missing_checkout', label: 'Missing Check Out', icon: LogOut, tone: 'rose' },
 ]
 
 const TONE_ICON = {
@@ -168,7 +181,7 @@ const LEGEND_ITEMS = [
   { dot: 'bg-cyan-500', label: 'Holiday' },
 ]
 
-const TABLE_COLS = ['Date', 'Day', 'Check In', 'Check Out', 'Working Hours', 'Status', 'Note']
+const TABLE_COLS = ['Date', 'Schedule', 'Check In', 'Check Out', 'Work Hours', 'Late', 'Deduction', 'Overtime', 'Status']
 const MOBILE_TABLE_COLS = ['Date', 'Day', 'In', 'Out', 'Hours', 'Status']
 const MOBILE_PAGE_SIZE = 10
 
@@ -226,9 +239,18 @@ function fmtWork(minutes) {
   return `${h}h ${String(m).padStart(2, '0')}m`
 }
 
-function dayNote(day) {
-  if (day.notes) return day.notes
-  return '–'
+function displayReportTime(day, key) {
+  if (day?.[key]) return day[key]
+  const timestamp = day?.[`${key}_at`]
+  if (timestamp) return formatTime(timestamp)
+  return null
+}
+
+function fmtSummaryMinutes(minutes) {
+  const value = Math.max(0, Number(minutes) || 0)
+  const h = Math.floor(value / 60)
+  const m = Math.round(value % 60)
+  return `${h}h ${String(m).padStart(2, '0')}m`
 }
 
 function downloadBlob(blob, filename) {
@@ -242,16 +264,21 @@ function downloadBlob(blob, filename) {
 
 function buildClientCsv(data) {
   const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`
-  const header = ['Date', 'Day', 'Check In', 'Check Out', 'Working Hours', 'Status', 'Note'].join(',')
+  const header = [
+    'Date', 'Schedule', 'Check In', 'Check Out', 'Work Hours', 'Late (min)',
+    'Deduction', 'Overtime', 'Status',
+  ].join(',')
   const rows = (data.days || []).map((d) =>
     [
       esc(d.date),
-      esc(d.day),
-      esc(d.check_in || '–'),
-      esc(d.check_out || '–'),
+      esc(d.schedule || '–'),
+      esc(displayReportTime(d, 'check_in') || '–'),
+      esc(displayReportTime(d, 'check_out') || '–'),
       esc(fmtWork(d.work_minutes)),
+      esc(d.late_minutes || 0),
+      esc(Number(d.deduction_amount || 0).toFixed(2)),
+      esc(fmtWork(d.overtime_minutes || 0)),
       esc(STATUS_META[d.status]?.label || d.status),
-      esc(dayNote(d)),
     ].join(','),
   )
   return [header, ...rows].join('\n')
@@ -308,6 +335,199 @@ function SummaryCard({ label, value, icon: Icon, tone = 'emerald', trend = 'This
   )
 }
 
+const MONTHLY_SUMMARY_ROWS = [
+  { key: 'expected_minutes', label: 'Total Working Hours (Expected)', tone: 'text-slate-700 dark:text-slate-200' },
+  { key: 'worked_minutes', label: 'Total Worked Hours', tone: 'text-slate-700 dark:text-slate-200' },
+  { key: 'overtime_minutes', label: 'Overtime', tone: 'text-emerald-600 dark:text-emerald-400' },
+  { key: 'late_minutes', label: 'Late Minutes', tone: 'text-orange-500' },
+  { key: 'missing_minutes', label: 'Missing Hours', tone: 'text-rose-500' },
+  { key: 'average_minutes', label: 'Average Daily Work Hours', tone: 'text-slate-700 dark:text-slate-200' },
+  { key: 'longest_minutes', label: 'Longest Work Day', tone: 'text-slate-700 dark:text-slate-200' },
+  { key: 'shortest_minutes', label: 'Shortest Work Day', tone: 'text-slate-700 dark:text-slate-200' },
+]
+
+const REQUEST_TONES = [
+  'bg-blue-100 text-blue-600 dark:bg-blue-950/50 dark:text-blue-400',
+  'bg-violet-100 text-violet-600 dark:bg-violet-950/50 dark:text-violet-400',
+  'bg-orange-100 text-orange-600 dark:bg-orange-950/50 dark:text-orange-400',
+  'bg-amber-100 text-amber-600 dark:bg-amber-950/50 dark:text-amber-400',
+  'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400',
+]
+
+const CHART_STATUS_COLORS = {
+  present: '#10b981',
+  late: '#f97316',
+  absent: '#f43f5e',
+  personal_request: '#3b82f6',
+  day_off: '#0ea5e9',
+  missing_checkin: '#8b5cf6',
+  missing_checkout: '#d946ef',
+  early_checkout: '#eab308',
+}
+
+function EmployeeReportCharts({ days = [], summary = {} }) {
+  const dailyHours = days.map((day) => ({
+    day: new Date(`${day.date}T12:00:00`).getDate(),
+    worked: Number(((Number(day.work_minutes) || 0) / 60).toFixed(2)),
+    expected: Number(((Number(day.scheduled_minutes) || 0) / 60).toFixed(2)),
+  }))
+  const statusData = Object.entries(CHART_STATUS_COLORS)
+    .map(([key, color]) => ({
+      key,
+      name: STATUS_META[key]?.label || key,
+      value: Number(summary[key] || 0),
+      color,
+    }))
+    .filter((item) => item.value > 0)
+  const attended = Number(summary.present || 0) + Number(summary.late || 0)
+  const workingDays = Number(summary.working_days || 0)
+  const attendanceRate = workingDays ? Math.round((attended / workingDays) * 100) : 0
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-[1.65fr_1fr] print:hidden">
+      <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="mb-4">
+          <h2 className="text-sm font-bold text-slate-900 dark:text-white">Daily Work Hours</h2>
+          <p className="mt-1 text-xs text-slate-500">Worked hours compared with scheduled hours</p>
+        </div>
+        <div className="h-64 w-full">
+          <ResponsiveContainer width="100%" height="100%" debounce={50}>
+            <BarChart data={dailyHours} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+              <XAxis dataKey="day" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+              <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} unit="h" />
+              <Tooltip
+                formatter={(value, name) => [`${value}h`, name === 'worked' ? 'Worked' : 'Expected']}
+                labelFormatter={(label) => `Day ${label}`}
+                contentStyle={{ borderRadius: 12, borderColor: '#e2e8f0', fontSize: 12 }}
+              />
+              <Bar dataKey="expected" fill="#dbeafe" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="worked" fill="#10b981" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <div className="mt-2 flex justify-center gap-5 text-xs text-slate-500">
+          <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-blue-100" />Expected</span>
+          <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" />Worked</span>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <h2 className="text-sm font-bold text-slate-900 dark:text-white">Attendance Overview</h2>
+        <p className="mt-1 text-xs text-slate-500">Status breakdown for this employee</p>
+        <div className="relative mx-auto mt-2 h-52 max-w-xs">
+          {statusData.length ? (
+            <>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={statusData} dataKey="value" nameKey="name" innerRadius={62} outerRadius={88} paddingAngle={2}>
+                    {statusData.map((item) => <Cell key={item.key} fill={item.color} />)}
+                  </Pie>
+                  <Tooltip contentStyle={{ borderRadius: 12, borderColor: '#e2e8f0', fontSize: 12 }} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
+                <div>
+                  <p className="text-2xl font-bold text-slate-900 dark:text-white">{attendanceRate}%</p>
+                  <p className="text-[10px] font-medium text-slate-500">Attendance</p>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="grid h-full place-items-center text-xs text-slate-400">No attendance data</div>
+          )}
+        </div>
+        <div className="grid grid-cols-2 gap-x-3 gap-y-2">
+          {statusData.map((item) => (
+            <div key={item.key} className="flex min-w-0 items-center gap-2 text-xs">
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: item.color }} />
+              <span className="min-w-0 flex-1 truncate text-slate-500">{item.name}</span>
+              <span className="font-bold text-slate-800 dark:text-slate-100">{item.value}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function MonthlyDetailSummary({ monthlySummary = {}, requestSummary = {}, lateAnalysis = {} }) {
+  const requestRows = Object.entries(requestSummary)
+  const totalRequests = requestRows.reduce((total, [, count]) => total + Number(count || 0), 0)
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-[1fr_1fr_0.72fr] print:hidden">
+      <section className="relative overflow-hidden rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <Calendar size={108} className="pointer-events-none absolute bottom-10 right-7 text-slate-100 dark:text-slate-800/60" />
+        <h2 className="mb-3 text-sm font-bold text-slate-900 dark:text-white">Monthly Summary</h2>
+        <div className="relative divide-y divide-slate-100 dark:divide-slate-800">
+          {MONTHLY_SUMMARY_ROWS.map((row) => (
+            <div key={row.key} className="flex items-center justify-between gap-4 py-2 text-xs">
+              <span className="font-medium text-slate-600 dark:text-slate-400">{row.label}</span>
+              <span className={clsx('font-bold tabular-nums', row.tone)}>
+                {fmtSummaryMinutes(monthlySummary[row.key])}
+              </span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <h2 className="mb-3 text-sm font-bold text-slate-900 dark:text-white">Leave &amp; Requests Summary</h2>
+        {requestRows.length ? (
+          <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            {requestRows.map(([type, count], index) => (
+              <div key={type} className="flex items-center gap-3 py-2">
+                <span className={clsx('grid h-7 w-7 shrink-0 place-items-center rounded-full', REQUEST_TONES[index % REQUEST_TONES.length])}>
+                  <FileText size={13} />
+                </span>
+                <span className="min-w-0 flex-1 truncate text-xs font-medium text-slate-600 dark:text-slate-300">{type}</span>
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                  {count} Request{Number(count) === 1 ? '' : 's'}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid min-h-44 place-items-center rounded-xl border border-dashed border-slate-200 text-center dark:border-slate-700">
+            <div>
+              <FileText size={28} className="mx-auto mb-2 text-slate-300" />
+              <p className="text-xs font-medium text-slate-400">No approved requests this month</p>
+            </div>
+          </div>
+        )}
+        <div className="mt-3 flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-xs dark:border-slate-700 dark:bg-slate-800/60">
+          <span className="font-bold text-slate-700 dark:text-slate-200">Total Requests</span>
+          <span className="font-bold text-slate-900 dark:text-white">{totalRequests}</span>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white">
+          <span className="grid h-7 w-7 place-items-center rounded-full bg-rose-100 text-rose-500 dark:bg-rose-950/50">
+            <Clock size={14} />
+          </span>
+          Late Analysis
+        </h2>
+        <div className="divide-y divide-slate-100 dark:divide-slate-800">
+          {[
+            ['Total Late Days', lateAnalysis.days ?? 0, 'text-slate-800 dark:text-slate-100'],
+            ['Total Late Minutes', `${lateAnalysis.total_minutes ?? 0} mins`, 'text-orange-500'],
+            ['Average Late', `${lateAnalysis.average_minutes ?? 0} mins`, 'text-slate-800 dark:text-slate-100'],
+            ['Longest Late', `${lateAnalysis.longest_minutes ?? 0} mins`, 'text-slate-800 dark:text-slate-100'],
+            ['Late Deduction', `$${Number(lateAnalysis.deduction_amount || 0).toFixed(2)}`, 'text-rose-500'],
+          ].map(([label, value, tone]) => (
+            <div key={label} className="flex items-center justify-between gap-4 py-2.5 text-xs">
+              <span className="font-medium text-slate-600 dark:text-slate-400">{label}</span>
+              <span className={clsx('whitespace-nowrap font-bold tabular-nums', tone)}>{value}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  )
+}
+
 function MonthToolbar({ monthLabel, onPrev, onNext, onToday, disabled }) {
   return (
     <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-800 sm:px-5">
@@ -348,7 +568,8 @@ function AttendanceTableRows({ days }) {
   return days.map((day, i) => {
     const rowTone = STATUS_META[day.status]?.row || ''
     const isLate = Number(day.late_minutes) > 0
-    const note = dayNote(day)
+    const checkInTime = displayReportTime(day, 'check_in')
+    const checkOutTime = displayReportTime(day, 'check_out')
 
     return (
       <tr
@@ -361,31 +582,42 @@ function AttendanceTableRows({ days }) {
         <td className="px-4 py-3.5 font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap">
           {formatDateShort(day.date)}
         </td>
-        <td className="px-4 py-3.5 text-xs text-slate-400 dark:text-slate-500">{day.day}</td>
+        <td className="whitespace-nowrap px-4 py-3.5 text-xs text-slate-500 dark:text-slate-400">
+          <span className="block font-semibold text-slate-700 dark:text-slate-300">{day.schedule || '–'}</span>
+          <span>{day.day}</span>
+        </td>
         <td className="px-4 py-3.5">
-          {day.check_in ? (
+          {checkInTime ? (
             <span
               className={clsx(
                 'font-semibold',
                 isLate ? 'text-amber-600 dark:text-amber-400' : 'text-slate-700 dark:text-slate-300',
               )}
             >
-              {day.check_in}
+              {checkInTime}
             </span>
           ) : (
             <span className="text-slate-300 dark:text-slate-600">–</span>
           )}
         </td>
         <td className="px-4 py-3.5 font-semibold text-slate-700 dark:text-slate-300">
-          {day.check_out || <span className="text-slate-300 dark:text-slate-600">–</span>}
+          {checkOutTime || <span className="text-slate-300 dark:text-slate-600">–</span>}
         </td>
         <td className="px-4 py-3.5 font-semibold text-slate-700 dark:text-slate-300">
           {fmtWork(day.work_minutes)}
         </td>
+        <td className={clsx('whitespace-nowrap px-4 py-3.5 font-semibold', isLate ? 'text-orange-600' : 'text-slate-400')}>
+          {isLate ? `${day.late_minutes} min` : '–'}
+        </td>
+        <td className="whitespace-nowrap px-4 py-3.5 font-semibold text-rose-500">
+          ${Number(day.deduction_amount || 0).toFixed(2)}
+        </td>
+        <td className="whitespace-nowrap px-4 py-3.5 font-semibold text-emerald-600 dark:text-emerald-400">
+          {Number(day.overtime_minutes || 0) > 0 ? fmtWork(day.overtime_minutes) : '–'}
+        </td>
         <td className="px-4 py-3.5">
           <StatusBadge status={day.status} />
         </td>
-        <td className="px-4 py-3.5 text-sm text-slate-500 dark:text-slate-400">{note}</td>
       </tr>
     )
   })
@@ -401,20 +633,30 @@ function DesktopReportCard({ days, monthLabel, onPrev, onNext, onToday, disabled
         onToday={onToday}
         disabled={disabled}
       />
+      <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3 dark:border-slate-800">
+        <h2 className="text-sm font-bold text-slate-900 dark:text-white">Attendance Details</h2>
+        <div className="flex items-center gap-2 text-xs text-slate-500">
+          <span>View by:</span>
+          <span className="inline-flex h-8 items-center gap-5 rounded-lg border border-slate-200 bg-white px-3 font-bold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+            Daily
+            <ChevronDown size={13} />
+          </span>
+        </div>
+      </div>
       {days.length === 0 ? (
         <div className="p-14 text-center">
           <Calendar size={44} className="mx-auto mb-3 text-slate-200 dark:text-slate-700" />
           <p className="font-medium text-slate-400">No records match the selected filters.</p>
         </div>
       ) : (
-        <div className="max-h-[min(65vh,680px)] overflow-auto">
-          <table className="w-full min-w-[800px] text-sm">
-            <thead className="sticky top-0 z-10 bg-slate-50 shadow-sm dark:bg-slate-800/95">
+        <div>
+          <table className="w-full table-fixed text-sm">
+            <thead className="bg-slate-50 shadow-sm dark:bg-slate-800/95">
               <tr className="border-b border-slate-100 dark:border-slate-800">
                 {TABLE_COLS.map((h) => (
                   <th
                     key={h}
-                    className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400"
+                    className="px-3 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400"
                   >
                     {h}
                   </th>
@@ -498,6 +740,8 @@ function MobileReportCard({ days, monthLabel, onPrev, onNext, mobileShown, onSho
             <tbody className="divide-y divide-slate-50 dark:divide-slate-800/60">
               {visible.map((day, i) => {
                 const isLate = Number(day.late_minutes) > 0
+                const checkInTime = displayReportTime(day, 'check_in')
+                const checkOutTime = displayReportTime(day, 'check_out')
                 return (
                   <tr key={`${day.date}-${i}`} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/30">
                     <td className="whitespace-nowrap px-2 py-2.5 font-semibold text-slate-800 dark:text-slate-200">
@@ -505,16 +749,16 @@ function MobileReportCard({ days, monthLabel, onPrev, onNext, mobileShown, onSho
                     </td>
                     <td className="px-2 py-2.5 text-slate-400">{day.day}</td>
                     <td className="px-2 py-2.5">
-                      {day.check_in ? (
+                      {checkInTime ? (
                         <span className={clsx('font-semibold', isLate && 'text-amber-600')}>
-                          {day.check_in}
+                          {checkInTime}
                         </span>
                       ) : (
                         <span className="text-slate-300">–</span>
                       )}
                     </td>
                     <td className="px-2 py-2.5 font-medium text-slate-700 dark:text-slate-300">
-                      {day.check_out || <span className="text-slate-300">–</span>}
+                      {checkOutTime || <span className="text-slate-300">–</span>}
                     </td>
                     <td className="whitespace-nowrap px-2 py-2.5 font-medium text-slate-700 dark:text-slate-300">
                       {fmtWork(day.work_minutes)}
@@ -558,7 +802,7 @@ function MobileReportCard({ days, monthLabel, onPrev, onNext, mobileShown, onSho
 const filterControlCls =
   'h-11 w-full min-w-0 rounded-xl border border-slate-200 bg-white text-sm font-medium text-slate-800 shadow-sm transition focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100'
 
-function FilterField({ label, icon: Icon, required, children, className }) {
+function FilterField({ label, required, children, className }) {
   return (
     <div className={className}>
       <label className="mb-2 block text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">
@@ -649,7 +893,6 @@ function MobileFilterToolbar({
   exportOpen,
   onToggleExport,
   onExportExcel,
-  onExportPdf,
   onPrint,
   hasExport,
   exportReady,
@@ -696,17 +939,6 @@ function MobileFilterToolbar({
                 >
                   <FileSpreadsheet size={16} />
                   {exporting ? 'Exporting…' : 'Export Excel'}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onToggleExport(false)
-                    setTimeout(() => onExportPdf(), 200)
-                  }}
-                  className="flex w-full items-center gap-2.5 px-4 py-3 text-left text-sm font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30"
-                >
-                  <FileText size={16} />
-                  Export PDF
                 </button>
                 <button
                   type="button"
@@ -786,12 +1018,14 @@ function PrintReportSheet({ report }) {
           {days.map((day) => (
             <tr key={day.date} className="border-b border-slate-200">
               <td className="px-2 py-1.5">{formatDateShort(day.date)}</td>
-              <td className="px-2 py-1.5">{day.day}</td>
-              <td className="px-2 py-1.5">{day.check_in || '–'}</td>
-              <td className="px-2 py-1.5">{day.check_out || '–'}</td>
+              <td className="px-2 py-1.5">{day.schedule || '–'}</td>
+              <td className="px-2 py-1.5">{displayReportTime(day, 'check_in') || '–'}</td>
+              <td className="px-2 py-1.5">{displayReportTime(day, 'check_out') || '–'}</td>
               <td className="px-2 py-1.5">{fmtWork(day.work_minutes)}</td>
+              <td className="px-2 py-1.5">{day.late_minutes ? `${day.late_minutes} min` : '–'}</td>
+              <td className="px-2 py-1.5">${Number(day.deduction_amount || 0).toFixed(2)}</td>
+              <td className="px-2 py-1.5">{Number(day.overtime_minutes || 0) > 0 ? fmtWork(day.overtime_minutes) : '–'}</td>
               <td className="px-2 py-1.5">{STATUS_META[day.status]?.label || day.status}</td>
-              <td className="px-2 py-1.5">{dayNote(day)}</td>
             </tr>
           ))}
         </tbody>
@@ -936,6 +1170,33 @@ export default function EmployeeMonthlyReportPage({ user, appData }) {
     })
   }
 
+  const applyDesktopFilters = ({ employee = draftEmp, reportMonth = draftMonth } = {}) => {
+    const empId = isViewOwnOnly ? selfIdStr : employee
+    setDraftEmp(empId)
+    setDraftMonth(reportMonth)
+
+    if (!empId) {
+      setEmployeeId('')
+      setData(null)
+      setError(null)
+      reportSnapshotRef.current = null
+      return
+    }
+
+    setMonth(reportMonth)
+    setEmployeeId(empId)
+    setDeptId('')
+    setStatusFilter('')
+    setDraftDept('')
+    setDraftStatus('')
+    fetchReport({
+      month: reportMonth,
+      employeeId: isViewOwnOnly ? '' : empId,
+      departmentId: '',
+      status: '',
+    })
+  }
+
   const handleReset = () => {
     const m = currentMonthStr()
     const emp = isViewOwnOnly ? selfIdStr : ''
@@ -1061,15 +1322,6 @@ export default function EmployeeMonthlyReportPage({ user, appData }) {
         type="button"
         onClick={handlePrint}
         disabled={!hasExportData}
-        className="inline-flex h-10 items-center gap-2 rounded-xl border-2 border-rose-200 bg-white px-4 text-sm font-bold text-rose-600 shadow-sm transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-rose-900 dark:bg-slate-900"
-      >
-        <FileText size={16} />
-        Export PDF
-      </button>
-      <button
-        type="button"
-        onClick={handlePrint}
-        disabled={!hasExportData}
         className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-900"
       >
         <Printer size={16} className="text-slate-400" />
@@ -1088,36 +1340,11 @@ export default function EmployeeMonthlyReportPage({ user, appData }) {
         exportOpen={exportOpen}
         onToggleExport={(open) => setExportOpen(typeof open === 'boolean' ? open : (v) => !v)}
         onExportExcel={handleExportExcel}
-        onExportPdf={handlePrint}
         onPrint={handlePrint}
-        hasExport={canExport}
+        hasExport={false}
         exportReady={hasExportData}
         exporting={exporting}
       />
-
-      {/* Header — desktop */}
-      <div className="hidden flex-wrap items-start justify-between gap-4 lg:flex print:hidden">
-        <div className="min-w-0 flex-1">
-          <p className="flex flex-wrap items-center gap-1.5 text-sm text-slate-500">
-            <Home size={14} className="text-slate-400" />
-            <span className="text-slate-400">Home</span>
-            <span className="text-slate-300">›</span>
-            <span className="text-slate-400">Reports</span>
-            <span className="text-slate-300">›</span>
-            <span className="font-medium text-emerald-600 dark:text-emerald-400">Employee Monthly Report</span>
-          </p>
-          <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-            Employee Monthly Report
-          </h1>
-          <p className="mt-1 max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-            View each employee&apos;s daily attendance status for the selected month.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">{exportButtons}</div>
-      </div>
-
-      {/* Header — tablet export */}
-      <div className="hidden flex-wrap gap-2 sm:flex lg:hidden print:hidden">{exportButtons}</div>
 
       {/* Filters */}
       <div
@@ -1223,17 +1450,17 @@ export default function EmployeeMonthlyReportPage({ user, appData }) {
               Reset
             </button>
           </div>
+
+          {canExport && (
+            <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
+              {exportButtons}
+            </div>
+          )}
         </div>
 
         {/* Desktop layout */}
-        <div className="hidden lg:block">
-          <div className={clsx('grid gap-4', canViewAll ? 'grid-cols-4' : isViewOwnOnly ? 'grid-cols-3' : 'grid-cols-2')}>
-            <FilterField label="Month" required>
-              <div className="relative">
-                <Calendar size={15} className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-slate-400" />
-                <input type="month" value={draftMonth} onChange={(e) => setDraftMonth(e.target.value)} className={clsx(inputCls, 'pl-9')} />
-              </div>
-            </FilterField>
+        <div className="hidden lg:flex lg:items-end lg:gap-7">
+          <div className="w-[270px] shrink-0">
             {isViewOwnOnly && selfIdStr && (
               <OwnEmployeeField
                 employeeId={selfIdStr}
@@ -1242,12 +1469,16 @@ export default function EmployeeMonthlyReportPage({ user, appData }) {
               />
             )}
             {canViewAll && (
-              <FilterField label="Employee">
+              <FilterField label="Employee" required>
                 <div className="relative">
                   <UserRound size={15} className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-slate-400" />
-                  <select value={draftEmp} onChange={(e) => setDraftEmp(e.target.value)} className={clsx(inputCls, 'appearance-none pl-9 pr-8')}>
+                  <select
+                    value={draftEmp}
+                    onChange={(e) => applyDesktopFilters({ employee: e.target.value })}
+                    className={clsx(inputCls, 'appearance-none pl-9 pr-8')}
+                  >
                     <option value="">Select employee</option>
-                    {filteredEmployees.map((e) => (
+                    {employees.map((e) => (
                       <option key={e.id} value={e.id}>
                         {[e.first_name, e.last_name].filter(Boolean).join(' ')}
                         {e.employee_code ? ` (${e.employee_code})` : ''}
@@ -1258,60 +1489,49 @@ export default function EmployeeMonthlyReportPage({ user, appData }) {
                 </div>
               </FilterField>
             )}
-            {canViewAll && (
-              <FilterField label="Department">
-                <div className="relative">
-                  <Building2 size={15} className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-slate-400" />
-                  <select
-                    value={draftDept}
-                    onChange={(e) => {
-                      setDraftDept(e.target.value)
-                      setDraftEmp('')
-                    }}
-                    className={clsx(inputCls, 'appearance-none pl-9 pr-8')}
-                  >
-                    <option value="">All Department</option>
-                    {departments.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.name}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          </div>
+
+          <div className="w-[260px] shrink-0">
+            <FilterField label="Month" required>
+              <div className="flex h-11 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                <button
+                  type="button"
+                  onClick={() => applyDesktopFilters({ reportMonth: shiftMonth(draftMonth, -1) })}
+                  className="grid w-11 shrink-0 place-items-center border-r border-slate-200 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                  aria-label="Previous month"
+                >
+                  <ChevronLeft size={18} />
+                </button>
+                <div className="relative min-w-0 flex-1">
+                  <input
+                    type="month"
+                    value={draftMonth}
+                    onChange={(e) => applyDesktopFilters({ reportMonth: e.target.value })}
+                    className="h-full w-full border-0 bg-transparent px-3 text-center text-sm font-bold text-slate-800 outline-none dark:text-slate-100"
+                  />
                 </div>
-              </FilterField>
-            )}
-            <FilterField label="Status">
-              <div className="relative">
-                <Filter size={15} className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-slate-400" />
-                <select value={draftStatus} onChange={(e) => setDraftStatus(e.target.value)} className={clsx(inputCls, 'appearance-none pl-9 pr-8')}>
-                  {STATUS_FILTER_OPTIONS.map((o) => (
-                    <option key={o.value || 'all'} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <button
+                  type="button"
+                  onClick={() => applyDesktopFilters({ reportMonth: shiftMonth(draftMonth, 1) })}
+                  className="grid w-11 shrink-0 place-items-center border-l border-slate-200 text-slate-500 transition hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"
+                  aria-label="Next month"
+                >
+                  <ChevronRight size={18} />
+                </button>
               </div>
             </FilterField>
           </div>
-          <div className="mt-5 flex gap-3">
-            <button
-              type="button"
-              onClick={handleSearch}
-              disabled={loading}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-8 py-2.5 text-sm font-bold text-white shadow-md hover:bg-emerald-700 disabled:opacity-60"
-            >
-              <Search size={14} />
-              Search
-            </button>
+
+          <div className="ml-auto flex items-center gap-2 pb-px">
+            {canExport && exportButtons}
             <button
               type="button"
               onClick={handleReset}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-8 py-2.5 text-sm font-bold text-slate-600 shadow-sm hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900"
+              className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900"
+              title="Reset report"
+              aria-label="Reset report"
             >
-              <RotateCcw size={13} />
-              Reset
+              <RotateCcw size={15} />
             </button>
           </div>
         </div>
@@ -1396,6 +1616,14 @@ export default function EmployeeMonthlyReportPage({ user, appData }) {
               />
             ))}
           </div>
+
+          <EmployeeReportCharts days={days} summary={summary} />
+
+          <MonthlyDetailSummary
+            monthlySummary={data?.monthly_summary}
+            requestSummary={data?.request_summary}
+            lateAnalysis={data?.late_analysis}
+          />
 
           <DesktopReportCard
             days={days}

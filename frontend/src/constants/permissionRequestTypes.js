@@ -48,6 +48,16 @@ export const PERMISSION_REQUEST_TYPES = [
     reasonPlaceholder: 'Why the check-in is missing...',
   },
   {
+    id: 'Missing Check Out',
+    shortLabel: 'Missing out',
+    desc: 'Request approval for a missing check-out.',
+    icon: AlertCircle,
+    color: 'fuchsia',
+    showTime: true,
+    showDateRange: false,
+    reasonPlaceholder: 'Why the check-out is missing...',
+  },
+  {
     id: 'Personal Request',
     shortLabel: 'Personal',
     desc: 'Request approval for personal matters.',
@@ -96,7 +106,7 @@ export function newRequestForm(typeId = 'Late Check In') {
 }
 
 export const REQUEST_CATEGORIES = {
-  'Attendance Requests': ['Late Check In', 'Early Check Out', 'Missing Check In'],
+  'Attendance Requests': ['Late Check In', 'Early Check Out', 'Missing Check In', 'Missing Check Out'],
   'Day Off': ['Day Off'],
   'Personal Requests': ['Personal Request'],
 }

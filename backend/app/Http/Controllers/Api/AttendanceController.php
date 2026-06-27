@@ -197,11 +197,21 @@ class AttendanceController extends Controller
     {
         $data = $request->validate([
             'changes' => ['sometimes', 'array'],
+            'changes.attendance_date' => ['sometimes', 'date'],
+            'changes.check_in_at' => ['nullable', 'date'],
+            'changes.check_out_at' => ['nullable', 'date'],
+            'changes.status' => ['sometimes', 'string', 'max:40'],
+            'changes.type' => ['sometimes', 'in:office,outdoor'],
+            'changes.notes' => ['nullable', 'string', 'max:2000'],
+            'changes.deduction_amount' => ['nullable', 'numeric', 'min:0'],
+            'changes.deduction_reason' => ['nullable', 'string', 'max:200'],
             'date' => ['sometimes', 'date'],
             'check_in_time' => ['nullable', 'date_format:H:i'],
             'check_out_time' => ['nullable', 'date_format:H:i'],
             'status' => ['sometimes', 'string', 'max:40'],
             'type' => ['sometimes', 'in:office,outdoor'],
+            'deduction_amount' => ['nullable', 'numeric', 'min:0'],
+            'deduction_reason' => ['nullable', 'string', 'max:200'],
             'reason' => ['required', 'string', 'min:8', 'max:2000'],
         ]);
 
@@ -226,7 +236,7 @@ class AttendanceController extends Controller
                     : null;
             }
 
-            foreach (['status', 'type'] as $field) {
+            foreach (['status', 'type', 'deduction_amount', 'deduction_reason'] as $field) {
                 if (array_key_exists($field, $data)) {
                     $changes[$field] = $data[$field];
                 }
@@ -234,12 +244,16 @@ class AttendanceController extends Controller
         }
 
         foreach ($changes as $field => $value) {
-            if (! in_array($field, ['attendance_date', 'type', 'status', 'check_in_at', 'check_out_at', 'notes'], true)) {
+            if (! in_array($field, ['attendance_date', 'type', 'status', 'check_in_at', 'check_out_at', 'notes', 'deduction_amount', 'deduction_reason'], true)) {
                 continue;
             }
 
             if (in_array($field, ['check_in_at', 'check_out_at'], true) && $value) {
                 $value = Carbon::parse($value);
+            }
+
+            if ($field === 'deduction_amount') {
+                $value = $value === null || $value === '' ? null : round((float) $value, 2);
             }
 
             AttendanceLog::create([

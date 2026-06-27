@@ -29,6 +29,9 @@ class PermissionRequest extends Model
         'is_emergency',
         'gps_location',
         'admin_notes',
+        'telegram_chat_id',
+        'telegram_message_thread_id',
+        'telegram_message_id',
         'reviewed_by',
         'reviewed_at',
     ];
@@ -39,6 +42,8 @@ class PermissionRequest extends Model
         'total_hours' => 'decimal:2',
         'total_days' => 'integer',
         'is_emergency' => 'boolean',
+        'telegram_message_thread_id' => 'integer',
+        'telegram_message_id' => 'integer',
         'reviewed_at' => 'datetime',
     ];
 

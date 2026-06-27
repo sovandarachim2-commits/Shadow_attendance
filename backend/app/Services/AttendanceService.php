@@ -405,11 +405,22 @@ class AttendanceService
             return 0;
         }
 
+        $date = $checkInAt->toDateString();
+
+        if ($request->request_time && ! $request->end_time) {
+            $approvedUntil = Carbon::parse("{$date} {$request->request_time}");
+            if ($approvedUntil->lessThanOrEqualTo($workStart)) {
+                return 0;
+            }
+
+            $coveredUntil = $approvedUntil->lessThan($checkInAt) ? $approvedUntil : $checkInAt;
+            return max(0, (int) ceil($workStart->diffInSeconds($coveredUntil) / 60));
+        }
+
         if (! $request->start_time || ! $request->end_time) {
             return max(0, (int) ceil($workStart->diffInSeconds($checkInAt) / 60));
         }
 
-        $date = $checkInAt->toDateString();
         $start = Carbon::parse("{$date} {$request->start_time}");
         $end = Carbon::parse("{$date} {$request->end_time}");
 

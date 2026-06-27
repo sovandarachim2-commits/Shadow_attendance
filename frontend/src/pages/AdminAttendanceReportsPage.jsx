@@ -176,17 +176,8 @@ export default function AdminAttendanceReportsPage({ user, appData, isLoaded }) 
 
   return (
     <div className="space-y-6 pb-24 print:pb-0">
-      {/* Header */}
-      <div className="flex flex-col gap-4 print:hidden lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <p className="text-sm text-slate-500">
-            <span className="text-slate-400">Reports</span>
-            <span className="mx-2 text-slate-300">›</span>
-            <span className="font-medium text-emerald-600">Attendance Report</span>
-          </p>
-          <h2 className="mt-1 text-2xl font-bold tracking-tight text-slate-950 dark:text-white">Admin Attendance Report</h2>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+      {/* Header actions */}
+      <div className="flex flex-wrap items-center justify-end gap-2 print:hidden">
           <label className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-900">
             <Calendar size={16} className="text-slate-400" />
             <input type="date" className="w-[7.5rem] border-0 bg-transparent text-sm outline-none" value={from} onChange={(e) => { setFrom(e.target.value); fetchReport({ from: e.target.value, to }) }} />
@@ -205,7 +196,6 @@ export default function AdminAttendanceReportsPage({ user, appData, isLoaded }) 
               </button>
             </>
           )}
-        </div>
       </div>
 
       {/* Summary stats */}

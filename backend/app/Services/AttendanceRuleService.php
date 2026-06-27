@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Attendance;
 use App\Models\AttendanceRule;
 use App\Models\Employee;
+use App\Models\PermissionRequest;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
@@ -114,8 +115,19 @@ class AttendanceRuleService
         $rules = $this->rules();
         $workMinutes = $attendance->check_in_at->diffInMinutes($checkOutAt);
         $minHours = (float) ($rules->minimum_work_hours ?? 0);
+        $workEnd = $this->workEndToday($user, $checkOutAt);
+        $approvedEarlyCheckOutAt = $this->approvedEarlyCheckOutAt($user, $checkOutAt, $workEnd);
 
-        if ($minHours > 0 && $workMinutes < (int) round($minHours * 60)) {
+        if ($approvedEarlyCheckOutAt && $checkOutAt->lessThan($approvedEarlyCheckOutAt)) {
+            $blockers[] = sprintf(
+                'Check-out is before approved Early Check Out time (%s). Check-out is not allowed.',
+                $approvedEarlyCheckOutAt->format('h:i A')
+            );
+
+            return $blockers;
+        }
+
+        if (! $approvedEarlyCheckOutAt && $minHours > 0 && $workMinutes < (int) round($minHours * 60)) {
             $blockers[] = sprintf(
                 'You worked %.1f hours (minimum is %.1f). Check-out is not allowed.',
                 $workMinutes / 60,
@@ -123,9 +135,7 @@ class AttendanceRuleService
             );
         }
 
-        $workEnd = $this->workEndToday($user, $checkOutAt);
-
-        if ($workEnd && $checkOutAt->lessThan($workEnd)) {
+        if (! $approvedEarlyCheckOutAt && $workEnd && $checkOutAt->lessThan($workEnd)) {
             $blockers[] = sprintf(
                 'Check-out is before work end (%s). Check-out is not allowed.',
                 $workEnd->format('h:i A')
@@ -133,6 +143,43 @@ class AttendanceRuleService
         }
 
         return $blockers;
+    }
+
+    private function approvedEarlyCheckOutAt(User $user, Carbon $checkOutAt, ?Carbon $workEnd): ?Carbon
+    {
+        if (! $user->employee_id) {
+            return null;
+        }
+
+        $date = $checkOutAt->toDateString();
+
+        $approvedAt = PermissionRequest::query()
+            ->where('employee_id', $user->employee_id)
+            ->where('status', 'approved')
+            ->where('type', 'Early Check Out')
+            ->whereDate('request_date', '<=', $date)
+            ->where(function ($query) use ($date) {
+                $query->whereNull('request_date_end')
+                    ->orWhereDate('request_date_end', '>=', $date);
+            })
+            ->get(['request_time', 'start_time'])
+            ->map(function (PermissionRequest $request) use ($date) {
+                $time = $request->request_time ?: $request->start_time;
+                return $time ? Carbon::parse("{$date} {$time}") : null;
+            })
+            ->filter()
+            ->sortBy(fn (Carbon $time) => $time->timestamp)
+            ->first();
+
+        if (! $approvedAt) {
+            return null;
+        }
+
+        if ($workEnd && $approvedAt->greaterThanOrEqualTo($workEnd)) {
+            return null;
+        }
+
+        return $approvedAt;
     }
 
     public function assertCanCheckOut(User $user, Attendance $attendance, Carbon $checkOutAt): void

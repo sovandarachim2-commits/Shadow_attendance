@@ -51,7 +51,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     envDir: rootDir,
-    cacheDir: '../.vite-cache',
+    cacheDir: 'node_modules/.vite',
     plugins: [
       react(),
       tailwindcss(),

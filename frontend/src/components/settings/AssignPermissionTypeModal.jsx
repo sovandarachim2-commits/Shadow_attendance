@@ -30,19 +30,20 @@ export const EMPTY_PERM_FORM = {
   deductionAmount: 0,
   color: '#f59e0b',
   description: '',
+  isActive: true,
 }
 
 // ── Shared field: icon-left + optional right badge ────────────────────────────
 function IconField({ icon: Icon, badge, children }) {
   return (
-    <div className="flex items-center overflow-hidden rounded-2xl border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950">
-      <div className="flex flex-1 items-center gap-3 px-4 py-3.5">
-        <Icon size={20} className="shrink-0 text-emerald-500" />
+    <div className="flex items-center overflow-hidden rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950">
+      <div className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2">
+        <Icon size={16} className="shrink-0 text-emerald-500" />
         {children}
       </div>
       {badge && (
-        <div className="border-l border-slate-200 bg-slate-50 px-5 py-3.5 dark:border-slate-700 dark:bg-slate-800">
-          <span className="text-sm font-semibold text-slate-500 dark:text-slate-300">{badge}</span>
+        <div className="shrink-0 border-l border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
+          <span className="text-xs font-semibold text-slate-500 dark:text-slate-300">{badge}</span>
         </div>
       )}
     </div>
@@ -56,6 +57,7 @@ function Helper({ text }) {
 
 // ── Main modal ────────────────────────────────────────────────────────────────
 export default function AssignPermissionTypeModal({ onClose, onSave, initialData = null }) {
+  const isFixedType = Boolean(initialData)
   const [form, setForm] = useState(
     initialData ? {
       name:             initialData.name             || '',
@@ -66,6 +68,7 @@ export default function AssignPermissionTypeModal({ onClose, onSave, initialData
       deductionAmount:  initialData.deductionAmount  ?? initialData.deduction_amount  ?? 0,
       color:            initialData.color            || '#f59e0b',
       description:      initialData.description      || '',
+      isActive:         initialData.isActive         ?? initialData.is_active         ?? true,
     } : EMPTY_PERM_FORM,
   )
   const [errors, setErrors] = useState({})
@@ -89,13 +92,11 @@ export default function AssignPermissionTypeModal({ onClose, onSave, initialData
 
   return (
     /* backdrop (desktop) / full-screen (mobile) */
-    <div className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-slate-900
-                    sm:items-center sm:justify-center sm:bg-slate-950/50 sm:p-4 sm:backdrop-blur-sm">
-      <div className="flex w-full flex-col overflow-hidden
-                      sm:max-w-lg sm:rounded-3xl sm:bg-white sm:shadow-2xl sm:dark:bg-slate-900">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-white dark:bg-slate-900 sm:items-center sm:bg-slate-950/60 sm:p-4 sm:backdrop-blur-sm">
+      <div className="flex h-full w-full flex-col overflow-hidden bg-white dark:bg-slate-900 sm:h-auto sm:max-h-[92vh] sm:max-w-4xl sm:rounded-2xl sm:shadow-2xl">
 
         {/* ── Header ────────────────────────────────────────────────────── */}
-        <div className="flex items-center gap-3 px-5 py-5">
+        <div className="flex shrink-0 items-center gap-3 border-b border-slate-200 px-4 py-3 dark:border-slate-800 sm:px-5">
           {/* mobile back */}
           <button type="button" onClick={onClose}
             className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 sm:hidden">
@@ -111,52 +112,92 @@ export default function AssignPermissionTypeModal({ onClose, onSave, initialData
             </svg>
           </button>
 
-          <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300">
-            <Hammer size={22} />
+          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-300">
+            <Hammer size={20} />
           </div>
-          <div>
+          <div className="min-w-0">
             <h2 className="text-lg font-bold text-slate-900 dark:text-white">
-              {initialData ? 'Edit Permission Type' : 'Add Permission Type'}
+              Edit Request Type Settings
             </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              Create a new permission type for attendance and salary rules.
+            <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+              Request type names are fixed. Edit only rules and display details.
             </p>
           </div>
         </div>
 
         {/* ── Form ──────────────────────────────────────────────────────── */}
-        <form onSubmit={handleSubmit} className="flex flex-1 flex-col overflow-y-auto">
-          <div className="flex-1 space-y-6 px-5 pb-6">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="flex-1 overflow-y-auto px-4 py-4 sm:px-5">
+            <div className="grid gap-4 lg:grid-cols-2">
 
             {/* Permission Type Name */}
-            <div>
-              <label className="mb-2 block text-sm font-bold text-slate-900 dark:text-white">
+            <div className="lg:col-span-2">
+              <label className="mb-1.5 block text-sm font-bold text-slate-900 dark:text-white">
                 Permission Type Name <span className="text-rose-500">*</span>
               </label>
               <div className={clsx(
-                'flex items-center gap-3 rounded-2xl border px-4 py-3.5 transition',
+                'flex items-center gap-2.5 rounded-lg border px-3 py-2 transition',
                 errors.name
                   ? 'border-rose-400 bg-rose-50/40 dark:border-rose-700 dark:bg-rose-950/20'
                   : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950',
               )}>
-                <FileText size={20} className="shrink-0 text-emerald-500" />
+                <FileText size={16} className="shrink-0 text-emerald-500" />
                 <input
                   type="text"
                   placeholder="e.g. Late Check In"
                   value={form.name}
                   onChange={(e) => set('name', e.target.value)}
-                  className="flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none placeholder:text-slate-400 dark:text-white"
+                  readOnly={isFixedType}
+                  className="flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none placeholder:text-slate-400 read-only:cursor-not-allowed read-only:text-slate-500 dark:text-white dark:read-only:text-slate-400"
                 />
               </div>
               {errors.name
                 ? <p className="mt-1.5 text-xs font-semibold text-rose-500">{errors.name}</p>
-                : <Helper text="Enter a clear name for this permission type." />
+                : <Helper text="This is a fixed request type. Users cannot add, delete, or rename request types." />
               }
+            </div>
+
+            {/* Status */}
+            <div className="lg:col-span-2">
+              <label className="mb-1.5 block text-sm font-bold text-slate-900 dark:text-white">
+                Status
+              </label>
+              <button
+                type="button"
+                onClick={() => set('isActive', !form.isActive)}
+                className={clsx(
+                  'flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-left transition',
+                  form.isActive
+                    ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900/60 dark:bg-emerald-950/20'
+                    : 'border-slate-200 bg-slate-50 dark:border-slate-700 dark:bg-slate-950',
+                )}
+              >
+                <span>
+                  <span className={clsx(
+                    'block text-sm font-bold',
+                    form.isActive ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-700 dark:text-slate-300',
+                  )}>
+                    {form.isActive ? 'On' : 'Off'}
+                  </span>
+                  <span className="block text-xs text-slate-500 dark:text-slate-400">
+                    {form.isActive ? 'Employees can submit this request type.' : 'Employees cannot submit this request type.'}
+                  </span>
+                </span>
+                <span className={clsx(
+                  'relative h-6 w-11 shrink-0 rounded-full transition',
+                  form.isActive ? 'bg-emerald-600' : 'bg-slate-300 dark:bg-slate-700',
+                )}>
+                  <span className={clsx(
+                    'absolute top-1 h-4 w-4 rounded-full bg-white shadow transition',
+                    form.isActive ? 'left-6' : 'left-1',
+                  )} />
+                </span>
+              </button>
             </div>
 
             {/* Allowed Times */}
             <div>
-              <label className="mb-2 block text-sm font-bold text-slate-900 dark:text-white">
+              <label className="mb-1.5 block text-sm font-bold text-slate-900 dark:text-white">
                 Allowed Times <span className="text-rose-500">*</span>
               </label>
               <IconField icon={Clock} badge="Time(s)">
@@ -173,10 +214,10 @@ export default function AssignPermissionTypeModal({ onClose, onSave, initialData
 
             {/* Limit Type */}
             <div>
-              <label className="mb-2 block text-sm font-bold text-slate-900 dark:text-white">
+              <label className="mb-1.5 block text-sm font-bold text-slate-900 dark:text-white">
                 Limit Type <span className="text-rose-500">*</span>
               </label>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2">
                 {[
                   { id: 'per_day',   label: 'Per Day'   },
                   { id: 'per_month', label: 'Per Month' },
@@ -185,21 +226,21 @@ export default function AssignPermissionTypeModal({ onClose, onSave, initialData
                   return (
                     <button key={opt.id} type="button" onClick={() => set('limitType', opt.id)}
                       className={clsx(
-                        'flex items-center gap-3 rounded-2xl border-2 px-4 py-3.5 text-left transition',
+                        'flex items-center gap-2 rounded-lg border px-3 py-2 text-left transition',
                         sel
                           ? 'border-emerald-500 bg-emerald-50 dark:border-emerald-600 dark:bg-emerald-950/30'
                           : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950',
                       )}>
-                      <CalendarDays size={20} className={sel ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'} />
+                      <CalendarDays size={16} className={sel ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'} />
                       <span className={clsx('flex-1 text-sm font-bold',
                         sel ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-600 dark:text-slate-300')}>
                         {opt.label}
                       </span>
                       <span className={clsx(
-                        'grid h-5 w-5 shrink-0 place-items-center rounded-full border-2 transition',
+                        'grid h-4 w-4 shrink-0 place-items-center rounded-full border transition',
                         sel ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300 dark:border-slate-600',
                       )}>
-                        {sel && <span className="h-2 w-2 rounded-full bg-white" />}
+                        {sel && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
                       </span>
                     </button>
                   )
@@ -209,10 +250,10 @@ export default function AssignPermissionTypeModal({ onClose, onSave, initialData
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-bold text-slate-900 dark:text-white">
+              <label className="mb-1.5 block text-sm font-bold text-slate-900 dark:text-white">
                 Request Duration Control
               </label>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2">
                 {[
                   { id: 'any', label: 'Any' },
                   { id: 'single_day', label: 'Single Day' },
@@ -223,7 +264,7 @@ export default function AssignPermissionTypeModal({ onClose, onSave, initialData
                   return (
                     <button key={opt.id} type="button" onClick={() => set('durationControl', opt.id)}
                       className={clsx(
-                        'rounded-2xl border-2 px-4 py-3 text-left text-sm font-bold transition',
+                        'rounded-lg border px-3 py-2 text-left text-sm font-bold transition',
                         sel
                           ? 'border-emerald-500 bg-emerald-50 text-emerald-700 dark:border-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-300'
                           : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300',
@@ -238,7 +279,7 @@ export default function AssignPermissionTypeModal({ onClose, onSave, initialData
 
             {form.durationControl === 'hours' && (
               <div>
-                <label className="mb-2 block text-sm font-bold text-slate-900 dark:text-white">
+                <label className="mb-1.5 block text-sm font-bold text-slate-900 dark:text-white">
                   Max Hours
                 </label>
                 <IconField icon={Clock} badge="Hour(s)">
@@ -259,7 +300,7 @@ export default function AssignPermissionTypeModal({ onClose, onSave, initialData
 
             {/* Deduction Amount */}
             <div>
-              <label className="mb-2 block text-sm font-bold text-slate-900 dark:text-white">
+              <label className="mb-1.5 block text-sm font-bold text-slate-900 dark:text-white">
                 Deduction Amount <span className="text-rose-500">*</span>
               </label>
               <IconField icon={CircleDollarSign} badge="$">
@@ -277,19 +318,19 @@ export default function AssignPermissionTypeModal({ onClose, onSave, initialData
 
             {/* Color */}
             <div>
-              <label className="mb-2 block text-sm font-bold text-slate-900 dark:text-white">
+              <label className="mb-1.5 block text-sm font-bold text-slate-900 dark:text-white">
                 Color <span className="text-rose-500">*</span>
               </label>
-              <div className="flex flex-wrap gap-2.5">
+              <div className="flex flex-wrap gap-2">
                 {PERM_COLORS.map((c) => (
                   <button key={c.id} type="button" onClick={() => set('color', c.hex)}
                     className={clsx(
-                      'grid h-14 w-14 place-items-center rounded-2xl border-2 transition active:scale-95',
+                      'grid h-11 w-11 place-items-center rounded-lg border transition active:scale-95',
                       form.color === c.hex
                         ? 'border-emerald-500 dark:border-emerald-400'
                         : 'border-slate-200 hover:border-slate-300 dark:border-slate-700',
                     )}>
-                    <span className="grid h-9 w-9 place-items-center rounded-full" style={{ backgroundColor: c.hex }}>
+                    <span className="grid h-7 w-7 place-items-center rounded-full" style={{ backgroundColor: c.hex }}>
                       {form.color === c.hex && (
                         <svg width="16" height="16" fill="none" stroke="white" strokeWidth="2.5" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -303,18 +344,18 @@ export default function AssignPermissionTypeModal({ onClose, onSave, initialData
             </div>
 
             {/* Description */}
-            <div>
-              <label className="mb-2 block text-sm font-bold text-slate-900 dark:text-white">
+            <div className="lg:col-span-2">
+              <label className="mb-1.5 block text-sm font-bold text-slate-900 dark:text-white">
                 Description
               </label>
-              <div className="flex gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3.5 dark:border-slate-700 dark:bg-slate-950">
-                <FileText size={20} className="mt-0.5 shrink-0 text-emerald-500" />
+              <div className="flex gap-2.5 rounded-lg border border-slate-200 bg-white px-3 py-2.5 dark:border-slate-700 dark:bg-slate-950">
+                <FileText size={16} className="mt-0.5 shrink-0 text-emerald-500" />
                 <textarea
                   placeholder="Describe how this permission type works..."
                   value={form.description}
                   onChange={(e) => set('description', e.target.value)}
                   maxLength={500}
-                  rows={4}
+                  rows={3}
                   className="flex-1 resize-none bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400 dark:text-white"
                 />
               </div>
@@ -323,19 +364,20 @@ export default function AssignPermissionTypeModal({ onClose, onSave, initialData
                 <span className="shrink-0 text-xs text-slate-400">{(form.description || '').length}/500</span>
               </div>
             </div>
+            </div>
           </div>
 
           {/* ── Footer ────────────────────────────────────────────────────── */}
-          <div className="border-t border-slate-100 bg-white/95 px-5 py-4 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95">
-            <div className="grid grid-cols-[1fr_1.7fr] gap-3">
+          <div className="shrink-0 border-t border-slate-100 bg-white/95 px-4 py-3 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 sm:px-5">
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end sm:gap-3">
               <button type="button" onClick={onClose} disabled={saving}
-                className="flex h-14 items-center justify-center gap-2 rounded-2xl border-2 border-rose-300
+                className="flex h-11 items-center justify-center gap-2 rounded-lg border border-slate-200
                            text-sm font-bold text-rose-600 transition hover:bg-rose-50 disabled:opacity-60
-                           dark:border-rose-800 dark:text-rose-400 dark:hover:bg-rose-950/20">
+                           dark:border-slate-700 dark:text-rose-400 dark:hover:bg-rose-950/20">
                 <XCircle size={18} /> Cancel
               </button>
               <button type="submit" disabled={saving}
-                className="flex h-14 items-center justify-center gap-2 rounded-2xl bg-emerald-600
+                className="flex h-11 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5
                            text-sm font-bold text-white shadow-lg shadow-emerald-600/25
                            transition hover:bg-emerald-700 disabled:opacity-60">
                 <HardDrive size={18} />

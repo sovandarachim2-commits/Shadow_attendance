@@ -13,47 +13,26 @@ class PermissionTypeController extends Controller
         return response()->json(
             PermissionType::query()
                 ->whereIn('name', $this->coreTypeNames())
-                ->orderByRaw("FIELD(name, 'Late Check In', 'Early Check Out', 'Day Off', 'Missing Check In', 'Personal Request')")
+                ->orderByRaw("FIELD(name, 'Late Check In', 'Early Check Out', 'Day Off', 'Missing Check In', 'Missing Check Out', 'Personal Request')")
                 ->get()
         );
     }
 
     private function coreTypeNames(): array
     {
-        return ['Late Check In', 'Early Check Out', 'Day Off', 'Missing Check In', 'Personal Request'];
+        return ['Late Check In', 'Early Check Out', 'Day Off', 'Missing Check In', 'Missing Check Out', 'Personal Request'];
     }
 
     public function store(Request $request)
     {
-        $data = $request->validate([
-            'name'             => 'required|string|max:100',
-            'allowedTimes'     => 'required|integer|min:0',
-            'limitType'        => 'required|in:per_day,per_month',
-            'durationControl'  => 'nullable|in:any,single_day,multiple_day,hours',
-            'maxHours'         => 'nullable|numeric|min:0.25|max:24',
-            'deductionAmount'  => 'required|numeric|min:0',
-            'color'            => 'required|string|max:20',
-            'description'      => 'nullable|string|max:500',
-        ]);
-
-        $type = PermissionType::create([
-            'name'             => $data['name'],
-            'allowed_times'    => $data['allowedTimes'],
-            'limit_type'       => $data['limitType'],
-            'duration_control' => $data['durationControl'] ?? 'any',
-            'max_hours'        => ($data['durationControl'] ?? 'any') === 'hours' ? ($data['maxHours'] ?? null) : null,
-            'deduction_amount' => $data['deductionAmount'],
-            'color'            => $data['color'],
-            'description'      => $data['description'] ?? null,
-        ]);
-
-        return response()->json($type, 201);
+        return response()->json([
+            'message' => 'Request types are fixed. Edit the existing request type settings instead.',
+        ], 422);
     }
 
     public function update(Request $request, PermissionType $permissionType)
     {
         $data = $request->validate([
-            'name'             => 'required|string|max:100',
             'allowedTimes'     => 'required|integer|min:0',
             'limitType'        => 'required|in:per_day,per_month',
             'durationControl'  => 'nullable|in:any,single_day,multiple_day,hours',
@@ -61,10 +40,10 @@ class PermissionTypeController extends Controller
             'deductionAmount'  => 'required|numeric|min:0',
             'color'            => 'required|string|max:20',
             'description'      => 'nullable|string|max:500',
+            'isActive'         => 'sometimes|boolean',
         ]);
 
         $permissionType->update([
-            'name'             => $data['name'],
             'allowed_times'    => $data['allowedTimes'],
             'limit_type'       => $data['limitType'],
             'duration_control' => $data['durationControl'] ?? 'any',
@@ -72,6 +51,7 @@ class PermissionTypeController extends Controller
             'deduction_amount' => $data['deductionAmount'],
             'color'            => $data['color'],
             'description'      => $data['description'] ?? null,
+            'is_active'        => array_key_exists('isActive', $data) ? $data['isActive'] : $permissionType->is_active,
         ]);
 
         return response()->json($permissionType);
@@ -79,11 +59,8 @@ class PermissionTypeController extends Controller
 
     public function destroy(PermissionType $permissionType)
     {
-        if (in_array($permissionType->name, $this->coreTypeNames(), true)) {
-            return response()->json(['message' => 'Core permission types cannot be deleted.'], 422);
-        }
-
-        $permissionType->delete();
-        return response()->json(['message' => 'Deleted.']);
+        return response()->json([
+            'message' => 'Request types are fixed and cannot be deleted.',
+        ], 422);
     }
 }

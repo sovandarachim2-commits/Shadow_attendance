@@ -66,13 +66,8 @@ export default function MyAttendanceReportsDesktop({
 
   return (
     <div className="space-y-6 pb-8">
-      {/* Header */}
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-950 dark:text-white">My Attendance Reports</h2>
-          <p className="mt-1 text-sm text-slate-500">Track your attendance history and work records.</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+      {/* Header actions */}
+      <div className="flex flex-wrap items-center justify-end gap-2">
           <label className="inline-flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-900">
             <Calendar size={16} className="text-slate-400" />
             <span className="font-medium text-slate-700 dark:text-slate-200">{formatPeriodLabel(monthRange.from, monthRange.to)}</span>
@@ -94,7 +89,6 @@ export default function MyAttendanceReportsDesktop({
             <RefreshCw size={16} />
             Request Correction
           </button>
-        </div>
       </div>
 
       {/* Stat cards */}

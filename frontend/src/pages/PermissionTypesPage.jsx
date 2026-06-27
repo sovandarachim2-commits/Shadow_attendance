@@ -8,9 +8,7 @@ import {
   HardDrive,
   Hammer,
   Pencil,
-  Plus,
   RefreshCw,
-  Trash2,
   XCircle,
 } from 'lucide-react'
 import clsx from 'clsx'
@@ -53,7 +51,6 @@ function durationControlLabel(control) {
   return 'Any Duration'
 }
 
-const CORE_TYPES = ['Late Check In', 'Early Check Out', 'Day Off', 'Missing Check In', 'Personal Request']
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function PermissionTypesPage() {
@@ -79,13 +76,9 @@ export default function PermissionTypesPage() {
   useEffect(() => { load() }, [])
 
   const handleSave = async (form) => {
-    if (editing) {
-      await api.put(`/permission-types/${editing.id}`, form)
-      notify('Permission type updated.')
-    } else {
-      await api.post('/permission-types', form)
-      notify('Permission type created.')
-    }
+    if (!editing) return
+    await api.put(`/permission-types/${editing.id}`, form)
+    notify('Permission type settings updated.')
     load()
   }
 
@@ -95,18 +88,6 @@ export default function PermissionTypesPage() {
     setEditing(null)
   }
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Delete this permission type?')) return
-    try {
-      await api.delete(`/permission-types/${id}`)
-      notify('Deleted successfully.')
-      load()
-    } catch {
-      notify('Could not delete.', false)
-    }
-  }
-
-  const openCreate = () => { setEditing(null); setShowForm(true) }
   const openEdit   = (item) => { setEditing(item); setShowForm(true) }
   const closeForm  = () => { setShowForm(false); setEditing(null) }
 
@@ -125,33 +106,16 @@ export default function PermissionTypesPage() {
       {/* ══════════════ DESKTOP ══════════════════════════════════════════════ */}
       <div className="hidden lg:block space-y-5">
 
-        {/* Inline form */}
-        {showForm && (
-          <DesktopPermissionTypeForm
-            initialData={editing}
-            onClose={closeForm}
-            onSave={handleSaveAndClose}
-          />
-        )}
-
-        {/* List view */}
-        <div className={showForm ? 'hidden' : 'space-y-5'}>
+        <div className="space-y-5">
           {/* Header */}
           <div className="flex items-start justify-between">
             <div>
               <h2 className="text-2xl font-bold text-slate-950 dark:text-white">Permission Types</h2>
               <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                Define and manage custom permission types for employee requests.
+                Request types are fixed. Edit only their rules, colors, and descriptions.
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={openCreate}
-                className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-semibold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700"
-              >
-                <Plus size={16} /> New Type
-              </button>
               <button
                 type="button"
                 onClick={load}
@@ -172,39 +136,31 @@ export default function PermissionTypesPage() {
                 <Hammer size={28} />
               </div>
               <div className="text-center">
-                <p className="font-semibold text-slate-700 dark:text-slate-200">No permission types yet</p>
-                <p className="mt-1 text-sm text-slate-400">Create your first custom permission type.</p>
+                <p className="font-semibold text-slate-700 dark:text-slate-200">Core request types are missing</p>
+                <p className="mt-1 text-sm text-slate-400">Run migrations/seeders to restore the fixed request types.</p>
               </div>
-              <button
-                type="button"
-                onClick={openCreate}
-                className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-600 px-5 text-sm font-bold text-white shadow-lg shadow-emerald-600/20 transition hover:bg-emerald-700"
-              >
-                <Plus size={16} /> Create First Type
-              </button>
             </div>
           )}
 
           {!loading && types.length > 0 && (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {types.map((item) => (
-                <PermissionTypeCard
-                  key={item.id}
-                  item={item}
-                  onEdit={() => openEdit(item)}
-                  onDelete={() => handleDelete(item.id)}
-                />
-              ))}
-
-              {/* Add new card */}
-              <button
-                type="button"
-                onClick={openCreate}
-                className="flex min-h-32 flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-200 bg-white text-slate-400 transition hover:border-emerald-400 hover:bg-emerald-50 hover:text-emerald-600 dark:border-slate-700 dark:bg-slate-900 dark:hover:border-emerald-700 dark:hover:bg-emerald-950/20"
-              >
-                <Plus size={24} />
-                <span className="text-sm font-semibold">Add New Type</span>
-              </button>
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+              <div className="grid grid-cols-[minmax(260px,1.4fr)_130px_150px_170px_130px_120px] gap-4 border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-black uppercase text-slate-400 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-500">
+                <span>Request Type</span>
+                <span>Status</span>
+                <span>Allowed</span>
+                <span>Duration Rule</span>
+                <span>Deduction</span>
+                <span className="text-right">Action</span>
+              </div>
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                {types.map((item) => (
+                  <PermissionTypeListRow
+                    key={item.id}
+                    item={item}
+                    onEdit={() => openEdit(item)}
+                  />
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -215,12 +171,8 @@ export default function PermissionTypesPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold text-slate-950 dark:text-white">Permission Types</h2>
-          <button
-            type="button"
-            onClick={openCreate}
-            className="grid h-10 w-10 place-items-center rounded-full bg-emerald-600 text-white shadow-lg shadow-emerald-600/25 transition active:scale-95"
-          >
-            <Plus size={20} />
+          <button type="button" onClick={load} className="grid h-10 w-10 place-items-center rounded-full border border-slate-200 text-slate-600 dark:border-slate-700 dark:text-slate-300">
+            <RefreshCw size={18} />
           </button>
         </div>
 
@@ -231,10 +183,7 @@ export default function PermissionTypesPage() {
             <div className="grid h-14 w-14 place-items-center rounded-2xl bg-slate-100 text-slate-400 dark:bg-slate-800">
               <Hammer size={24} />
             </div>
-            <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">No permission types yet</p>
-            <button type="button" onClick={openCreate} className="inline-flex h-10 items-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white transition hover:bg-emerald-700">
-              <Plus size={15} /> Create First
-            </button>
+            <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Core request types are missing</p>
           </div>
         )}
 
@@ -245,26 +194,15 @@ export default function PermissionTypesPage() {
                 key={item.id}
                 item={item}
                 onEdit={() => openEdit(item)}
-                onDelete={() => handleDelete(item.id)}
               />
             ))}
           </div>
         )}
-
-        {/* Mobile FAB */}
-        <button
-          type="button"
-          onClick={openCreate}
-          className="fixed bottom-24 right-5 z-30 grid h-14 w-14 place-items-center rounded-full bg-emerald-600 text-white shadow-xl shadow-emerald-900/25 transition active:scale-95"
-          aria-label="New permission type"
-        >
-          <Plus size={24} />
-        </button>
       </div>
 
       {/* ── Mobile-only form overlay ────────────────────────────────────────── */}
       {showForm && (
-        <div className="lg:hidden">
+        <div>
           <AssignPermissionTypeModal
             initialData={editing}
             onClose={closeForm}
@@ -277,13 +215,73 @@ export default function PermissionTypesPage() {
 }
 
 // ── Desktop card ──────────────────────────────────────────────────────────────
-function PermissionTypeCard({ item, onEdit, onDelete }) {
-  const isCore  = CORE_TYPES.includes(item.name)
+function PermissionTypeListRow({ item, onEdit }) {
+  const allowed = item.allowedTimes ?? item.allowed_times ?? 0
+  const limit = item.limitType ?? item.limit_type ?? 'per_month'
+  const control = item.durationControl ?? item.duration_control ?? 'any'
+  const maxHours = item.maxHours ?? item.max_hours ?? null
+  const deduct = item.deductionAmount ?? item.deduction_amount ?? 0
+  const isActive = item.isActive ?? item.is_active ?? true
+
+  return (
+    <div className="grid min-h-[88px] grid-cols-[minmax(260px,1.4fr)_130px_150px_170px_130px_120px] items-center gap-4 px-5 py-4">
+      <div className="flex min-w-0 items-center gap-4">
+        <span className="h-11 w-11 shrink-0 rounded-lg shadow-sm" style={{ backgroundColor: item.color || '#9ca3af' }} />
+        <span className="min-w-0">
+          <span className="block truncate font-black text-slate-900 dark:text-white">{item.name}</span>
+          <span className="mt-1 block truncate text-xs font-medium text-slate-400">{item.description || 'Fixed request type'}</span>
+        </span>
+      </div>
+
+      <div>
+        <span className={clsx(
+          'inline-flex rounded-lg px-3 py-1.5 text-xs font-black',
+          isActive
+            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
+            : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
+        )}>
+          {isActive ? 'On' : 'Off'}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-2 text-sm font-bold text-slate-600 dark:text-slate-300">
+        <Clock size={15} className="text-emerald-500" />
+        {allowed}x {limitLabel(limit)}
+      </div>
+
+      <div>
+        <span className="inline-flex rounded-lg bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300">
+          {durationControlLabel(control)}
+          {control === 'hours' && maxHours ? `, max ${Number(maxHours).toFixed(2)}h` : ''}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-2 text-sm font-bold text-slate-600 dark:text-slate-300">
+        <CircleDollarSign size={15} className="text-emerald-500" />
+        ${Number(deduct).toFixed(2)}
+      </div>
+
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={onEdit}
+          className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 text-sm font-bold text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+        >
+          <Pencil size={15} />
+          Edit
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function PermissionTypeCard({ item, onEdit }) {
   const allowed = item.allowedTimes ?? item.allowed_times ?? 0
   const limit   = item.limitType   ?? item.limit_type   ?? 'per_month'
   const control = item.durationControl ?? item.duration_control ?? 'any'
   const maxHours = item.maxHours ?? item.max_hours ?? null
   const deduct  = item.deductionAmount ?? item.deduction_amount ?? 0
+  const isActive = item.isActive ?? item.is_active ?? true
 
   return (
     <div className="flex flex-col rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -302,6 +300,14 @@ function PermissionTypeCard({ item, onEdit, onDelete }) {
             {item.description && (
               <p className="mt-0.5 line-clamp-1 text-xs text-slate-400">{item.description}</p>
             )}
+            <span className={clsx(
+              'mt-2 inline-flex rounded-lg px-2.5 py-1 text-xs font-black',
+              isActive
+                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
+                : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
+            )}>
+              {isActive ? 'On' : 'Off'}
+            </span>
           </div>
         </div>
 
@@ -332,21 +338,11 @@ function PermissionTypeCard({ item, onEdit, onDelete }) {
             onClick={onEdit}
             className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
           >
-            <Pencil size={14} /> Edit
+            <Pencil size={14} /> Edit Settings
           </button>
-          {isCore ? (
-            <div className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 py-2.5 text-sm font-semibold text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500">
-              <HardDrive size={14} /> Core
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={onDelete}
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-rose-200 py-2.5 text-sm font-semibold text-rose-600 transition hover:bg-rose-50 dark:border-rose-900 dark:text-rose-400 dark:hover:bg-rose-950/20"
-            >
-              <Trash2 size={14} /> Delete
-            </button>
-          )}
+          <div className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 py-2.5 text-sm font-semibold text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500">
+            <HardDrive size={14} /> Fixed
+          </div>
         </div>
       </div>
     </div>
@@ -354,13 +350,13 @@ function PermissionTypeCard({ item, onEdit, onDelete }) {
 }
 
 // ── Mobile row ────────────────────────────────────────────────────────────────
-function MobilePermissionTypeRow({ item, onEdit, onDelete }) {
-  const isCore  = CORE_TYPES.includes(item.name)
+function MobilePermissionTypeRow({ item, onEdit }) {
   const allowed = item.allowedTimes ?? item.allowed_times ?? 0
   const limit   = item.limitType   ?? item.limit_type   ?? 'per_month'
   const control = item.durationControl ?? item.duration_control ?? 'any'
   const maxHours = item.maxHours ?? item.max_hours ?? null
   const deduct  = item.deductionAmount ?? item.deduction_amount ?? 0
+  const isActive = item.isActive ?? item.is_active ?? true
 
   return (
     <div className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3.5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -385,6 +381,14 @@ function MobilePermissionTypeRow({ item, onEdit, onDelete }) {
           {durationControlLabel(control)}{control === 'hours' && maxHours ? `, max ${Number(maxHours).toFixed(2)}h` : ''}
         </p>
         <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">Approval Required</p>
+        <span className={clsx(
+          'mt-1 inline-flex w-fit rounded-lg px-2.5 py-1 text-xs font-black',
+          isActive
+            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
+            : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
+        )}>
+          {isActive ? 'On' : 'Off'}
+        </span>
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
@@ -395,19 +399,9 @@ function MobilePermissionTypeRow({ item, onEdit, onDelete }) {
         >
           <Pencil size={15} />
         </button>
-        {isCore ? (
-          <div className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 bg-slate-50 text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500">
-            <HardDrive size={15} />
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={onDelete}
-            className="grid h-9 w-9 place-items-center rounded-xl border border-rose-200 text-rose-500 transition hover:bg-rose-50 dark:border-rose-900 dark:hover:bg-rose-950/30"
-          >
-            <Trash2 size={15} />
-          </button>
-        )}
+        <div className="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 bg-slate-50 text-slate-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500">
+          <HardDrive size={15} />
+        </div>
       </div>
     </div>
   )
@@ -415,6 +409,7 @@ function MobilePermissionTypeRow({ item, onEdit, onDelete }) {
 
 // ── Desktop inline form ───────────────────────────────────────────────────────
 function DesktopPermissionTypeForm({ initialData, onClose, onSave }) {
+  const isFixedType = Boolean(initialData)
   const [form, setForm] = useState(
     initialData ? {
       name:            initialData.name            || '',
@@ -462,12 +457,8 @@ function DesktopPermissionTypeForm({ initialData, onClose, onSave }) {
             <Hammer size={22} />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-slate-950 dark:text-white">
-              {initialData ? 'Edit Permission Type' : 'Add Permission Type'}
-            </h2>
-            <p className="text-sm text-slate-500 dark:text-slate-400">
-              {initialData ? 'Update this permission type.' : 'Create a new permission type for attendance and salary rules.'}
-            </p>
+            <h2 className="text-2xl font-bold text-slate-950 dark:text-white">Edit Request Type Settings</h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400">The request type name is fixed. Update only rules and display details.</p>
           </div>
         </div>
       </div>
@@ -490,18 +481,19 @@ function DesktopPermissionTypeForm({ initialData, onClose, onSave }) {
                 : 'border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950',
             )}>
               <FileText size={20} className="shrink-0 text-emerald-500" />
-              <input
-                type="text"
-                placeholder="e.g. Late Check In"
-                value={form.name}
-                onChange={(e) => set('name', e.target.value)}
-                className="flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none placeholder:text-slate-400 dark:text-white"
-              />
+                <input
+                  type="text"
+                  placeholder="e.g. Late Check In"
+                  value={form.name}
+                  onChange={(e) => set('name', e.target.value)}
+                  readOnly={isFixedType}
+                  className="flex-1 bg-transparent text-sm font-medium text-slate-800 outline-none placeholder:text-slate-400 read-only:cursor-not-allowed read-only:text-slate-500 dark:text-white dark:read-only:text-slate-400"
+                />
               {errors.name && <AlertCircle size={18} className="shrink-0 text-rose-500" />}
             </div>
             {errors.name
               ? <p className="mt-1.5 text-xs font-semibold text-rose-500">{errors.name}</p>
-              : <Helper text="Enter a clear name for this permission type." />
+                : <Helper text="This is a fixed request type. Users cannot add, delete, or rename request types." />
             }
           </div>
 

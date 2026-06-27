@@ -34,10 +34,15 @@ class TelegramNotificationService
 
     public function send(string $message, string|array $eventKeys = 'daily_attendance'): void
     {
+        $this->sendWithResults($message, $eventKeys);
+    }
+
+    public function sendWithResults(string $message, string|array $eventKeys = 'daily_attendance'): array
+    {
         $token = $this->getToken();
 
         if (! $token || ! $this->alertEnabled('telegram_bot_enabled', true)) {
-            return;
+            return [];
         }
 
         $keys = is_array($eventKeys) ? $eventKeys : [$eventKeys];
@@ -47,11 +52,29 @@ class TelegramNotificationService
             $destinations = $destinations->merge($this->resolveDestinations($eventKey));
         }
 
-        $destinations
+        return $destinations
             ->unique(fn ($destination) => $destination->chat_id.'|'.($destination->message_thread_id ?? ''))
-            ->each(function ($destination) use ($token, $message) {
-                $this->sendPayload($token, $destination->chat_id, $message, $destination->message_thread_id ?? null);
-            });
+            ->map(function ($destination) use ($token, $message) {
+                $result = $this->sendPayload($token, $destination->chat_id, $message, $destination->message_thread_id ?? null);
+
+                return array_merge($result, [
+                    'chat_id' => (string) $destination->chat_id,
+                    'message_thread_id' => $destination->message_thread_id ?? null,
+                ]);
+            })
+            ->values()
+            ->all();
+    }
+
+    public function sendReply(string $chatId, string $message, ?int $threadId = null, ?int $replyToMessageId = null): array
+    {
+        $token = $this->getToken();
+
+        if (! $token) {
+            return ['ok' => false, 'description' => 'TELEGRAM_BOT_TOKEN is not set.'];
+        }
+
+        return $this->sendPayload($token, $chatId, $message, $threadId, true, null, $replyToMessageId);
     }
 
     private function resolveDestinations(string $eventKey)
@@ -770,7 +793,7 @@ class TelegramNotificationService
         }
     }
 
-    private function sendPayload(string $token, string $chatId, string $message, ?int $threadId = null, bool $preview = true, ?string $previewUrl = null): array
+    private function sendPayload(string $token, string $chatId, string $message, ?int $threadId = null, bool $preview = true, ?string $previewUrl = null, ?int $replyToMessageId = null): array
     {
         try {
             $linkPreviewOptions = ['is_disabled' => ! $preview];
@@ -790,6 +813,13 @@ class TelegramNotificationService
                 $payload['message_thread_id'] = $threadId;
             }
 
+            if ($replyToMessageId) {
+                $payload['reply_parameters'] = [
+                    'message_id' => $replyToMessageId,
+                    'allow_sending_without_reply' => true,
+                ];
+            }
+
             $response = Http::withOptions(['proxy' => false])->timeout(10)->post("https://api.telegram.org/bot{$token}/sendMessage", $payload);
             $body     = $response->json();
 
@@ -799,7 +829,10 @@ class TelegramNotificationService
                 return ['ok' => false, 'description' => $desc];
             }
 
-            return ['ok' => true];
+            return [
+                'ok' => true,
+                'message_id' => $body['result']['message_id'] ?? null,
+            ];
         } catch (\Throwable $e) {
             Log::warning('Telegram notification exception', ['message' => $e->getMessage()]);
             return ['ok' => false, 'description' => 'Network error: '.$e->getMessage()];

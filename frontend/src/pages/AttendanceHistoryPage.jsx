@@ -10,8 +10,6 @@ import { EmptyState } from '../components/shared/UI'
 import { attendanceLocationMapUrl, employeeFullName, initials } from '../utils/format'
 import EditAttendanceModal from '../components/attendance/EditAttendanceModal'
 
-const todayStr = () => new Date().toISOString().split('T')[0]
-
 const STATUS_STYLE = {
   present:  { label: 'Present',     dot: 'bg-emerald-500', cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400' },
   late:     { label: 'Late',        dot: 'bg-amber-400',   cls: 'bg-amber-100  text-amber-700  dark:bg-amber-950/60  dark:text-amber-400'  },
@@ -35,14 +33,14 @@ function formatWorkHours(minutes) {
 export default function AttendanceHistoryPage({ appData, isLoaded, viewMode = 'all' }) {
   const [rows, setRows]                   = useState([])
   const [loading, setLoading]             = useState(true)
-  const [date, setDate]                   = useState(todayStr())
+  const [date, setDate]                   = useState('')
   const [department, setDept]             = useState('')
   const [branch, setBranch]               = useState('')
   const [empSearch, setEmpSearch]         = useState('')
   const [status, setStatus]               = useState('')
   const [type, setType]                   = useState('')
   const [page, setPage]                   = useState(1)
-  const [perPage, setPerPage]             = useState(10)
+  const [perPage, setPerPage]             = useState(100)
   const [editingAttendance, setEditing]   = useState(null)
   const [photoPreview, setPhotoPreview]   = useState(null)
 
@@ -86,10 +84,10 @@ export default function AttendanceHistoryPage({ appData, isLoaded, viewMode = 'a
     })
   }, [rows, empSearch, department, branch, type, viewMode])
 
-  /* ── Stats (from all API rows, not client-filtered) ──────────── */
+  /* ── Stats (from displayed records) ──────────── */
   const stats = useMemo(() => {
-    const total = rows.length || 1
-    const count = (fn) => rows.filter(fn).length
+    const total = filtered.length
+    const count = (fn) => filtered.filter(fn).length
     const pct   = (n)  => total ? ((n / total) * 100).toFixed(2) + '% of total' : '0%'
     const present     = count((r) => r.status === 'present')
     const late        = count((r) => r.status === 'late')
@@ -97,13 +95,13 @@ export default function AttendanceHistoryPage({ appData, isLoaded, viewMode = 'a
     const onLeave     = count((r) => r.status === 'on_leave' || r.status === 'half_day')
     const missingOut  = count((r) => r.check_in_at && !r.check_out_at && r.status !== 'absent')
     return [
-      { label: 'Present Today',      value: present,    pct: pct(present),   icon: Users,        tone: 'emerald' },
-      { label: 'Late Today',         value: late,       pct: pct(late),      icon: Clock,        tone: 'amber'   },
-      { label: 'Absent Today',       value: absent,     pct: pct(absent),    icon: UserMinus,    tone: 'rose'    },
+      { label: 'Present Records',    value: present,    pct: pct(present),   icon: Users,        tone: 'emerald' },
+      { label: 'Late Records',       value: late,       pct: pct(late),      icon: Clock,        tone: 'amber'   },
+      { label: 'Absent Records',     value: absent,     pct: pct(absent),    icon: UserMinus,    tone: 'rose'    },
       { label: 'On Leave',           value: onLeave,    pct: pct(onLeave),   icon: CalendarCheck,tone: 'sky'     },
       { label: 'Missing Check Out',  value: missingOut, pct: pct(missingOut),icon: LogOut,       tone: 'violet'  },
     ]
-  }, [rows])
+  }, [filtered])
 
   /* ── Pagination ───────────────────────────────────────────────── */
   const totalPages  = Math.max(1, Math.ceil(filtered.length / perPage))
@@ -111,7 +109,7 @@ export default function AttendanceHistoryPage({ appData, isLoaded, viewMode = 'a
   const paginated   = filtered.slice((safePage - 1) * perPage, safePage * perPage)
 
   const reset = () => {
-    setDate(todayStr())
+    setDate('')
     setDept('')
     setBranch('')
     setEmpSearch('')
@@ -139,7 +137,7 @@ export default function AttendanceHistoryPage({ appData, isLoaded, viewMode = 'a
     const csv  = [headers, ...csvData].map((r) => r.map((v) => `"${v}"`).join(',')).join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
     const url  = URL.createObjectURL(blob)
-    const a    = Object.assign(document.createElement('a'), { href: url, download: `attendance-${date || 'all'}.csv` })
+    const a    = Object.assign(document.createElement('a'), { href: url, download: date ? `attendance-${date}.csv` : 'attendance-records.csv' })
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -148,10 +146,7 @@ export default function AttendanceHistoryPage({ appData, isLoaded, viewMode = 'a
     <div className="space-y-5">
       {/* ── Page header ─────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-slate-950 dark:text-white">{viewMode === 'missing_checkout' ? 'Missing Check Out' : 'Attendance'}</h2>
-          <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">{viewMode === 'missing_checkout' ? 'Employees checked in without check out' : 'View All Attendance'}</p>
-        </div>
+        <div />
         <button
           onClick={load}
           className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
@@ -177,7 +172,7 @@ export default function AttendanceHistoryPage({ appData, isLoaded, viewMode = 'a
               type="date"
               className="h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
               value={date}
-              onChange={(e) => setDate(e.target.value)}
+              onChange={(e) => { setDate(e.target.value); setPage(1) }}
             />
           </div>
           {/* Department */}
@@ -420,7 +415,7 @@ export default function AttendanceHistoryPage({ appData, isLoaded, viewMode = 'a
                 value={perPage}
                 onChange={(e) => { setPerPage(Number(e.target.value)); setPage(1) }}
               >
-                {[5, 10, 25, 50].map((n) => <option key={n} value={n}>{n} / page</option>)}
+                {[10, 25, 50, 100, 200].map((n) => <option key={n} value={n}>{n} / page</option>)}
               </select>
             </div>
           </div>
