@@ -102,9 +102,8 @@ function EmployeeDrawer({ employee, onClose }) {
   const attendanceTime = (record, key) => {
     if (record?.[key]) return record[key]
     const value = record?.[`${key}_at`]
-    return value
-      ? new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      : '—'
+    const match = String(value || '').match(/(?:T|\s)(\d{2}:\d{2})/)
+    return match?.[1] || '—'
   }
   const downloadReport = () => {
     const header = isOvertime ? 'Date,Check In,Check Out,Work Minutes,Overtime Minutes,Status\n' : 'Date,Check In,Late Minutes,Deduction,Status\n'

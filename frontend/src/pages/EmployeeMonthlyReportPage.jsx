@@ -36,7 +36,7 @@ import {
 import { employeeMonthlyReportService } from '../services/api'
 import { FloatingSpinner } from '../components/shared/UI'
 import { inputCls } from '../components/attendance/reports/attendanceReportShared'
-import { canAccess, formatTime } from '../utils/format'
+import { canAccess } from '../utils/format'
 
 const STATUS_META = {
   present: {
@@ -242,8 +242,8 @@ function fmtWork(minutes) {
 function displayReportTime(day, key) {
   if (day?.[key]) return day[key]
   const timestamp = day?.[`${key}_at`]
-  if (timestamp) return formatTime(timestamp)
-  return null
+  const match = String(timestamp || '').match(/(?:T|\s)(\d{2}:\d{2})/)
+  return match?.[1] || null
 }
 
 function fmtSummaryMinutes(minutes) {
