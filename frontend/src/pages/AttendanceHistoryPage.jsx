@@ -38,10 +38,6 @@ function localDateString(value = new Date()) {
   return `${year}-${month}-${day}`
 }
 
-function rowDate(row) {
-  return row.attendance_date?.slice?.(0, 10) || row.attendance_date || ''
-}
-
 export default function AttendanceHistoryPage({ appData, isLoaded, viewMode = 'all' }) {
   const [rows, setRows]                   = useState([])
   const [loading, setLoading]             = useState(true)
@@ -60,8 +56,11 @@ export default function AttendanceHistoryPage({ appData, isLoaded, viewMode = 'a
     setLoading(true)
     try {
       const params = { per_page: 500 }
-      if (date)   params.date   = date
-      if (status) params.status = status
+      const effectiveDate = date || (status === 'absent' ? localDateString() : '')
+      if (effectiveDate) params.date = effectiveDate
+      // Absence is derived from employees who have no attendance record.
+      // Load every record for the target date before calculating that list.
+      if (status && status !== 'absent') params.status = status
       const res = await api.get('/attendance', { params })
       setRows(res.data.data || res.data || [])
       setPage(1)
@@ -86,7 +85,6 @@ export default function AttendanceHistoryPage({ appData, isLoaded, viewMode = 'a
 
     const employeeIdsWithAttendance = new Set(
       rows
-        .filter((row) => rowDate(row) === targetAbsentDate)
         .map((row) => Number(row.employee_id ?? row.employee?.id))
         .filter(Boolean),
     )
@@ -125,9 +123,10 @@ export default function AttendanceHistoryPage({ appData, isLoaded, viewMode = 'a
       if (department && item.employee?.department?.name !== department) return false
       if (branch     && item.employee?.branch?.name     !== branch)     return false
       if (type       && item.type !== type)                              return false
+      if (status === 'absent' && item.status !== 'absent')               return false
       return true
     })
-  }, [displayRows, empSearch, department, branch, type, viewMode])
+  }, [displayRows, empSearch, department, branch, type, status, viewMode])
 
   /* ── Stats (from displayed records) ──────────── */
   const stats = useMemo(() => {

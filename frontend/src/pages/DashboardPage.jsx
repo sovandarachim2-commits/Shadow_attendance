@@ -358,28 +358,47 @@ function RecentActivityPanel({ attendance, visits }) {
 
 // ── Admin-only widgets ────────────────────────────────────────────────────────
 function TodayAttendanceTable({ rows }) {
+  const [workStatus, setWorkStatus] = useState('all')
+  const filteredRows = workStatus === 'all'
+    ? rows
+    : rows.filter(({ attendance }) => getWorkStatus(attendance).key === workStatus)
+
   return (
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
-      <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4 dark:border-slate-800">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-5 py-4 dark:border-slate-800">
         <h3 className="text-base font-bold">Today's Attendance</h3>
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-300">
-          {rows.length} employees
-        </span>
+        <div className="flex items-center gap-2">
+          <select
+            value={workStatus}
+            onChange={(event) => setWorkStatus(event.target.value)}
+            className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none focus:border-emerald-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200"
+            aria-label="Filter by work status"
+          >
+            <option value="all">All Work Statuses</option>
+            <option value="office">Working in Office</option>
+            <option value="outdoor">Working Outdoor</option>
+            <option value="checked_out">Checked Out</option>
+            <option value="not_checked_in">Not Checked In</option>
+          </select>
+          <span className="whitespace-nowrap rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+            {filteredRows.length}/{rows.length} employees
+          </span>
+        </div>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <table className="w-full min-w-[860px] text-sm">
           <thead>
             <tr className="border-b border-slate-100 dark:border-slate-800">
-              {['#', 'Employee', 'Department', 'Check In', 'Check Out', 'Status'].map((col) => (
+              {['#', 'Employee', 'Department', 'Check In', 'Check Out', 'Attendance', 'Work Status'].map((col) => (
                 <th key={col} className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400">{col}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 && (
-              <tr><td colSpan={6} className="px-5 py-8 text-center text-sm text-slate-400">No employees found.</td></tr>
+            {filteredRows.length === 0 && (
+              <tr><td colSpan={7} className="px-5 py-8 text-center text-sm text-slate-400">No employees match this work status.</td></tr>
             )}
-            {rows.map(({ employee, attendance }, i) => {
+            {filteredRows.map(({ employee, attendance }, i) => {
               const name = [employee?.first_name, employee?.last_name].filter(Boolean).join(' ') || employee?.name || '-'
               return (
                 <tr key={employee?.id || attendance?.id || i} className="border-b border-slate-50 transition hover:bg-slate-50 dark:border-slate-800/50 dark:hover:bg-slate-950">
@@ -396,6 +415,7 @@ function TodayAttendanceTable({ rows }) {
                     {attendance?.check_out_at ? formatTime(attendance.check_out_at) : <span className="text-slate-300 dark:text-slate-600">-</span>}
                   </td>
                   <td className="px-4 py-3"><StatusPill status={attendance ? titleCase(attendance.status) : 'Not Checked In'} /></td>
+                  <td className="px-4 py-3"><WorkStatusPill attendance={attendance} /></td>
                 </tr>
               )
             })}
@@ -404,6 +424,40 @@ function TodayAttendanceTable({ rows }) {
       </div>
     </div>
   )
+}
+
+function WorkStatusPill({ attendance }) {
+  const { label, style } = getWorkStatus(attendance)
+  return <span className={clsx('inline-flex whitespace-nowrap rounded-full px-3 py-1 text-xs font-semibold', style)}>{label}</span>
+}
+
+function getWorkStatus(attendance) {
+  if (attendance?.check_out_at) {
+    return {
+      key: 'checked_out',
+      label: 'Checked Out',
+      style: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+    }
+  }
+  if (attendance?.check_in_at && attendance?.type === 'outdoor') {
+    return {
+      key: 'outdoor',
+      label: 'Working Outdoor',
+      style: 'bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-300',
+    }
+  }
+  if (attendance?.check_in_at) {
+    return {
+      key: 'office',
+      label: 'Working in Office',
+      style: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300',
+    }
+  }
+  return {
+    key: 'not_checked_in',
+    label: 'Not Checked In',
+    style: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+  }
 }
 
 function AttendanceDonutChart({ data, total }) {
