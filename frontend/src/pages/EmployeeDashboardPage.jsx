@@ -99,16 +99,20 @@ function EmployeeDrawer({ employee, onClose }) {
   const allRecords = employee.allRecords || employee.records || []
   const statusCount = (statuses) => allRecords.filter((record) => statuses.includes(record.display_status || record.status)).length
   const tabs = isOvertime ? ['Summary', 'Overtime History', 'Daily Records'] : ['Summary', 'Late History', 'Daily Records', 'Deductions', 'Requests']
-  const formatTime = (value) => value
-    ? new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    : '—'
+  const attendanceTime = (record, key) => {
+    if (record?.[key]) return record[key]
+    const value = record?.[`${key}_at`]
+    return value
+      ? new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : '—'
+  }
   const downloadReport = () => {
     const header = isOvertime ? 'Date,Check In,Check Out,Work Minutes,Overtime Minutes,Status\n' : 'Date,Check In,Late Minutes,Deduction,Status\n'
     const rows = (employee.records || []).map((record) => [
       record.attendance_date,
-      formatTime(record.check_in_at),
+      attendanceTime(record, 'check_in'),
       ...(isOvertime
-        ? [formatTime(record.check_out_at), record.work_minutes || 0, Math.max(0, Number(record.work_minutes || 0) - 480)]
+        ? [attendanceTime(record, 'check_out'), record.work_minutes || 0, Math.max(0, Number(record.work_minutes || 0) - 480)]
         : [record.late_minutes || 0, Number(record.deduction_amount || 0).toFixed(2)]),
       record.display_status || record.status,
     ].map((value) => `"${value}"`).join(',')).join('\n')
@@ -178,10 +182,10 @@ function EmployeeDrawer({ employee, onClose }) {
                   {(employee.records || []).slice(0, 8).map((record) => (
                     <tr key={record.id}>
                       <td className="px-3 py-3 font-semibold">{record.attendance_date}</td>
-                      <td className="px-3 py-3">{formatTime(record.check_in_at)}</td>
+                      <td className="px-3 py-3">{attendanceTime(record, 'check_in')}</td>
                       {isOvertime ? (
                         <>
-                          <td className="px-3 py-3">{formatTime(record.check_out_at)}</td>
+                          <td className="px-3 py-3">{attendanceTime(record, 'check_out')}</td>
                           <td className="px-3 py-3">{formatMinutesClock(record.work_minutes)}</td>
                           <td className="px-3 py-3 font-bold text-cyan-600">{formatMinutesClock(Math.max(0, Number(record.work_minutes || 0) - 480))}</td>
                           <td className="px-3 py-3"><span className="rounded-full bg-cyan-50 px-3 py-1 font-bold text-cyan-600 dark:bg-cyan-950/40">Overtime</span></td>

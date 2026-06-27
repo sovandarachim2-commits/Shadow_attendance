@@ -30,6 +30,18 @@ function formatWorkHours(minutes) {
   return `${h}h ${String(m).padStart(2, '0')}m`
 }
 
+function localDateString(value = new Date()) {
+  const dateValue = value instanceof Date ? value : new Date(value)
+  const year = dateValue.getFullYear()
+  const month = String(dateValue.getMonth() + 1).padStart(2, '0')
+  const day = String(dateValue.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function rowDate(row) {
+  return row.attendance_date?.slice?.(0, 10) || row.attendance_date || ''
+}
+
 export default function AttendanceHistoryPage({ appData, isLoaded, viewMode = 'all' }) {
   const [rows, setRows]                   = useState([])
   const [loading, setLoading]             = useState(true)
@@ -66,11 +78,44 @@ export default function AttendanceHistoryPage({ appData, isLoaded, viewMode = 'a
   const employees    = appData?.employees || []
   const departments  = useMemo(() => [...new Set(employees.map((e) => e.department?.name).filter(Boolean))].sort(), [employees])
   const branches     = useMemo(() => [...new Set(employees.map((e) => e.branch?.name).filter(Boolean))].sort(),     [employees])
+  const displayRows = useMemo(() => {
+    const targetAbsentDate = date || (status === 'absent' ? localDateString() : '')
+    const shouldAddAbsentRows = viewMode === 'all' && targetAbsentDate && (!status || status === 'absent')
+
+    if (!shouldAddAbsentRows) return rows
+
+    const employeeIdsWithAttendance = new Set(
+      rows
+        .filter((row) => rowDate(row) === targetAbsentDate)
+        .map((row) => Number(row.employee_id ?? row.employee?.id))
+        .filter(Boolean),
+    )
+
+    const syntheticAbsentRows = employees
+      .filter((employee) => (employee.status || 'active') === 'active')
+      .filter((employee) => !employeeIdsWithAttendance.has(Number(employee.id)))
+      .map((employee) => ({
+        id: `absent-${targetAbsentDate}-${employee.id}`,
+        employee_id: employee.id,
+        employee,
+        attendance_date: targetAbsentDate,
+        check_in_at: null,
+        check_out_at: null,
+        work_minutes: null,
+        status: 'absent',
+        type: employee.employment_type === 'outdoor_sales' ? 'outdoor' : 'office',
+        check_in_address: '',
+        check_out_address: '',
+        synthetic_absent: true,
+      }))
+
+    return [...rows, ...syntheticAbsentRows]
+  }, [rows, employees, date, status, viewMode])
 
   /* ── Client-side filtering ────────────────────────────────────── */
   const filtered = useMemo(() => {
     const q = empSearch.trim().toLowerCase()
-    return rows.filter((item) => {
+    return displayRows.filter((item) => {
       if (viewMode === 'missing_checkout' && (!item.check_in_at || item.check_out_at || item.status === 'absent')) return false
       if (q) {
         const name = employeeFullName(item.employee).toLowerCase()
@@ -82,7 +127,7 @@ export default function AttendanceHistoryPage({ appData, isLoaded, viewMode = 'a
       if (type       && item.type !== type)                              return false
       return true
     })
-  }, [rows, empSearch, department, branch, type, viewMode])
+  }, [displayRows, empSearch, department, branch, type, viewMode])
 
   /* ── Stats (from displayed records) ──────────── */
   const stats = useMemo(() => {
@@ -323,7 +368,10 @@ export default function AttendanceHistoryPage({ appData, isLoaded, viewMode = 'a
 
                       {/* Check In */}
                       <td className="px-4 py-4">
-                        <TimeCell datetime={item.check_in_at} isLate={isLate} />
+                        {item.synthetic_absent
+                          ? <AbsentDayCell date={item.attendance_date} />
+                          : <TimeCell datetime={item.check_in_at} isLate={isLate} />
+                        }
                       </td>
 
                       {/* Check Out */}
@@ -378,8 +426,14 @@ export default function AttendanceHistoryPage({ appData, isLoaded, viewMode = 'a
                       {/* Action */}
                       <td className="px-4 py-4">
                         <div className="flex items-center gap-1.5">
-                          <ActionBtn icon={Eye} label="View" tone="slate" onClick={() => {}} />
-                          <ActionBtn icon={Pencil} label="Edit" tone="sky" onClick={() => setEditing(item)} />
+                          {!item.synthetic_absent ? (
+                            <>
+                              <ActionBtn icon={Eye} label="View" tone="slate" onClick={() => {}} />
+                              <ActionBtn icon={Pencil} label="Edit" tone="sky" onClick={() => setEditing(item)} />
+                            </>
+                          ) : (
+                            <span className="text-xs font-semibold text-slate-400">No record</span>
+                          )}
                           {mapUrl && (
                             <a
                               href={mapUrl}
@@ -474,6 +528,23 @@ function TimeCell({ datetime, isLate }) {
       <div>
         <p className="font-semibold text-slate-900 dark:text-slate-100">{time}</p>
         <p className="text-[11px] text-slate-400">{date}</p>
+      </div>
+    </div>
+  )
+}
+
+function AbsentDayCell({ date }) {
+  const d = new Date(`${date}T00:00:00`)
+  const label = Number.isNaN(d.getTime())
+    ? date
+    : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+
+  return (
+    <div className="flex items-start gap-2">
+      <span className="mt-[5px] h-2 w-2 shrink-0 rounded-full bg-rose-500" />
+      <div>
+        <p className="font-semibold text-rose-700 dark:text-rose-300">Absent Day</p>
+        <p className="text-[11px] text-slate-400">{label}</p>
       </div>
     </div>
   )

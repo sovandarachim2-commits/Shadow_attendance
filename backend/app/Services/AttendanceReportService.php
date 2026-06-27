@@ -143,6 +143,8 @@ class AttendanceReportService
             'branch_id' => $employee?->branch_id ?? $row->branch_id,
             'position' => $employee?->position?->name,
             'attendance_date' => $row->attendance_date?->toDateString(),
+            'check_in' => $row->check_in_at?->format('H:i'),
+            'check_out' => $row->check_out_at?->format('H:i'),
             'check_in_at' => $row->check_in_at?->toIso8601String(),
             'check_out_at' => $row->check_out_at?->toIso8601String(),
             'work_minutes' => $row->work_minutes,
