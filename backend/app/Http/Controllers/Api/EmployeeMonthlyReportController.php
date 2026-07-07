@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Attendance;
 use App\Models\Employee;
+use App\Models\EmployeeMonthlyPayrollHistory;
 use App\Models\PermissionRequest;
 use App\Services\ImageUploadService;
+use App\Services\PayrollSecurityService;
 use App\Services\WorkScheduleService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -14,7 +16,10 @@ use Symfony\Component\HttpFoundation\Response;
 
 class EmployeeMonthlyReportController extends Controller
 {
-    public function __construct(private WorkScheduleService $workSchedules) {}
+    public function __construct(
+        private WorkScheduleService $workSchedules,
+        private PayrollSecurityService $payrollSecurity,
+    ) {}
     private const STATUS_LABELS = [
         'present'          => 'Present',
         'late'             => 'Late Check In',
@@ -56,9 +61,10 @@ class EmployeeMonthlyReportController extends Controller
         };
 
         $csv = implode(',', [
-            'Date', 'Schedule', 'Check In', 'Check Out', 'Work Hours', 'Late (min)',
+            'Date', 'Schedule', 'Check In', 'Check Out', 'Work Hours', 'Late',
             'Deduction', 'Overtime', 'Status',
         ])."\n";
+        $totals = $this->attendanceDetailTotals($report['days']);
 
         foreach ($report['days'] as $day) {
             $csv .= implode(',', [
@@ -67,12 +73,24 @@ class EmployeeMonthlyReportController extends Controller
                 $escape($day['check_in'] ?? '-'),
                 $escape($day['check_out'] ?? '-'),
                 $escape($fmtWork($day['work_minutes'])),
-                $escape($day['late_minutes'] ?? 0),
+                $escape($this->formatWorkDuration($day['late_minutes'] ?? 0)),
                 $escape(number_format((float) ($day['deduction_amount'] ?? 0), 2, '.', '')),
                 $escape($fmtWork($day['overtime_minutes'] ?? 0)),
                 $escape(self::STATUS_LABELS[$day['status']] ?? $day['status']),
             ])."\n";
         }
+
+        $csv .= implode(',', [
+            $escape('Total'),
+            $escape(''),
+            $escape(''),
+            $escape(''),
+            $escape($this->formatWorkDuration($totals['work_minutes'])),
+            $escape($this->formatWorkDuration($totals['late_minutes'])),
+            $escape(number_format((float) $totals['deduction_amount'], 2, '.', '')),
+            $escape($this->formatWorkDuration($totals['overtime_minutes'])),
+            $escape(''),
+        ])."\n";
 
         $code = $report['employee']['employee_code'] ?? 'emp';
 
@@ -80,6 +98,251 @@ class EmployeeMonthlyReportController extends Controller
             'Content-Type'        => 'text/csv',
             'Content-Disposition' => "attachment; filename=\"monthly-report-{$code}-{$report['month']}.csv\"",
         ]);
+    }
+
+    public function exportExcel(Request $request): Response
+    {
+        $report = $this->buildReport($request);
+
+        if (! $report['employee']) {
+            abort(422, 'Select an employee before exporting.');
+        }
+
+        $code = $report['employee']['employee_code'] ?? 'emp';
+        $filename = "monthly-report-{$code}-{$report['month']}.xls";
+
+        return response($this->buildExcelHtml($report), 200, [
+            'Content-Type'        => 'application/vnd.ms-excel; charset=UTF-8',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+            'Cache-Control'       => 'max-age=0',
+        ]);
+    }
+
+    public function payrollHistory(Request $request)
+    {
+        $this->payrollSecurity->assertUnlocked($request);
+
+        $data = $request->validate([
+            'month' => ['required', 'date_format:Y-m'],
+            'employee_id' => ['nullable', 'integer', 'exists:employees,id'],
+        ]);
+
+        $month = Carbon::parse($data['month'].'-01')->startOfMonth();
+
+        if (empty($data['employee_id'])) {
+            return response()->json([
+                'month' => $month->format('Y-m'),
+                'month_label' => $month->format('F Y'),
+                'items' => $this->payrollHistoryRows($request, $month),
+            ]);
+        }
+
+        $employeeId = $this->resolvePayrollHistoryEmployeeId($request, $data['employee_id']);
+
+        $history = EmployeeMonthlyPayrollHistory::query()
+            ->where('employee_id', $employeeId)
+            ->whereDate('month', $month->toDateString())
+            ->first();
+
+        return response()->json([
+            'history' => $history ? $this->formatPayrollHistory($history) : null,
+        ]);
+    }
+
+    public function savePayrollHistory(Request $request)
+    {
+        $this->payrollSecurity->assertUnlocked($request);
+
+        $user = $request->user();
+
+        abort_unless(
+            $user->hasPermission('payroll.create') || $user->hasPermission('payroll.update'),
+            403,
+            'You do not have permission to save payroll history.'
+        );
+
+        $data = $request->validate([
+            'month' => ['required', 'date_format:Y-m'],
+            'employee_id' => ['nullable', 'integer', 'exists:employees,id'],
+            'base_salary' => ['nullable', 'numeric', 'min:0'],
+            'allowances' => ['nullable', 'numeric', 'min:0'],
+            'overtime' => ['nullable', 'numeric', 'min:0'],
+            'commission' => ['nullable', 'numeric', 'min:0'],
+            'bonus' => ['nullable', 'numeric', 'min:0'],
+            'deductions' => ['nullable', 'numeric', 'min:0'],
+            'tax' => ['nullable', 'numeric', 'min:0'],
+            'status' => ['nullable', 'in:pending,paid'],
+            'report_snapshot' => ['nullable', 'array'],
+        ]);
+
+        $employeeId = $this->resolvePayrollHistoryEmployeeId($request, $data['employee_id'] ?? null);
+        $month = Carbon::parse($data['month'].'-01')->startOfMonth();
+        $values = [
+            'base_salary' => (float) ($data['base_salary'] ?? 0),
+            'allowances' => (float) ($data['allowances'] ?? 0),
+            'overtime' => (float) ($data['overtime'] ?? 0),
+            'commission' => (float) ($data['commission'] ?? 0),
+            'bonus' => (float) ($data['bonus'] ?? 0),
+            'deductions' => (float) ($data['deductions'] ?? 0),
+            'tax' => (float) ($data['tax'] ?? 0),
+        ];
+        $values['net_salary'] = $values['base_salary']
+            + $values['allowances']
+            + $values['overtime']
+            + $values['commission']
+            + $values['bonus']
+            - $values['deductions']
+            - $values['tax'];
+
+        $history = EmployeeMonthlyPayrollHistory::query()->updateOrCreate(
+            [
+                'employee_id' => $employeeId,
+                'month' => $month->toDateString(),
+            ],
+            [
+                ...$values,
+                'status' => $data['status'] ?? 'pending',
+                'report_snapshot' => $data['report_snapshot'] ?? null,
+                'updated_by' => $user->id,
+                'created_by' => EmployeeMonthlyPayrollHistory::query()
+                    ->where('employee_id', $employeeId)
+                    ->whereDate('month', $month->toDateString())
+                    ->value('created_by') ?: $user->id,
+            ]
+        );
+
+        return response()->json([
+            'history' => $this->formatPayrollHistory($history->fresh()),
+        ]);
+    }
+
+    private function buildExcelHtml(array $report): string
+    {
+        $employee = $report['employee'];
+        $cell = fn ($value): string => htmlspecialchars((string) ($value ?? ''), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $summary = $report['summary'] ?? [];
+        $monthly = $report['monthly_summary'] ?? [];
+        $requests = $report['request_summary'] ?? [];
+        $late = $report['late_analysis'] ?? [];
+        $summaryRows = [
+            ['Working Days', $summary['working_days'] ?? 0],
+            ['Present', $summary['present'] ?? 0],
+            ['Late Check In', $summary['late'] ?? 0],
+            ['Early Check Out', $summary['early_checkout'] ?? 0],
+            ['Absent', $summary['absent'] ?? 0],
+            ['Missing Check In', $summary['missing_checkin'] ?? 0],
+            ['Missing Check Out', $summary['missing_checkout'] ?? 0],
+            ['Day Off', $summary['day_off'] ?? 0],
+            ['Personal Request', $summary['personal_request'] ?? 0],
+        ];
+        $monthlyRows = [
+            ['Total Working Hours (Expected)', $this->formatWorkDuration($monthly['expected_minutes'] ?? 0)],
+            ['Total Worked Hours', $this->formatWorkDuration($monthly['worked_minutes'] ?? 0)],
+            ['Overtime', $this->formatWorkDuration($monthly['overtime_minutes'] ?? 0)],
+            ['Late Time', $this->formatWorkDuration($monthly['late_minutes'] ?? 0)],
+            ['Missing Hours', $this->formatWorkDuration($monthly['missing_minutes'] ?? 0)],
+            ['Average Daily Work Hours', $this->formatWorkDuration($monthly['average_minutes'] ?? 0)],
+            ['Longest Work Day', $this->formatWorkDuration($monthly['longest_minutes'] ?? 0)],
+            ['Shortest Work Day', $this->formatWorkDuration($monthly['shortest_minutes'] ?? 0)],
+        ];
+        $lateRows = [
+            ['Total Late Days', $late['days'] ?? 0],
+            ['Total Late Time', $this->formatWorkDuration($late['total_minutes'] ?? 0)],
+            ['Average Late', $this->formatWorkDuration((int) round((float) ($late['average_minutes'] ?? 0)))],
+            ['Longest Late', $this->formatWorkDuration($late['longest_minutes'] ?? 0)],
+            ['Late Deduction', '$'.number_format((float) ($late['deduction_amount'] ?? 0), 2, '.', '')],
+        ];
+        $summaryHtml = $this->buildKeyValueExcelTable('Attendance Summary', $summaryRows, $cell);
+        $monthlyHtml = $this->buildKeyValueExcelTable('Work Summary', $monthlyRows, $cell);
+        $lateHtml = $this->buildKeyValueExcelTable('Late Summary', $lateRows, $cell);
+        $requestHtml = count($requests)
+            ? $this->buildKeyValueExcelTable('Approved Requests', collect($requests)->map(fn ($count, $type) => [$type, $count])->all(), $cell)
+            : $this->buildKeyValueExcelTable('Approved Requests', [['No approved requests', 0]], $cell);
+        $totals = $this->attendanceDetailTotals($report['days']);
+
+        $rows = '';
+        foreach ($report['days'] as $day) {
+            $status = self::STATUS_LABELS[$day['status']] ?? $day['status'];
+            $rows .= '<tr>'
+                .'<td>'.$cell($day['date']).'</td>'
+                .'<td>'.$cell($day['schedule'] ?? '-').'</td>'
+                .'<td>'.$cell($day['check_in'] ?? '-').'</td>'
+                .'<td>'.$cell($day['check_out'] ?? '-').'</td>'
+                .'<td>'.$cell($this->formatWorkDuration($day['work_minutes'])).'</td>'
+                .'<td>'.$cell($this->formatWorkDuration($day['late_minutes'] ?? 0)).'</td>'
+                .'<td>'.$cell(number_format((float) ($day['deduction_amount'] ?? 0), 2, '.', '')).'</td>'
+                .'<td>'.$cell($this->formatWorkDuration($day['overtime_minutes'] ?? 0)).'</td>'
+                .'<td>'.$cell($status).'</td>'
+                .'</tr>';
+        }
+        $rows .= '<tr>'
+            .'<th colspan="4">Total</th>'
+            .'<th>'.$cell($this->formatWorkDuration($totals['work_minutes'])).'</th>'
+            .'<th>'.$cell($this->formatWorkDuration($totals['late_minutes'])).'</th>'
+            .'<th>'.$cell(number_format((float) $totals['deduction_amount'], 2, '.', '')).'</th>'
+            .'<th>'.$cell($this->formatWorkDuration($totals['overtime_minutes'])).'</th>'
+            .'<th></th>'
+            .'</tr>';
+
+        return '<!doctype html>'
+            .'<html><head><meta charset="UTF-8">'
+            .'<style>table{border-collapse:collapse}td,th{border:1px solid #999;padding:6px}th{font-weight:bold;background:#eef2f7}.meta th{text-align:left;background:#f8fafc}</style>'
+            .'</head><body>'
+            .'<table class="meta">'
+            .'<tr><th colspan="2">Employee Monthly Report</th></tr>'
+            .'<tr><td>Employee</td><td>'.$cell($employee['name'] ?? '-').'</td></tr>'
+            .'<tr><td>Employee Code</td><td>'.$cell($employee['employee_code'] ?? '-').'</td></tr>'
+            .'<tr><td>Department</td><td>'.$cell($employee['department'] ?? '-').'</td></tr>'
+            .'<tr><td>Month</td><td>'.$cell($report['month_label'] ?? $report['month']).'</td></tr>'
+            .'</table><br>'
+            .$summaryHtml.'<br>'
+            .$monthlyHtml.'<br>'
+            .$lateHtml.'<br>'
+            .$requestHtml.'<br>'
+            .'<table>'
+            .'<thead><tr>'
+            .'<th>Date</th><th>Schedule</th><th>Check In</th><th>Check Out</th><th>Work Hours</th><th>Late</th><th>Deduction</th><th>Overtime</th><th>Status</th>'
+            .'</tr></thead><tbody>'
+            .$rows
+            .'</tbody></table>'
+            .'</body></html>';
+    }
+
+    private function buildKeyValueExcelTable(string $title, array $rows, callable $cell): string
+    {
+        $html = '<table class="meta"><tr><th colspan="2">'.$cell($title).'</th></tr>';
+
+        foreach ($rows as [$label, $value]) {
+            $html .= '<tr><td>'.$cell($label).'</td><td>'.$cell($value).'</td></tr>';
+        }
+
+        return $html.'</table>';
+    }
+
+    private function attendanceDetailTotals(array $days): array
+    {
+        return array_reduce(
+            $days,
+            fn (array $totals, array $day) => [
+                'work_minutes' => $totals['work_minutes'] + (int) ($day['work_minutes'] ?? 0),
+                'late_minutes' => $totals['late_minutes'] + (int) ($day['late_minutes'] ?? 0),
+                'deduction_amount' => $totals['deduction_amount'] + (float) ($day['deduction_amount'] ?? 0),
+                'overtime_minutes' => $totals['overtime_minutes'] + (int) ($day['overtime_minutes'] ?? 0),
+            ],
+            ['work_minutes' => 0, 'late_minutes' => 0, 'deduction_amount' => 0.0, 'overtime_minutes' => 0],
+        );
+    }
+
+    private function formatWorkDuration(?int $minutes): string
+    {
+        if ($minutes === null) {
+            return '-';
+        }
+
+        $h = intdiv($minutes, 60);
+        $m = $minutes % 60;
+
+        return sprintf('%dh %02dm', $h, $m);
     }
 
     private function buildReport(Request $request): array
@@ -364,6 +627,171 @@ class EmployeeMonthlyReportController extends Controller
     private function canViewAll($user): bool
     {
         return $user->hasPermission('employee_report.view_all');
+    }
+
+    private function canViewPayrollAll($user): bool
+    {
+        return $user->hasPermission('payroll.view_all')
+            || $user->hasPermission('payroll.create')
+            || $user->hasPermission('payroll.update');
+    }
+
+    private function payrollHistoryRows(Request $request, Carbon $month): array
+    {
+        $user = $request->user();
+        $canAll = $this->canViewPayrollAll($user) || $this->canViewAll($user);
+        $ownEmployeeId = (int) ($user->employee_id ?? $user->employee?->id ?? 0);
+
+        if (! $canAll && ! $ownEmployeeId) {
+            abort(422, 'Your user account is not linked to an employee profile.');
+        }
+
+        $employees = Employee::query()
+            ->with(['department', 'position', 'branch', 'salarySetup'])
+            ->when(! $canAll, fn ($query) => $query->whereKey($ownEmployeeId))
+            ->orderBy('employee_code')
+            ->orderBy('first_name')
+            ->get();
+
+        $histories = EmployeeMonthlyPayrollHistory::query()
+            ->whereDate('month', $month->toDateString())
+            ->whereIn('employee_id', $employees->pluck('id'))
+            ->get()
+            ->keyBy('employee_id');
+
+        $previousHistories = EmployeeMonthlyPayrollHistory::query()
+            ->whereDate('month', '<', $month->toDateString())
+            ->whereIn('employee_id', $employees->pluck('id'))
+            ->orderByDesc('month')
+            ->get()
+            ->unique('employee_id')
+            ->keyBy('employee_id');
+
+        return $employees
+            ->values()
+            ->map(function (Employee $employee, int $index) use ($request, $month, $histories, $previousHistories) {
+                $history = $histories->get($employee->id);
+                $previousHistory = $previousHistories->get($employee->id);
+                $report = $this->buildEmployeePayrollReportSnapshot($request, $employee, $month);
+
+                return $this->formatPayrollHistoryRow($employee, $history, $previousHistory, $report, $index + 1);
+            })
+            ->all();
+    }
+
+    private function buildEmployeePayrollReportSnapshot(Request $request, Employee $employee, Carbon $month): array
+    {
+        $reportRequest = $request->duplicate([
+            'month' => $month->format('Y-m'),
+            'employee_id' => $employee->id,
+        ]);
+        $reportRequest->setUserResolver(fn () => $request->user());
+
+        return $this->buildReport($reportRequest);
+    }
+
+    private function formatPayrollHistoryRow(
+        Employee $employee,
+        ?EmployeeMonthlyPayrollHistory $history,
+        ?EmployeeMonthlyPayrollHistory $previousHistory,
+        array $report,
+        int $number
+    ): array
+    {
+        $summary = $history
+            ? $this->formatPayrollHistory($history)['summary']
+            : [
+                'baseSalary' => (float) ($previousHistory?->base_salary ?? $employee->salarySetup?->base_salary ?? 0),
+                'allowances' => 0.0,
+                'overtime' => 0.0,
+                'commission' => 0.0,
+                'bonus' => 0.0,
+                'deductions' => (float) ($report['late_analysis']['deduction_amount'] ?? 0),
+                'tax' => 0.0,
+            ];
+        $gross = (float) $summary['baseSalary']
+            + (float) $summary['allowances']
+            + (float) $summary['overtime']
+            + (float) $summary['commission']
+            + (float) $summary['bonus'];
+        $deductions = (float) $summary['deductions'] + (float) $summary['tax'];
+        $net = $history ? (float) $history->net_salary : $gross - $deductions;
+
+        return [
+            'number' => $number,
+            'employee_id' => $employee->id,
+            'employee_code' => $employee->employee_code,
+            'employee_name' => trim("{$employee->first_name} {$employee->last_name}"),
+            'department' => $employee->department?->name,
+            'position' => $employee->position?->name,
+            'branch' => $employee->branch?->name,
+            'photo_url' => $employee->photo_url,
+            'summary' => $summary,
+            'gross_salary' => round($gross, 2),
+            'total_deductions' => round($deductions, 2),
+            'net_salary' => round($net, 2),
+            'status' => $history?->status ?: 'pending',
+            'history' => $history ? $this->formatPayrollHistory($history) : null,
+            'report_snapshot' => [
+                'employee' => $report['employee'],
+                'month' => $report['month'],
+                'month_label' => $report['month_label'],
+                'summary' => $report['summary'],
+                'monthly_summary' => $report['monthly_summary'],
+                'late_analysis' => $report['late_analysis'],
+                'request_summary' => $report['request_summary'],
+                'schedule' => $report['schedule'],
+                'days' => $report['days'],
+                'total_days' => $report['total_days'],
+            ],
+        ];
+    }
+
+    private function resolvePayrollHistoryEmployeeId(Request $request, ?int $requestedEmployeeId): int
+    {
+        $user = $request->user();
+
+        if ($this->canViewPayrollAll($user) || $this->canViewAll($user)) {
+            if (! $requestedEmployeeId) {
+                abort(422, 'Select an employee before opening payroll history.');
+            }
+
+            return $requestedEmployeeId;
+        }
+
+        $employeeId = (int) ($user->employee_id ?? $user->employee?->id ?? 0);
+
+        if (! $employeeId) {
+            abort(422, 'Your user account is not linked to an employee profile.');
+        }
+
+        if ($requestedEmployeeId && $requestedEmployeeId !== $employeeId) {
+            abort(403);
+        }
+
+        return $employeeId;
+    }
+
+    private function formatPayrollHistory(EmployeeMonthlyPayrollHistory $history): array
+    {
+        return [
+            'id' => $history->id,
+            'employee_id' => $history->employee_id,
+            'month' => $history->month?->format('Y-m'),
+            'summary' => [
+                'baseSalary' => (float) $history->base_salary,
+                'allowances' => (float) $history->allowances,
+                'overtime' => (float) $history->overtime,
+                'commission' => (float) $history->commission,
+                'bonus' => (float) $history->bonus,
+                'deductions' => (float) $history->deductions,
+                'tax' => (float) $history->tax,
+            ],
+            'net_salary' => (float) $history->net_salary,
+            'status' => $history->status ?: 'pending',
+            'report_snapshot' => $history->report_snapshot,
+            'updated_at' => $history->updated_at?->toIso8601String(),
+        ];
     }
 
     private function canViewOwn($user): bool

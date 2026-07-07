@@ -50,7 +50,7 @@ export default function EditAttendanceModal({ attendance, onClose, onSaved, isLo
   const toTime = (iso) => (iso ? new Date(iso).toTimeString().slice(0, 5) : '')
 
   // Form state
-  const [date,        setDate]        = useState(attendance?.date || attendance?.check_in_at?.slice(0, 10) || '')
+  const [date,        setDate]        = useState(attendance?.date || attendance?.attendance_date || attendance?.check_in_at?.slice(0, 10) || '')
   const [checkIn,     setCheckIn]     = useState(toTime(attendance?.check_in_at))
   const [checkOut,    setCheckOut]    = useState(toTime(attendance?.check_out_at))
   const [status,      setStatus]      = useState(attendance?.status || 'present')
@@ -146,10 +146,18 @@ export default function EditAttendanceModal({ attendance, onClose, onSaved, isLo
         deduction_reason: deductionReason.trim() || null,
       }
 
-      await api.patch(`/attendance/${attendance?.id}/edit`, {
-        changes,
-        reason,
-      })
+      if (attendance?.synthetic_absent) {
+        await api.post('/attendance/manual-edit', {
+          employee_id: attendance.employee_id || attendance.employee?.id,
+          changes,
+          reason,
+        })
+      } else {
+        await api.patch(`/attendance/${attendance?.id}/edit`, {
+          changes,
+          reason,
+        })
+      }
       onSaved()
     } catch (ex) {
       setError(apiError(ex))

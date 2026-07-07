@@ -35,6 +35,10 @@ class SettingsController extends Controller
         $now = now();
 
         foreach ($data['settings'] as $key => $value) {
+            if (str_starts_with($key, 'payroll_lock_')) {
+                continue;
+            }
+
             SystemSetting::updateOrCreate(
                 ['key' => $key],
                 ['value' => $value, 'updated_at' => $now],
@@ -79,6 +83,8 @@ class SettingsController extends Controller
 
     private function settings()
     {
-        return Cache::remember('system_settings.all', now()->addMinutes(10), fn () => SystemSetting::all()->pluck('value', 'key'));
+        return Cache::remember('system_settings.all', now()->addMinutes(10), fn () => SystemSetting::query()
+            ->where('key', 'not like', 'payroll_lock_%')
+            ->pluck('value', 'key'));
     }
 }

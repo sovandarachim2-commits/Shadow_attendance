@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PermissionController;
 use App\Http\Controllers\Api\PermissionRequestController;
 use App\Http\Controllers\Api\EmployeeMonthlyReportController;
+use App\Http\Controllers\Api\PayrollSecurityController;
 use App\Http\Controllers\Api\PermissionTypeController;
 use App\Http\Controllers\Api\PositionController;
 use App\Http\Controllers\Api\ReportController;
@@ -62,6 +63,8 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('permission:attendance.check_in');
     Route::post('/attendance/check-out', [AttendanceController::class, 'checkOut'])
         ->middleware('permission:attendance.check_out');
+    Route::post('/attendance/manual-edit', [AttendanceController::class, 'createFromEdit'])
+        ->middleware('permission:attendance.edit');
     Route::match(['put', 'patch'], '/attendance/{attendance}', [AttendanceController::class, 'edit'])
         ->middleware('permission:attendance.edit');
     Route::patch('/attendance/{attendance}/edit', [AttendanceController::class, 'edit'])
@@ -131,6 +134,18 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('permission:employee_report.view_all,employee_report.view_own');
     Route::get('/employee-monthly-report/export', [EmployeeMonthlyReportController::class, 'export'])
         ->middleware('permission:employee_report.view_all,employee_report.view_own,employee_report.export');
+    Route::get('/employee-monthly-report/export-excel', [EmployeeMonthlyReportController::class, 'exportExcel'])
+        ->middleware('permission:employee_report.view_all,employee_report.view_own,employee_report.export');
+    Route::get('/employee-monthly-report/payroll-security', [PayrollSecurityController::class, 'status'])
+        ->middleware('permission:payroll.view_all,payroll.view_own,payroll.create,payroll.update,employee_report.view_all,employee_report.view_own,settings.manage,settings.security');
+    Route::post('/employee-monthly-report/payroll-security/unlock', [PayrollSecurityController::class, 'unlock'])
+        ->middleware('permission:payroll.view_all,payroll.view_own,payroll.create,payroll.update,employee_report.view_all,employee_report.view_own');
+    Route::put('/employee-monthly-report/payroll-security', [PayrollSecurityController::class, 'update'])
+        ->middleware('permission:settings.manage,settings.security');
+    Route::get('/employee-monthly-report/payroll-history', [EmployeeMonthlyReportController::class, 'payrollHistory'])
+        ->middleware('permission:payroll.view_all,payroll.view_own,payroll.create,payroll.update,employee_report.view_all,employee_report.view_own');
+    Route::post('/employee-monthly-report/payroll-history', [EmployeeMonthlyReportController::class, 'savePayrollHistory'])
+        ->middleware('permission:payroll.create,payroll.update');
 
     // Permission Requests
     Route::get('/permission-requests/replacements', [PermissionRequestController::class, 'replacements'])

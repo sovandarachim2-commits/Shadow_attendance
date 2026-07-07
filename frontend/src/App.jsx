@@ -21,7 +21,6 @@ import {
   Sun,
   Users,
   UserRound,
-  Wallet,
   X,
 } from 'lucide-react'
 import clsx from 'clsx'
@@ -47,7 +46,7 @@ import AdminAttendanceReportsPage from './pages/AdminAttendanceReportsPage'
 import MyAttendanceReportsPage from './pages/MyAttendanceReportsPage'
 import EmployeeMonthlyReportPage from './pages/EmployeeMonthlyReportPage'
 import EmployeeDashboardPage from './pages/EmployeeDashboardPage'
-import PayrollPage from './pages/PayrollPage'
+import PayrollHistoryPage from './pages/PayrollHistoryPage'
 import LoginPage from './pages/LoginPage'
 import MobileNav from './components/layout/MobileNav'
 import AttendanceActionModal from './components/attendance/AttendanceActionModal'
@@ -61,7 +60,6 @@ import { canAccess, formatTime, userDisplayName } from './utils/format'
 const sidebarMainItems = [
   { label: 'Dashboard', target: 'Dashboard', icon: Home, permissions: ['dashboard.admin', 'dashboard.employee'] },
   { label: 'Customer Visits', target: 'Customer Visits', icon: ShoppingBag, permissions: ['visits.view', 'visits.create', 'visits.manage'] },
-  { label: 'Payroll Management', target: 'Payroll Management', icon: Wallet, permissions: ['payroll.view_all', 'payroll.view_own'] },
   { label: 'Route Map', target: 'Route Map', icon: MapPinned, permissions: ['gps.view', 'gps.live', 'gps.history'] },
   { label: 'Profile', target: 'Profile', icon: UserRound, permissions: ['profile.update_own', 'profile.update_all', 'dashboard.admin', 'dashboard.employee'] },
   { label: 'Notifications', target: 'Notifications', icon: Bell, permissions: ['notifications.view', 'notifications.manage'] },
@@ -70,9 +68,10 @@ const sidebarMainItems = [
 const reportSubItems = [
   { label: 'Employee Dashboard', target: 'Employee Dashboard', activeTargets: ['Employee Dashboard', 'Attendance Dashboard'], permissions: ['employee_report.view_all', 'reports.attendance.view_all', 'attendance.view_all'] },
   { label: 'Employee Monthly Report', target: 'Employee Monthly Report', activeTargets: ['Employee Monthly Report', 'Monthly Report'], permissions: ['employee_report.view_all', 'employee_report.view_own'] },
+  { label: 'Payroll History', target: 'Payroll History', activeTargets: ['Payroll History'], permissions: ['payroll.view_all', 'payroll.view_own', 'payroll.create', 'payroll.update'] },
 ]
 
-const REPORTS_TARGETS = new Set(['Employee Dashboard', 'Attendance Dashboard', 'Employee Monthly Report', 'Monthly Report'])
+const REPORTS_TARGETS = new Set(['Employee Dashboard', 'Attendance Dashboard', 'Employee Monthly Report', 'Monthly Report', 'Payroll History'])
 
 const attendanceSubItems = [
   { label: 'Attendance Records', target: 'Attendance History', activeTargets: ['Attendance History'], permissions: ['attendance.view_all'] },
@@ -134,6 +133,7 @@ function AppShell({ isLoaded, initialBranding = {} }) {
   const [modal, setModal] = useState(null)
   const [editingEmployee, setEditingEmployee] = useState(null)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [payrollHistoryMonth, setPayrollHistoryMonth] = useState(null)
   const bootstrapRequestRef = useRef(null)
   const [data, setData] = useState({
     dashboard: null,
@@ -250,6 +250,11 @@ function AppShell({ isLoaded, initialBranding = {} }) {
     setActive('Permission Requests')
   }
 
+  const openPayrollHistoryPage = (month) => {
+    setPayrollHistoryMonth(month || null)
+    setActive('Payroll History')
+  }
+
   const props = {
     appData: data,
     isLoaded,
@@ -260,6 +265,7 @@ function AppShell({ isLoaded, initialBranding = {} }) {
     pendingRequestType,
     onClearPendingRequest: () => setPendingRequestType(null),
     setActive,
+    openPayrollHistoryPage,
     setModal,
     setEditingEmployee,
     onLogout: handleLogout,
@@ -286,8 +292,8 @@ function AppShell({ isLoaded, initialBranding = {} }) {
     Notifications: <NotificationsPage {...props} />,
     Profile: <ProfilePage {...props} />,
     'Website Branding': <BrandingPage {...props} />,
-    Settings: <SecurityPage refresh={() => loadRealData(user)} />,
-    'Help & Support': <SecurityPage refresh={() => loadRealData(user)} />,
+    Settings: <SecurityPage user={user} refresh={() => loadRealData(user)} />,
+    'Help & Support': <SecurityPage user={user} refresh={() => loadRealData(user)} />,
     'Attendance History': <AttendanceHistoryPage {...props} viewMode="all" />,
     'Admin Attendance Reports': <AdminAttendanceReportsPage {...props} />,
     'My Attendance Reports': <MyAttendanceReportsPage {...props} />,
@@ -295,7 +301,7 @@ function AppShell({ isLoaded, initialBranding = {} }) {
     'Monthly Report': <EmployeeMonthlyReportPage {...props} />,
     'Employee Dashboard': <EmployeeDashboardPage {...props} />,
     'Attendance Dashboard': <EmployeeDashboardPage {...props} />,
-    'Payroll Management': <PayrollPage {...props} />,
+    'Payroll History': <PayrollHistoryPage {...props} initialMonth={payrollHistoryMonth} />,
     'Permission Types': <PermissionTypesPage />,
     Employees: <EmployeesPage {...props} />,
     Branches: <BranchesPage />,

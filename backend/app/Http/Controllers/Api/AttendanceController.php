@@ -279,4 +279,80 @@ class AttendanceController extends Controller
 
         return $attendance->fresh(['employee', 'logs.editor']);
     }
+
+    public function createFromEdit(Request $request)
+    {
+        $data = $request->validate([
+            'employee_id' => ['required', 'integer', 'exists:employees,id'],
+            'changes' => ['required', 'array'],
+            'changes.attendance_date' => ['required', 'date'],
+            'changes.check_in_at' => ['nullable', 'date'],
+            'changes.check_out_at' => ['nullable', 'date'],
+            'changes.status' => ['sometimes', 'string', 'max:40'],
+            'changes.type' => ['sometimes', 'in:office,outdoor'],
+            'changes.notes' => ['nullable', 'string', 'max:2000'],
+            'changes.deduction_amount' => ['nullable', 'numeric', 'min:0'],
+            'changes.deduction_reason' => ['nullable', 'string', 'max:200'],
+            'reason' => ['required', 'string', 'min:8', 'max:2000'],
+        ]);
+
+        $employee = Employee::findOrFail((int) $data['employee_id']);
+        $attendanceDate = Carbon::parse($data['changes']['attendance_date'])->toDateString();
+        $attendance = Attendance::firstOrNew([
+            'employee_id' => $employee->id,
+            'attendance_date' => $attendanceDate,
+        ]);
+
+        if (! $attendance->exists) {
+            $attendance->branch_id = $employee->branch_id;
+        }
+
+        foreach ($data['changes'] as $field => $value) {
+            if (! in_array($field, ['attendance_date', 'type', 'status', 'check_in_at', 'check_out_at', 'notes', 'deduction_amount', 'deduction_reason'], true)) {
+                continue;
+            }
+
+            if (in_array($field, ['check_in_at', 'check_out_at'], true) && $value) {
+                $value = Carbon::parse($value);
+            }
+
+            if ($field === 'attendance_date') {
+                $value = Carbon::parse($value)->toDateString();
+            }
+
+            if ($field === 'deduction_amount') {
+                $value = $value === null || $value === '' ? null : round((float) $value, 2);
+            }
+
+            $attendance->{$field} = $value;
+        }
+
+        if (! $attendance->type) {
+            $attendance->type = 'office';
+        }
+
+        if (! $attendance->status) {
+            $attendance->status = 'present';
+        }
+
+        if ($attendance->check_in_at && $attendance->check_out_at) {
+            $attendance->work_minutes = $attendance->check_in_at->diffInMinutes($attendance->check_out_at);
+        } else {
+            $attendance->work_minutes = null;
+        }
+
+        $attendance->save();
+
+        AttendanceLog::create([
+            'attendance_id' => $attendance->id,
+            'edited_by' => $request->user()->id,
+            'field_name' => 'record',
+            'previous_value' => '',
+            'new_value' => 'Created from Attendance Records edit',
+            'reason' => $data['reason'],
+            'ip_address' => $request->ip(),
+        ]);
+
+        return $attendance->fresh(['employee', 'logs.editor']);
+    }
 }

@@ -11,6 +11,7 @@ import {
   FileSpreadsheet,
   FileText,
   Filter,
+  Eye,
   LogOut,
   Printer,
   RotateCcw,
@@ -53,8 +54,8 @@ const STATUS_META = {
   },
   early_checkout: {
     label: 'Early Check Out',
-    badge: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950/60 dark:text-yellow-300',
-    dot: 'bg-yellow-500',
+    badge: 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400',
+    dot: 'bg-blue-500',
     row: '',
   },
   absent: {
@@ -65,50 +66,50 @@ const STATUS_META = {
   },
   missing_checkin: {
     label: 'Missing Check In',
-    badge: 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-400',
-    dot: 'bg-violet-500',
+    badge: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+    dot: 'bg-slate-400',
     row: '',
   },
   missing_checkout: {
     label: 'Missing Check Out',
-    badge: 'bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-950/60 dark:text-fuchsia-400',
-    dot: 'bg-fuchsia-500',
+    badge: 'bg-orange-200 text-orange-800 dark:bg-orange-950/70 dark:text-orange-300',
+    dot: 'bg-orange-700',
     row: '',
   },
   missing_attendance: {
     label: 'Missing Check In',
-    badge: 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-400',
-    dot: 'bg-violet-500',
+    badge: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+    dot: 'bg-slate-400',
     row: '',
   },
   day_off: {
     label: 'Day Off',
-    badge: 'bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-400',
-    dot: 'bg-sky-500',
+    badge: 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-400',
+    dot: 'bg-violet-500',
     row: 'bg-sky-50/40 dark:bg-sky-950/10',
   },
   on_leave: {
     label: 'Personal Request',
-    badge: 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400',
-    dot: 'bg-blue-500',
+    badge: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-950/60 dark:text-cyan-400',
+    dot: 'bg-cyan-500',
     row: '',
   },
   leave: {
     label: 'Personal Request',
-    badge: 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400',
-    dot: 'bg-blue-500',
+    badge: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-950/60 dark:text-cyan-400',
+    dot: 'bg-cyan-500',
     row: '',
   },
   half_day: {
     label: 'Personal Request',
-    badge: 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400',
-    dot: 'bg-blue-500',
+    badge: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-950/60 dark:text-cyan-400',
+    dot: 'bg-cyan-500',
     row: '',
   },
   personal_request: {
     label: 'Personal Request',
-    badge: 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400',
-    dot: 'bg-blue-500',
+    badge: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-950/60 dark:text-cyan-400',
+    dot: 'bg-cyan-500',
     row: '',
   },
   holiday: {
@@ -120,14 +121,14 @@ const STATUS_META = {
 }
 
 const CARDS_CONFIG = [
-  { key: 'working_days', label: 'Working Days', icon: Calendar, tone: 'blue', pct: false },
   { key: 'present', label: 'Present', icon: CheckCircle2, tone: 'emerald' },
-  { key: 'late', label: 'Late', icon: Clock, tone: 'orange' },
   { key: 'absent', label: 'Absent', icon: UserX, tone: 'rose' },
-  { key: 'personal_request', label: 'Leave', icon: XCircle, tone: 'violet' },
+  { key: 'late', label: 'Late Check In', icon: Clock, tone: 'orange' },
+  { key: 'missing_checkin', label: 'Missing Check In', icon: AlertCircle, tone: 'gray' },
+  { key: 'early_checkout', label: 'Early Check Out', icon: LogOut, tone: 'blue' },
   { key: 'day_off', label: 'Day Off', icon: Umbrella, tone: 'violet' },
-  { key: 'missing_checkin', label: 'Missing Check In', icon: AlertCircle, tone: 'violet' },
-  { key: 'missing_checkout', label: 'Missing Check Out', icon: LogOut, tone: 'rose' },
+  { key: 'missing_checkout', label: 'Missing Check Out', icon: LogOut, tone: 'darkOrange' },
+  { key: 'personal_request', label: 'Personal Request', icon: XCircle, tone: 'cyan' },
 ]
 
 const TONE_ICON = {
@@ -139,8 +140,11 @@ const TONE_ICON = {
   violet: 'bg-violet-100 text-violet-600 dark:bg-violet-950/40 dark:text-violet-400',
   fuchsia: 'bg-fuchsia-100 text-fuchsia-600 dark:bg-fuchsia-950/40 dark:text-fuchsia-400',
   slate: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
+  gray: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300',
+  darkOrange: 'bg-orange-200 text-orange-800 dark:bg-orange-950/60 dark:text-orange-300',
   sky: 'bg-sky-100 text-sky-600 dark:bg-sky-950/40 dark:text-sky-400',
   blue: 'bg-blue-100 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400',
+  cyan: 'bg-cyan-100 text-cyan-600 dark:bg-cyan-950/40 dark:text-cyan-400',
 }
 
 const TONE_VALUE = {
@@ -152,8 +156,11 @@ const TONE_VALUE = {
   violet: 'text-violet-700 dark:text-violet-300',
   fuchsia: 'text-fuchsia-700 dark:text-fuchsia-300',
   slate: 'text-slate-600 dark:text-slate-300',
+  gray: 'text-slate-500 dark:text-slate-300',
+  darkOrange: 'text-orange-800 dark:text-orange-300',
   sky: 'text-sky-700 dark:text-sky-300',
   blue: 'text-blue-700 dark:text-blue-300',
+  cyan: 'text-cyan-700 dark:text-cyan-300',
 }
 
 const STATUS_FILTER_OPTIONS = [
@@ -171,19 +178,102 @@ const STATUS_FILTER_OPTIONS = [
 
 const LEGEND_ITEMS = [
   { dot: 'bg-emerald-500', label: 'Present' },
-  { dot: 'bg-orange-500', label: 'Late Check In' },
-  { dot: 'bg-yellow-500', label: 'Early Check Out' },
-  { dot: 'bg-sky-500', label: 'Day Off' },
-  { dot: 'bg-violet-500', label: 'Missing Check In' },
-  { dot: 'bg-fuchsia-500', label: 'Missing Check Out' },
-  { dot: 'bg-blue-500', label: 'Personal Request' },
   { dot: 'bg-rose-500', label: 'Absent' },
-  { dot: 'bg-cyan-500', label: 'Holiday' },
+  { dot: 'bg-orange-500', label: 'Late Check In' },
+  { dot: 'bg-slate-400', label: 'Missing Check In' },
+  { dot: 'bg-blue-500', label: 'Early Check Out' },
+  { dot: 'bg-violet-500', label: 'Day Off' },
+  { dot: 'bg-orange-700', label: 'Missing Check Out' },
+  { dot: 'bg-cyan-500', label: 'Personal Request' },
 ]
 
 const TABLE_COLS = ['Date', 'Schedule', 'Check In', 'Check Out', 'Work Hours', 'Late', 'Deduction', 'Overtime', 'Status']
 const MOBILE_TABLE_COLS = ['Date', 'Day', 'In', 'Out', 'Hours', 'Status']
 const MOBILE_PAGE_SIZE = 10
+
+const PRINT_TEXT = {
+  en: {
+    title: 'Monthly Report',
+    employeeInfo: 'Employee Information',
+    employee: 'Employee',
+    employeeId: 'Employee ID',
+    position: 'Position',
+    department: 'Department',
+    reportMonth: 'Report Month',
+    attendanceSummary: 'Attendance Summary',
+    attendanceRecords: 'Attendance Records',
+    leaveAbsence: 'Leave & Absence',
+    qty: 'Qty',
+    status: 'Status',
+    total: 'Total',
+    workingDays: 'Working Days',
+    present: 'Present',
+    late: 'Late Check In',
+    earlyCheckout: 'Early Check Out',
+    absent: 'Absent',
+    missingCheckin: 'Missing Check In',
+    missingCheckout: 'Missing Check Out',
+    dayOff: 'Day Off',
+    personalRequest: 'Personal Request',
+    tableCols: TABLE_COLS,
+    preparedBy: 'Prepared by',
+    hrDepartment: 'HR Department',
+    reviewedBy: 'Reviewed by',
+    departmentManager: 'Department Manager',
+    approvedBy: 'Approved by',
+    authorizedSignature: 'Authorized Signature',
+  },
+  km: {
+    title: 'របាយការណ៍ប្រចាំខែ',
+    employeeInfo: 'ព័ត៌មានបុគ្គលិក',
+    employee: 'បុគ្គលិក',
+    employeeId: 'លេខសម្គាល់បុគ្គលិក',
+    position: 'តួនាទី',
+    department: 'ផ្នែក',
+    reportMonth: 'ខែរបាយការណ៍',
+    attendanceSummary: 'សង្ខេបវត្តមាន',
+    attendanceRecords: 'កំណត់ត្រាវត្តមាន',
+    leaveAbsence: 'ការឈប់ និងអវត្តមាន',
+    qty: 'ចំនួន',
+    status: 'ស្ថានភាព',
+    total: 'សរុប',
+    workingDays: 'រំពឹងច៉នួនថ្ងៃធ្វើការ',
+    present: 'មានវត្តមាន',
+    late: 'ចូលយឺត',
+    earlyCheckout: 'ចេញមុន',
+    absent: 'អវត្តមាន',
+    missingCheckin: 'ភ្លេចចុចចូល',
+    missingCheckout: 'ភ្លេចចុចចេញ',
+    dayOff: 'ថ្ងៃឈប់សម្រាក',
+    personalRequest: 'សំណើផ្ទាល់ខ្លួន',
+    tableCols: ['កាលបរិច្ឆេទ', 'កាលវិភាគ', 'ម៉ោងចូល', 'ម៉ោងចេញ', 'ម៉ោងធ្វើការ', 'យឺត', 'ការកាត់', 'ថែមម៉ោង', 'ស្ថានភាព'],
+    preparedBy: 'រៀបចំដោយ',
+    hrDepartment: 'ផ្នែកធនធានមនុស្ស',
+    reviewedBy: 'ពិនិត្យដោយ',
+    departmentManager: 'អ្នកគ្រប់គ្រងផ្នែក',
+    approvedBy: 'អនុម័តដោយ',
+    authorizedSignature: 'ហត្ថលេខាអនុញ្ញាត',
+  },
+}
+
+const PRINT_STATUS_LABELS = {
+  en: Object.fromEntries(Object.entries(STATUS_META).map(([key, meta]) => [key, meta.label])),
+  km: {
+    present: PRINT_TEXT.km.present,
+    late: PRINT_TEXT.km.late,
+    early_checkout: PRINT_TEXT.km.earlyCheckout,
+    absent: PRINT_TEXT.km.absent,
+    missing_checkin: PRINT_TEXT.km.missingCheckin,
+    missing_checkout: PRINT_TEXT.km.missingCheckout,
+    missing_attendance: PRINT_TEXT.km.missingCheckin,
+    day_off: PRINT_TEXT.km.dayOff,
+    on_leave: PRINT_TEXT.km.personalRequest,
+    leave: PRINT_TEXT.km.personalRequest,
+    half_day: PRINT_TEXT.km.personalRequest,
+    personal_request: PRINT_TEXT.km.personalRequest,
+    holiday: 'ថ្ងៃឈប់បុណ្យ',
+  },
+}
 
 const MOBILE_STATUS_LABELS = {
   present: 'Present',
@@ -224,6 +314,12 @@ function formatDateShort(dateStr) {
   return d.toLocaleDateString(undefined, { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+function formatDateWithDay(dateStr, dayLabel) {
+  if (!dateStr) return '–'
+  const day = dayLabel || new Date(`${dateStr}T12:00:00`).toLocaleDateString(undefined, { weekday: 'short' })
+  return `${formatDateShort(dateStr)} (${day})`
+}
+
 function formatDateMobile(dateStr) {
   if (!dateStr) return '–'
   const d = new Date(`${dateStr}T12:00:00`)
@@ -253,6 +349,84 @@ function fmtSummaryMinutes(minutes) {
   return `${h}h ${String(m).padStart(2, '0')}m`
 }
 
+function attendanceDetailTotals(days = []) {
+  return days.reduce(
+    (totals, day) => ({
+      work_minutes: totals.work_minutes + Number(day.work_minutes || 0),
+      late_minutes: totals.late_minutes + Number(day.late_minutes || 0),
+      deduction_amount: totals.deduction_amount + Number(day.deduction_amount || 0),
+      overtime_minutes: totals.overtime_minutes + Number(day.overtime_minutes || 0),
+    }),
+    { work_minutes: 0, late_minutes: 0, deduction_amount: 0, overtime_minutes: 0 },
+  )
+}
+
+const PAYROLL_FIELDS = [
+  ['baseSalary', 'Base Salary'],
+  ['allowances', 'Allowances'],
+  ['overtime', 'Overtime'],
+  ['commission', 'Commission'],
+  ['bonus', 'Bonus'],
+  ['deductions', 'Deductions'],
+  ['tax', 'Tax'],
+]
+
+const EMPTY_PAYROLL_SUMMARY = PAYROLL_FIELDS.reduce((fields, [key]) => ({ ...fields, [key]: '' }), {})
+
+const STATUS_SUMMARY_TEXT_COLOR = {
+  present: '#059669',
+  absent: '#DC2626',
+  late: '#EA580C',
+  missing_checkin: '#6B7280',
+  missing_attendance: '#6B7280',
+  early_checkout: '#2563EB',
+  day_off: '#7C3AED',
+  missing_checkout: '#C2410C',
+  personal_request: '#0891B2',
+  on_leave: '#0891B2',
+  leave: '#0891B2',
+  half_day: '#0891B2',
+}
+
+function statusSummaryColor(key) {
+  return STATUS_SUMMARY_TEXT_COLOR[key] || '#111827'
+}
+
+function defaultPayrollSummary(report, savedSummary = null) {
+  const data = report?.data || {}
+  const dailyTotals = attendanceDetailTotals(data.days || [])
+  const deductionTotal = Number(data.late_analysis?.deduction_amount ?? dailyTotals.deduction_amount ?? 0)
+
+  return {
+    ...EMPTY_PAYROLL_SUMMARY,
+    ...(savedSummary || {}),
+    deductions: savedSummary?.deductions ?? deductionTotal.toFixed(2),
+  }
+}
+
+function payrollNumber(value) {
+  return Number(value || 0)
+}
+
+function payrollNet(summary = {}) {
+  return (
+    payrollNumber(summary.baseSalary) +
+    payrollNumber(summary.allowances) +
+    payrollNumber(summary.overtime) +
+    payrollNumber(summary.commission) +
+    payrollNumber(summary.bonus) -
+    payrollNumber(summary.deductions) -
+    payrollNumber(summary.tax)
+  )
+}
+
+function fmtMoney(value) {
+  return `$${payrollNumber(value).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`
+}
+
 function downloadBlob(blob, filename) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -265,7 +439,7 @@ function downloadBlob(blob, filename) {
 function buildClientCsv(data) {
   const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`
   const header = [
-    'Date', 'Schedule', 'Check In', 'Check Out', 'Work Hours', 'Late (min)',
+    'Date', 'Schedule', 'Check In', 'Check Out', 'Work Hours', 'Late',
     'Deduction', 'Overtime', 'Status',
   ].join(',')
   const rows = (data.days || []).map((d) =>
@@ -275,13 +449,180 @@ function buildClientCsv(data) {
       esc(displayReportTime(d, 'check_in') || '–'),
       esc(displayReportTime(d, 'check_out') || '–'),
       esc(fmtWork(d.work_minutes)),
-      esc(d.late_minutes || 0),
+      esc(fmtWork(d.late_minutes)),
       esc(Number(d.deduction_amount || 0).toFixed(2)),
       esc(fmtWork(d.overtime_minutes || 0)),
       esc(STATUS_META[d.status]?.label || d.status),
     ].join(','),
   )
-  return [header, ...rows].join('\n')
+  const totals = attendanceDetailTotals(data.days || [])
+  const totalRow = [
+    esc('Total'),
+    esc(''),
+    esc(''),
+    esc(''),
+    esc(fmtWork(totals.work_minutes)),
+    esc(fmtWork(totals.late_minutes)),
+    esc(Number(totals.deduction_amount || 0).toFixed(2)),
+    esc(fmtWork(totals.overtime_minutes)),
+    esc(''),
+  ].join(',')
+
+  return [header, ...rows, totalRow].join('\n')
+}
+
+function buildClientExcel(data, payrollSummary = null) {
+  const esc = (v) =>
+    String(v ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+  const keyValueTable = (title, items) => `
+    <table class="meta">
+      <tr><th colspan="2">${esc(title)}</th></tr>
+      ${items.map(([label, value]) => `<tr><td>${esc(label)}</td><td>${esc(value)}</td></tr>`).join('')}
+    </table>
+  `
+  const summary = data.summary || {}
+  const monthly = data.monthly_summary || {}
+  const requests = data.request_summary || {}
+  const late = data.late_analysis || {}
+  const requestRows = Object.entries(requests)
+  const workSummaryRows = [
+    ['present', 'Present', summary.present ?? 0],
+    ['late', 'Late Check In', summary.late ?? 0],
+    ['early_checkout', 'Early Check Out', summary.early_checkout ?? 0],
+    ['missing_checkout', 'Missing Check Out', summary.missing_checkout ?? 0],
+  ]
+  const absenceSummaryRows = [
+    ['absent', 'Absent', summary.absent ?? 0],
+    ['missing_checkin', 'Missing Check In', summary.missing_checkin ?? 0],
+    ['day_off', 'Day Off', summary.day_off ?? 0],
+    ['personal_request', 'Personal Request', summary.personal_request ?? 0],
+  ]
+  const workSummaryTotal = workSummaryRows.reduce((total, [, , value]) => total + Number(value || 0), 0)
+  const absenceSummaryTotal = absenceSummaryRows.reduce((total, [, , value]) => total + Number(value || 0), 0)
+  const payrollSummaryRows = payrollSummary
+    ? PAYROLL_FIELDS.filter(([key]) => payrollNumber(payrollSummary[key]) !== 0).map(([key, label]) => {
+        const isDeduction = key === 'deductions' || key === 'tax'
+        return [label, isDeduction ? `(${fmtMoney(payrollSummary[key])})` : fmtMoney(payrollSummary[key])]
+      })
+    : []
+  const netSalary = payrollSummary ? payrollNet(payrollSummary) : 0
+  const hasNetSalary = netSalary !== 0
+  const summaryRowCount = Math.max(workSummaryRows.length, absenceSummaryRows.length, payrollSummaryRows.length) + 1
+  const summaryRowsHtml = Array.from({ length: summaryRowCount }).map((_, index) => {
+    const isTotalRow = index === summaryRowCount - 1
+    const [workKey = '', workLabel = '', workValue = ''] = isTotalRow ? ['', 'Total', workSummaryTotal] : workSummaryRows[index] || []
+    const [absenceKey = '', absenceLabel = '', absenceValue = ''] = isTotalRow ? ['', 'Total', absenceSummaryTotal] : absenceSummaryRows[index] || []
+    const [payrollLabel = '', payrollValue = ''] = isTotalRow
+      ? hasNetSalary
+        ? ['Net Salary', fmtMoney(netSalary)]
+        : []
+      : payrollSummaryRows[index] || []
+    const workStyle = workKey ? ` style="color:${statusSummaryColor(workKey)};font-weight:700;"` : ''
+    const absenceStyle = absenceKey ? ` style="color:${statusSummaryColor(absenceKey)};font-weight:700;"` : ''
+    return `
+      <tr>
+        <td${workStyle}>${esc(workLabel)}</td><td${workStyle}>${esc(workValue)}</td>
+        <td${absenceStyle}>${esc(absenceLabel)}</td><td${absenceStyle}>${esc(absenceValue)}</td>
+        <td>${esc(payrollLabel)}</td><td>${esc(payrollValue)}</td>
+      </tr>
+    `
+  }).join('')
+  const summaryHtml = `
+    <table class="meta">
+      <tr><th colspan="6">Attendance Summary</th></tr>
+      <tr><td>Working Days</td><td colspan="5">${esc(summary.working_days ?? 0)}</td></tr>
+      <tr><th>Work</th><th>Qty</th><th>Absent</th><th>Qty</th><th>Payroll Summary</th><th>Amount</th></tr>
+      ${summaryRowsHtml}
+    </table>
+  `
+  const monthlyHtml = keyValueTable('Work Summary', [
+    ['Total Working Hours (Expected)', fmtWork(monthly.expected_minutes ?? 0)],
+    ['Total Worked Hours', fmtWork(monthly.worked_minutes ?? 0)],
+    ['Overtime', fmtWork(monthly.overtime_minutes ?? 0)],
+    ['Late Time', fmtWork(monthly.late_minutes ?? 0)],
+    ['Missing Hours', fmtWork(monthly.missing_minutes ?? 0)],
+    ['Average Daily Work Hours', fmtWork(monthly.average_minutes ?? 0)],
+    ['Longest Work Day', fmtWork(monthly.longest_minutes ?? 0)],
+    ['Shortest Work Day', fmtWork(monthly.shortest_minutes ?? 0)],
+  ])
+  const lateHtml = keyValueTable('Late Summary', [
+    ['Total Late Days', late.days ?? 0],
+    ['Total Late Time', fmtWork(late.total_minutes ?? 0)],
+    ['Average Late', fmtWork(Math.round(Number(late.average_minutes || 0)))],
+    ['Longest Late', fmtWork(late.longest_minutes ?? 0)],
+    ['Late Deduction', `$${Number(late.deduction_amount || 0).toFixed(2)}`],
+  ])
+  const requestHtml = keyValueTable(
+    'Approved Requests',
+    requestRows.length ? requestRows : [['No approved requests', 0]],
+  )
+  const rows = (data.days || []).map((d) => `
+    <tr>
+      <td>${esc(d.date)}</td>
+      <td>${esc(d.schedule || '-')}</td>
+      <td>${esc(displayReportTime(d, 'check_in') || '-')}</td>
+      <td>${esc(displayReportTime(d, 'check_out') || '-')}</td>
+      <td>${esc(fmtWork(d.work_minutes))}</td>
+      <td>${esc(fmtWork(d.late_minutes))}</td>
+      <td>${esc(Number(d.deduction_amount || 0).toFixed(2))}</td>
+      <td>${esc(fmtWork(d.overtime_minutes || 0))}</td>
+      <td style="color:${statusSummaryColor(d.status)};font-weight:700;">${esc(STATUS_META[d.status]?.label || d.status)}</td>
+    </tr>
+  `)
+  const totals = attendanceDetailTotals(data.days || [])
+
+  return `<!doctype html>
+    <html>
+      <head>
+        <meta charset="UTF-8" />
+        <style>
+          table { border-collapse: collapse; }
+          td, th { border: 1px solid #999; padding: 6px; }
+          th { font-weight: bold; background: #eef2f7; }
+          .meta th { text-align: left; background: #f8fafc; }
+        </style>
+      </head>
+      <body>
+        <table class="meta">
+          <tr><th colspan="2">Employee Monthly Report</th></tr>
+          <tr><td>Employee</td><td>${esc(data.employee?.name || '-')}</td></tr>
+          <tr><td>Employee Code</td><td>${esc(data.employee?.employee_code || '-')}</td></tr>
+          <tr><td>Department</td><td>${esc(data.employee?.department || '-')}</td></tr>
+          <tr><td>Month</td><td>${esc(data.month_label || data.month || '-')}</td></tr>
+        </table>
+        <br />
+        ${summaryHtml}
+        <br />
+        ${monthlyHtml}
+        <br />
+        ${lateHtml}
+        <br />
+        ${requestHtml}
+        <br />
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th><th>Schedule</th><th>Check In</th><th>Check Out</th><th>Work Hours</th><th>Late</th><th>Deduction</th><th>Overtime</th><th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.join('')}
+            <tr>
+              <th colspan="4">Total</th>
+              <th>${esc(fmtWork(totals.work_minutes))}</th>
+              <th>${esc(fmtWork(totals.late_minutes))}</th>
+              <th>${esc(Number(totals.deduction_amount || 0).toFixed(2))}</th>
+              <th>${esc(fmtWork(totals.overtime_minutes))}</th>
+              <th></th>
+            </tr>
+          </tbody>
+        </table>
+      </body>
+    </html>`
 }
 
 function StatusBadge({ status, compact = false }) {
@@ -356,13 +697,13 @@ const REQUEST_TONES = [
 
 const CHART_STATUS_COLORS = {
   present: '#10b981',
-  late: '#f97316',
   absent: '#f43f5e',
-  personal_request: '#3b82f6',
-  day_off: '#0ea5e9',
-  missing_checkin: '#8b5cf6',
-  missing_checkout: '#d946ef',
-  early_checkout: '#eab308',
+  late: '#f97316',
+  missing_checkin: '#94a3b8',
+  early_checkout: '#3b82f6',
+  day_off: '#8b5cf6',
+  missing_checkout: '#c2410c',
+  personal_request: '#06b6d4',
 }
 
 function EmployeeReportCharts({ days = [], summary = {} }) {
@@ -566,7 +907,6 @@ function MonthToolbar({ monthLabel, onPrev, onNext, onToday, disabled }) {
 
 function AttendanceTableRows({ days }) {
   return days.map((day, i) => {
-    const rowTone = STATUS_META[day.status]?.row || ''
     const isLate = Number(day.late_minutes) > 0
     const checkInTime = displayReportTime(day, 'check_in')
     const checkOutTime = displayReportTime(day, 'check_out')
@@ -575,8 +915,8 @@ function AttendanceTableRows({ days }) {
       <tr
         key={`${day.date}-${i}`}
         className={clsx(
+          i % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-[#F9FAFB] dark:bg-slate-950/40',
           'transition-colors hover:bg-emerald-50/50 dark:hover:bg-emerald-950/10',
-          rowTone,
         )}
       >
         <td className="px-4 py-3.5 font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap">
@@ -607,7 +947,7 @@ function AttendanceTableRows({ days }) {
           {fmtWork(day.work_minutes)}
         </td>
         <td className={clsx('whitespace-nowrap px-4 py-3.5 font-semibold', isLate ? 'text-orange-600' : 'text-slate-400')}>
-          {isLate ? `${day.late_minutes} min` : '–'}
+          {isLate ? fmtWork(day.late_minutes) : '–'}
         </td>
         <td className="whitespace-nowrap px-4 py-3.5 font-semibold text-rose-500">
           ${Number(day.deduction_amount || 0).toFixed(2)}
@@ -623,7 +963,12 @@ function AttendanceTableRows({ days }) {
   })
 }
 
-function DesktopReportCard({ days, monthLabel, onPrev, onNext, onToday, disabled }) {
+function DesktopReportCard({ days, monthLabel, employee, onPrev, onNext, onToday, disabled }) {
+  const employeeMeta = [employee?.employee_code, employee?.department]
+    .filter(Boolean)
+    .join(' - ')
+  const totals = attendanceDetailTotals(days)
+
   return (
     <div className="hidden overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 lg:block print:hidden">
       <MonthToolbar
@@ -634,7 +979,15 @@ function DesktopReportCard({ days, monthLabel, onPrev, onNext, onToday, disabled
         disabled={disabled}
       />
       <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3 dark:border-slate-800">
-        <h2 className="text-sm font-bold text-slate-900 dark:text-white">Attendance Details</h2>
+        <div className="min-w-0">
+          <h2 className="text-sm font-bold text-slate-900 dark:text-white">Attendance Details</h2>
+          {employee?.name && (
+            <p className="mt-0.5 truncate text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+              {employee.name}
+              {employeeMeta ? <span className="font-medium text-slate-500 dark:text-slate-400"> ({employeeMeta})</span> : null}
+            </p>
+          )}
+        </div>
         <div className="flex items-center gap-2 text-xs text-slate-500">
           <span>View by:</span>
           <span className="inline-flex h-8 items-center gap-5 rounded-lg border border-slate-200 bg-white px-3 font-bold text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
@@ -666,6 +1019,16 @@ function DesktopReportCard({ days, monthLabel, onPrev, onNext, onToday, disabled
             <tbody className="divide-y divide-slate-50 dark:divide-slate-800/60">
               <AttendanceTableRows days={days} />
             </tbody>
+            <tfoot className="border-t-2 border-emerald-200 bg-emerald-50/80 text-sm font-bold dark:border-emerald-900/60 dark:bg-emerald-950/25">
+              <tr>
+                <td className="px-4 py-3.5 text-slate-900 dark:text-slate-100" colSpan={4}>Total</td>
+                <td className="px-4 py-3.5 text-slate-900 dark:text-slate-100">{fmtWork(totals.work_minutes)}</td>
+                <td className="px-4 py-3.5 text-orange-600 dark:text-orange-300">{fmtWork(totals.late_minutes)}</td>
+                <td className="px-4 py-3.5 text-rose-600 dark:text-rose-300">${Number(totals.deduction_amount || 0).toFixed(2)}</td>
+                <td className="px-4 py-3.5 text-emerald-700 dark:text-emerald-300">{fmtWork(totals.overtime_minutes)}</td>
+                <td className="px-4 py-3.5" />
+              </tr>
+            </tfoot>
           </table>
         </div>
       )}
@@ -712,13 +1075,25 @@ function MobileMonthToolbar({ monthLabel, onPrev, onNext, disabled }) {
   )
 }
 
-function MobileReportCard({ days, monthLabel, onPrev, onNext, mobileShown, onShowMore, disabled }) {
+function MobileReportCard({ days, monthLabel, employee, onPrev, onNext, mobileShown, onShowMore, disabled }) {
   const visible = days.slice(0, mobileShown)
   const remaining = days.length - mobileShown
+  const employeeMeta = [employee?.employee_code, employee?.department]
+    .filter(Boolean)
+    .join(' - ')
+  const totals = attendanceDetailTotals(days)
 
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 lg:hidden print:hidden">
       <MobileMonthToolbar monthLabel={monthLabel} onPrev={onPrev} onNext={onNext} disabled={disabled} />
+      {employee?.name && (
+        <div className="border-b border-slate-100 px-3 py-2.5 dark:border-slate-800">
+          <p className="truncate text-xs font-bold text-slate-900 dark:text-white">Attendance Details - {employee.name}</p>
+          {employeeMeta && (
+            <p className="mt-0.5 truncate text-[11px] font-medium text-slate-500 dark:text-slate-400">{employeeMeta}</p>
+          )}
+        </div>
+      )}
 
       {days.length === 0 ? (
         <p className="p-8 text-center text-sm text-slate-400">No records for this month.</p>
@@ -743,7 +1118,13 @@ function MobileReportCard({ days, monthLabel, onPrev, onNext, mobileShown, onSho
                 const checkInTime = displayReportTime(day, 'check_in')
                 const checkOutTime = displayReportTime(day, 'check_out')
                 return (
-                  <tr key={`${day.date}-${i}`} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/30">
+                  <tr
+                    key={`${day.date}-${i}`}
+                    className={clsx(
+                      i % 2 === 0 ? 'bg-white dark:bg-slate-900' : 'bg-[#F9FAFB] dark:bg-slate-950/40',
+                      'hover:bg-slate-50/80 dark:hover:bg-slate-800/30',
+                    )}
+                  >
                     <td className="whitespace-nowrap px-2 py-2.5 font-semibold text-slate-800 dark:text-slate-200">
                       {formatDateMobile(day.date)}
                     </td>
@@ -770,6 +1151,13 @@ function MobileReportCard({ days, monthLabel, onPrev, onNext, mobileShown, onSho
                 )
               })}
             </tbody>
+            <tfoot className="border-t border-emerald-100 bg-emerald-50/80 text-[11px] font-bold dark:border-emerald-900/60 dark:bg-emerald-950/25">
+              <tr>
+                <td className="px-2 py-2.5 text-slate-900 dark:text-slate-100" colSpan={4}>Total</td>
+                <td className="whitespace-nowrap px-2 py-2.5 text-emerald-700 dark:text-emerald-300">{fmtWork(totals.work_minutes)}</td>
+                <td className="px-2 py-2.5" />
+              </tr>
+            </tfoot>
           </table>
         </div>
       )}
@@ -960,90 +1348,559 @@ function MobileFilterToolbar({
   )
 }
 
-function PrintReportSheet({ report }) {
+function PrintReportSheet({ report, appSettings = {}, language = 'en', payrollSummary = null }) {
   if (!report?.data?.employee) return null
 
   const { data, filters } = report
   const { employee, summary, days, month_label: monthLabel } = data
+  const totals = attendanceDetailTotals(days)
+  const companyName = appSettings.company_name || appSettings.site_title || 'Attendance System'
+  const reportMonth = filters.monthLabel || monthLabel || '-'
+  const text = PRINT_TEXT[language] || PRINT_TEXT.en
+  const statusLabels = PRINT_STATUS_LABELS[language] || PRINT_STATUS_LABELS.en
+  const workHeading = language === 'km' ? 'ការងារ' : 'Work'
+  const absenceHeading = language === 'km' ? text.absent : 'Absent'
+  const workSummaryRows = [
+    ['present', text.present, summary.present ?? 0],
+    ['late', text.late, summary.late ?? 0],
+    ['early_checkout', text.earlyCheckout, summary.early_checkout ?? 0],
+    ['missing_checkout', text.missingCheckout, summary.missing_checkout ?? 0],
+  ]
+  const absenceSummaryRows = [
+    ['absent', text.absent, summary.absent ?? 0],
+    ['missing_checkin', text.missingCheckin, summary.missing_checkin ?? 0],
+    ['day_off', text.dayOff, summary.day_off ?? 0],
+    ['personal_request', text.personalRequest, summary.personal_request ?? 0],
+  ]
+  const workSummaryTotal = workSummaryRows.reduce((total, [, , value]) => total + Number(value || 0), 0)
+  const absenceSummaryTotal = absenceSummaryRows.reduce((total, [, , value]) => total + Number(value || 0), 0)
+  const payrollSummaryRows = payrollSummary
+    ? PAYROLL_FIELDS.filter(([key]) => payrollNumber(payrollSummary[key]) !== 0).map(([key, label]) => {
+        const isDeduction = key === 'deductions' || key === 'tax'
+        return [label, isDeduction ? `(${fmtMoney(payrollSummary[key])})` : fmtMoney(payrollSummary[key])]
+      })
+    : []
+  const netSalary = payrollSummary ? payrollNet(payrollSummary) : 0
+  const hasNetSalary = netSalary !== 0
+  const summaryRowCount = Math.max(workSummaryRows.length, absenceSummaryRows.length, payrollSummaryRows.length) + 1
 
   return (
-    <div className="monthly-report-print-sheet hidden">
-      <h1 className="text-xl font-bold text-slate-900">Employee Monthly Report</h1>
-      <p className="mt-1 text-sm text-slate-600">{monthLabel}</p>
-
-      <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-slate-600 sm:grid-cols-4">
-        <p>
-          <span className="font-semibold">Month:</span> {filters.monthLabel}
-        </p>
-        <p>
-          <span className="font-semibold">Employee:</span> {employee.name}
-        </p>
-        <p>
-          <span className="font-semibold">Department:</span> {filters.departmentLabel}
-        </p>
-        <p>
-          <span className="font-semibold">Status:</span> {filters.statusLabel}
-        </p>
+    <div className={clsx('monthly-report-print-sheet hidden text-blue-950', language === 'km' && 'monthly-report-print-km')}>
+      <div className="mb-7 border-b-[3px] border-blue-950 pb-4 text-center">
+        <h1 className="text-[20px] font-black uppercase tracking-wide text-blue-950">{text.title}</h1>
       </div>
 
-      <div className="mt-4 rounded border border-slate-200 p-3 text-sm">
-        <p className="font-bold">{employee.name}</p>
-        <p className="text-slate-600">
-          {[employee.employee_code, employee.position, employee.department, employee.branch]
-            .filter(Boolean)
-            .join(' · ')}
-        </p>
+      <div className="grid grid-cols-[0.65fr_1.35fr] items-start gap-8">
+      <div className="text-[12px] text-blue-950">
+        <h2 className="text-sm font-black uppercase tracking-wide text-blue-950">{text.employeeInfo}</h2>
+        <div className="mt-4 grid grid-cols-[130px_1fr] gap-x-4 gap-y-3">
+          <p className="font-bold">{text.employee}:</p>
+          <p>{employee.name || '-'}</p>
+          <p className="font-bold">{text.employeeId}:</p>
+          <p>{employee.employee_code || '-'}</p>
+          <p className="font-bold">{text.position}:</p>
+          <p>{employee.position || '-'}</p>
+          <p className="font-bold">{text.department}:</p>
+          <p>{employee.department || filters.departmentLabel || '-'}</p>
+          <p className="font-bold">{text.reportMonth}:</p>
+          <p>{reportMonth}</p>
+          <p className="font-bold">{text.workingDays}:</p>
+          <p>{summary.working_days ?? 0}</p>
+        </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-3 gap-2 text-sm sm:grid-cols-6">
-        {CARDS_CONFIG.map((c) => (
-          <div key={c.key} className="rounded border border-slate-200 p-2">
-            <p className="text-[10px] text-slate-500">{c.label}</p>
-            <p className="text-base font-bold">{summary[c.key] ?? 0}</p>
-          </div>
-        ))}
+      <div>
+        <table className="w-full border-collapse border border-black text-[12px] text-black">
+          <thead>
+            <tr>
+              <th className="border border-black px-3 py-2 text-left text-[12px] font-black" colSpan={payrollSummary ? 6 : 4}>
+                {text.attendanceSummary}
+              </th>
+            </tr>
+            <tr>
+              <th className="border border-black px-2 py-1 text-center font-black">{workHeading}</th>
+              <th className="w-14 border border-black px-2 py-1 text-center font-black">{text.qty}</th>
+              <th className="border border-black px-2 py-1 text-center font-black">{absenceHeading}</th>
+              <th className="w-14 border border-black px-2 py-1 text-center font-black">{text.qty}</th>
+              {payrollSummary && (
+                <>
+                  <th className="border border-black px-2 py-1 text-center font-black">Payroll Summary</th>
+                  <th className="w-24 border border-black px-2 py-1 text-center font-black">Amount</th>
+                </>
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: summaryRowCount }).map((_, index) => {
+              const isTotalRow = index === summaryRowCount - 1
+              const [workKey = '', workLabel = '', workValue = ''] = isTotalRow ? ['', text.total, workSummaryTotal] : workSummaryRows[index] || []
+              const [absenceKey = '', absenceLabel = '', absenceValue = ''] = isTotalRow ? ['', text.total, absenceSummaryTotal] : absenceSummaryRows[index] || []
+              const [payrollLabel = '', payrollValue = ''] = isTotalRow
+                ? hasNetSalary
+                  ? ['Net Salary', fmtMoney(netSalary)]
+                  : []
+                : payrollSummaryRows[index] || []
+              const workStyle = workKey ? { color: statusSummaryColor(workKey), fontWeight: 700 } : undefined
+              const absenceStyle = absenceKey ? { color: statusSummaryColor(absenceKey), fontWeight: 700 } : undefined
+              return (
+                <tr
+                  key={`summary-${index}`}
+                  className={clsx(index % 2 === 0 ? 'bg-white' : 'bg-[#F9FAFB]', isTotalRow && 'font-black')}
+                >
+                  <td className="border border-black px-2 py-1 text-center" style={workStyle}>{workLabel}</td>
+                  <td className="border border-black px-2 py-1 text-center" style={workStyle}>{workValue}</td>
+                  <td className="border border-black px-2 py-1 text-center" style={absenceStyle}>{absenceLabel}</td>
+                  <td className="border border-black px-2 py-1 text-center" style={absenceStyle}>{absenceValue}</td>
+                  {payrollSummary && (
+                    <>
+                      <td className={clsx('border border-black px-2 py-1 text-center', payrollLabel === 'Net Salary' && 'font-black')}>{payrollLabel}</td>
+                      <td className={clsx('border border-black px-2 py-1 text-right', payrollLabel === 'Net Salary' && 'font-black')}>{payrollValue}</td>
+                    </>
+                  )}
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
       </div>
 
-      <table className="mt-6 w-full border-collapse text-[11px]">
+      <table className="mt-10 w-full border-collapse text-[11px] text-blue-950">
         <thead>
-          <tr className="border-b-2 border-slate-400 bg-slate-50">
-            {TABLE_COLS.map((h) => (
-              <th key={h} className="px-2 py-2 text-left font-bold text-slate-700">
+          <tr className="bg-[#eaf2fb]">
+            {text.tableCols.map((h) => (
+              <th key={h} className="border border-black px-2 py-2 text-center font-black text-blue-950">
                 {h}
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {days.map((day) => (
-            <tr key={day.date} className="border-b border-slate-200">
-              <td className="px-2 py-1.5">{formatDateShort(day.date)}</td>
-              <td className="px-2 py-1.5">{day.schedule || '–'}</td>
-              <td className="px-2 py-1.5">{displayReportTime(day, 'check_in') || '–'}</td>
-              <td className="px-2 py-1.5">{displayReportTime(day, 'check_out') || '–'}</td>
-              <td className="px-2 py-1.5">{fmtWork(day.work_minutes)}</td>
-              <td className="px-2 py-1.5">{day.late_minutes ? `${day.late_minutes} min` : '–'}</td>
-              <td className="px-2 py-1.5">${Number(day.deduction_amount || 0).toFixed(2)}</td>
-              <td className="px-2 py-1.5">{Number(day.overtime_minutes || 0) > 0 ? fmtWork(day.overtime_minutes) : '–'}</td>
-              <td className="px-2 py-1.5">{STATUS_META[day.status]?.label || day.status}</td>
+          {days.map((day, index) => (
+            <tr
+              key={day.date}
+              className={clsx(
+                index % 2 === 0 ? 'bg-white' : 'bg-[#F9FAFB]',
+                day.status === 'absent' && 'monthly-report-absent-row font-black text-rose-600',
+              )}
+            >
+              <td className="border border-black px-2 py-1.5 text-center">{formatDateWithDay(day.date, day.day)}</td>
+              <td className="border border-blue-200 px-2 py-1.5 text-center">{day.schedule || '–'}</td>
+              <td className="border border-blue-200 px-2 py-1.5 text-center">{displayReportTime(day, 'check_in') || '–'}</td>
+              <td className="border border-blue-200 px-2 py-1.5 text-center">{displayReportTime(day, 'check_out') || '–'}</td>
+              <td className="border border-black px-2 py-1.5 text-center">{fmtWork(day.work_minutes)}</td>
+              <td className="border border-blue-200 px-2 py-1.5 text-center">{day.late_minutes ? fmtWork(day.late_minutes) : '–'}</td>
+              <td className="border border-black px-2 py-1.5 text-center">${Number(day.deduction_amount || 0).toFixed(2)}</td>
+              <td className="border border-blue-200 px-2 py-1.5 text-center">{Number(day.overtime_minutes || 0) > 0 ? fmtWork(day.overtime_minutes) : '–'}</td>
+              <td className="border border-black px-2 py-1.5 text-center font-bold" style={{ color: statusSummaryColor(day.status) }}>{statusLabels[day.status] || STATUS_META[day.status]?.label || day.status}</td>
             </tr>
           ))}
         </tbody>
+        <tfoot>
+          <tr className="bg-[#eaf2fb] font-black text-blue-950">
+            <td className="border border-black px-2 py-2 text-center" colSpan={4}>{text.total}</td>
+            <td className="border border-black px-2 py-2 text-center">{fmtWork(totals.work_minutes)}</td>
+            <td className="border border-black px-2 py-2 text-center">{fmtWork(totals.late_minutes)}</td>
+            <td className="border border-black px-2 py-2 text-center">${Number(totals.deduction_amount || 0).toFixed(2)}</td>
+            <td className="border border-black px-2 py-2 text-center">{fmtWork(totals.overtime_minutes)}</td>
+            <td className="border border-black px-2 py-2" />
+          </tr>
+        </tfoot>
       </table>
 
-      <p className="mt-4 text-[10px] text-slate-500">
-        Working hours are calculated from check-in and check-out times. Printed{' '}
-        {new Date().toLocaleString()}.
-      </p>
+      <div className="mt-12 grid grid-cols-3 gap-10 text-center text-xs text-blue-950">
+        {[
+          [text.preparedBy, text.hrDepartment],
+          [text.reviewedBy, text.departmentManager],
+          [text.approvedBy, text.authorizedSignature],
+        ].map(([title, role]) => (
+          <div key={title}>
+            <p className="font-bold">{title}</p>
+            <div className="mx-auto mt-16 w-48 border-b border-dotted border-blue-950" />
+            <p className="mt-3 font-medium text-slate-950">{role}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-10 border-t-4 border-blue-900 pt-4 text-center text-[10px] font-medium text-slate-500">
+        {companyName}
+      </div>
     </div>
   )
 }
 
-export default function EmployeeMonthlyReportPage({ user, appData }) {
+function PrintLanguageDialog({ open, onCancel, onSelect }) {
+  if (!open) return null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 print:hidden" role="dialog" aria-modal="true">
+      <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-base font-black text-slate-900 dark:text-white">Choose report language</h2>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Select the language for the printed monthly report.</p>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+            aria-label="Close"
+          >
+            <XCircle size={18} />
+          </button>
+        </div>
+
+        <div className="mt-5 grid gap-3">
+          <button
+            type="button"
+            onClick={() => onSelect('km')}
+            className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-left text-sm font-bold text-blue-800 transition hover:bg-blue-100"
+          >
+            Khmer Report
+            <span className="mt-0.5 block text-xs font-semibold text-blue-600">របាយការណ៍ភាសាខ្មែរ</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => onSelect('en')}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-sm font-bold text-slate-800 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800"
+          >
+            English Report
+            <span className="mt-0.5 block text-xs font-semibold text-slate-500">Use English labels for the printout</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PayrollSummaryDialog({ open, report, values, action = 'print', onChange, onCancel, onSubmit }) {
+  if (!open) return null
+
+  const employee = report?.data?.employee
+  const filters = report?.filters || {}
+  const reportMonth = filters.monthLabel || report?.data?.month_label || '-'
+  const department = employee?.department || filters.departmentLabel || '-'
+  const submitLabel = action === 'excel' ? 'Continue to Export' : 'Continue to Print'
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 print:hidden" role="dialog" aria-modal="true">
+      <form
+        className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+        onSubmit={(event) => {
+          event.preventDefault()
+          onSubmit()
+        }}
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-base font-black text-slate-900 dark:text-white">Payroll Summary Preview</h2>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Fill this before printing the monthly report.</p>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+            aria-label="Close"
+          >
+            <XCircle size={18} />
+          </button>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-700 dark:bg-slate-800/50">
+          <div className="grid grid-cols-[110px_1fr] gap-x-3 gap-y-1">
+            <span className="font-bold text-slate-700 dark:text-slate-200">Employee:</span>
+            <span>{employee?.name || '-'}</span>
+            <span className="font-bold text-slate-700 dark:text-slate-200">Month:</span>
+            <span>{reportMonth}</span>
+            <span className="font-bold text-slate-700 dark:text-slate-200">Department:</span>
+            <span>{department}</span>
+          </div>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {PAYROLL_FIELDS.map(([key, label]) => (
+            <label key={key} className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              {label}
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                required
+                value={values[key]}
+                onChange={(event) => onChange(key, event.target.value)}
+                className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                placeholder="0.00"
+              />
+            </label>
+          ))}
+        </div>
+
+        <div className="mt-4 flex items-center justify-between rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm dark:border-blue-900/40 dark:bg-blue-950/30">
+          <span className="font-black text-blue-950 dark:text-blue-200">Net Salary</span>
+          <span className="font-black text-blue-950 dark:text-blue-200">{fmtMoney(payrollNet(values))}</span>
+        </div>
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="rounded-xl border border-blue-700 bg-blue-700 px-4 py-2 text-sm font-bold text-white hover:bg-blue-800"
+          >
+            {submitLabel}
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+function PayrollHistoryDialog({
+  open,
+  monthLabel,
+  rows,
+  selectedItem,
+  values,
+  loading,
+  saving,
+  canSave,
+  onSelect,
+  onChange,
+  onCancel,
+  onSave,
+}) {
+  if (!open) return null
+
+  const report = selectedItem?.report_snapshot || {}
+  const employee = report.employee || selectedItem
+  const summary = report.summary || {}
+  const monthly = report.monthly_summary || {}
+  const late = report.late_analysis || {}
+  const metricRows = [
+    ['Working Days', summary.working_days ?? 0],
+    ['Present', summary.present ?? 0],
+    ['Absent', summary.absent ?? 0],
+    ['Late Days', late.days ?? summary.late ?? 0],
+    ['Missing Check In', summary.missing_checkin ?? 0],
+    ['Missing Check Out', summary.missing_checkout ?? 0],
+    ['Work Hours', fmtWork(monthly.worked_minutes ?? 0)],
+    ['Overtime', fmtWork(monthly.overtime_minutes ?? 0)],
+    ['Late Deduction', fmtMoney(late.deduction_amount ?? 0)],
+  ]
+  const grossSalary = payrollNumber(values.baseSalary)
+    + payrollNumber(values.allowances)
+    + payrollNumber(values.overtime)
+    + payrollNumber(values.commission)
+    + payrollNumber(values.bonus)
+  const totalDeductions = payrollNumber(values.deductions) + payrollNumber(values.tax)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-3 print:hidden" role="dialog" aria-modal="true">
+      <form
+        className="max-h-[92vh] w-full max-w-7xl overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+        onSubmit={(event) => {
+          event.preventDefault()
+          if (canSave && selectedItem) onSave()
+        }}
+      >
+        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-100 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
+          <div>
+            <p className="text-xs font-black uppercase tracking-wide text-indigo-600 dark:text-indigo-400">Payroll History</p>
+            <h2 className="mt-1 text-lg font-black text-slate-950 dark:text-white">All Employees</h2>
+            <p className="mt-0.5 text-sm font-semibold text-slate-500">{monthLabel || '-'}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+            aria-label="Close payroll history"
+          >
+            <XCircle size={19} />
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="p-10 text-center text-sm font-semibold text-slate-500">Loading payroll history...</div>
+        ) : (
+          <div className="p-4">
+            <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+              <table className="w-full min-w-[1180px] border-collapse text-sm">
+                <thead className="bg-slate-50 text-xs font-black uppercase tracking-wide text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                  <tr>
+                    {['#', 'Employee ID', 'Employee', 'Department', 'Basic Salary', 'OT', 'Allowance', 'Bonus', 'Gross Salary', 'Deductions', 'Net Salary', 'Status', 'Action'].map((heading) => (
+                      <th key={heading} className="border border-slate-200 px-4 py-3 text-center dark:border-slate-700">{heading}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.length === 0 ? (
+                    <tr>
+                      <td className="border border-slate-200 px-4 py-10 text-center text-slate-500 dark:border-slate-700" colSpan={13}>
+                        No employees found for this month.
+                      </td>
+                    </tr>
+                  ) : rows.map((item) => {
+                    const isSelected = selectedItem?.employee_id === item.employee_id
+                    return (
+                      <tr key={item.employee_id} className={clsx('bg-white dark:bg-slate-900', isSelected && 'bg-indigo-50 dark:bg-indigo-950/30')}>
+                        <td className="border border-slate-200 px-4 py-3 text-center font-bold dark:border-slate-700">{item.number}</td>
+                        <td className="border border-slate-200 px-4 py-3 text-center font-bold dark:border-slate-700">{item.employee_code || '-'}</td>
+                        <td className="border border-slate-200 px-4 py-3 dark:border-slate-700">
+                          <div className="flex items-center gap-3">
+                            <div className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full bg-slate-200 text-xs font-black text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+                              {item.photo_url ? <img src={item.photo_url} alt={item.employee_name} className="h-full w-full object-cover" /> : item.employee_name?.charAt(0)?.toUpperCase() || '?'}
+                            </div>
+                            <span className="font-black text-slate-900 dark:text-white">{item.employee_name || '-'}</span>
+                          </div>
+                        </td>
+                        <td className="border border-slate-200 px-4 py-3 text-center font-semibold dark:border-slate-700">{item.department || '-'}</td>
+                        <td className="border border-slate-200 px-4 py-3 text-right font-bold dark:border-slate-700">{fmtMoney(item.summary?.baseSalary)}</td>
+                        <td className="border border-slate-200 px-4 py-3 text-right font-bold dark:border-slate-700">{fmtMoney(item.summary?.overtime)}</td>
+                        <td className="border border-slate-200 px-4 py-3 text-right font-bold dark:border-slate-700">{fmtMoney(item.summary?.allowances)}</td>
+                        <td className="border border-slate-200 px-4 py-3 text-right font-bold dark:border-slate-700">{fmtMoney(item.summary?.bonus)}</td>
+                        <td className="border border-slate-200 px-4 py-3 text-right font-black dark:border-slate-700">{fmtMoney(item.gross_salary)}</td>
+                        <td className="border border-slate-200 px-4 py-3 text-right font-bold dark:border-slate-700">{fmtMoney(item.total_deductions)}</td>
+                        <td className="border border-slate-200 px-4 py-3 text-right font-black dark:border-slate-700">{fmtMoney(item.net_salary)}</td>
+                        <td className="border border-slate-200 px-4 py-3 text-center dark:border-slate-700">
+                          <span className={clsx(
+                            'inline-flex rounded-lg px-3 py-1 text-xs font-black capitalize',
+                            item.status === 'paid'
+                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
+                              : 'bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300',
+                          )}>
+                            {item.status || 'pending'}
+                          </span>
+                        </td>
+                        <td className="border border-slate-200 px-4 py-3 text-center dark:border-slate-700">
+                          <button
+                            type="button"
+                            onClick={() => onSelect(item)}
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-slate-700 shadow-sm transition hover:bg-white dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                            aria-label={`View payroll for ${item.employee_name}`}
+                          >
+                            <Eye size={18} />
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {selectedItem && (
+              <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_1.15fr]">
+                <section className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-800/40">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-black text-slate-900 dark:text-white">{selectedItem.employee_name}</h3>
+                      <p className="text-xs font-semibold text-slate-500">{[selectedItem.employee_code, selectedItem.department, monthLabel].filter(Boolean).join(' - ')}</p>
+                    </div>
+                    <span className={clsx(
+                      'rounded-full px-2.5 py-1 text-xs font-bold capitalize',
+                      selectedItem.history
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300'
+                        : 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300',
+                    )}>
+                      {selectedItem.history ? 'Saved' : 'New'}
+                    </span>
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-2.5">
+                    {metricRows.map(([label, value]) => (
+                      <div key={label} className="rounded-lg border border-white bg-white p-3 shadow-sm dark:border-slate-700 dark:bg-slate-900">
+                        <p className="text-[11px] font-bold uppercase text-slate-400">{label}</p>
+                        <p className="mt-1 text-sm font-black text-slate-900 dark:text-white">{value}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {selectedItem.history?.updated_at && (
+                    <p className="mt-4 text-xs font-semibold text-slate-500">
+                      Last saved: {new Date(selectedItem.history.updated_at).toLocaleString()}
+                    </p>
+                  )}
+                </section>
+
+                <section>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {PAYROLL_FIELDS.map(([key, label]) => (
+                      <label key={key} className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                        {label}
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={values[key]}
+                          disabled={!canSave}
+                          onChange={(event) => onChange(key, event.target.value)}
+                          className="mt-1 h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-900 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20 disabled:bg-slate-100 disabled:text-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:disabled:bg-slate-800"
+                          placeholder="0.00"
+                        />
+                      </label>
+                    ))}
+                  </div>
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-700">
+                      <p className="text-xs font-bold uppercase text-slate-400">Gross Salary</p>
+                      <p className="mt-1 font-black">{fmtMoney(grossSalary)}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 px-4 py-3 dark:border-slate-700">
+                      <p className="text-xs font-bold uppercase text-slate-400">Deductions</p>
+                      <p className="mt-1 font-black">{fmtMoney(totalDeductions)}</p>
+                    </div>
+                    <div className="rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3 dark:border-indigo-900/40 dark:bg-indigo-950/30">
+                      <p className="text-xs font-bold uppercase text-indigo-500">Net Salary</p>
+                      <p className="mt-1 font-black text-indigo-950 dark:text-indigo-200">{fmtMoney(payrollNet(values))}</p>
+                    </div>
+                  </div>
+
+                  {!canSave && (
+                    <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 dark:border-amber-900/40 dark:bg-amber-950/30 dark:text-amber-300">
+                      You can view payroll history, but your role cannot save payroll values.
+                    </p>
+                  )}
+                </section>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2 border-t border-slate-100 p-5 dark:border-slate-800">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+          >
+            Close
+          </button>
+          {canSave && (
+            <button
+              type="submit"
+              disabled={saving || loading || !selectedItem}
+              className="inline-flex items-center gap-2 rounded-xl border border-indigo-700 bg-indigo-700 px-4 py-2 text-sm font-bold text-white hover:bg-indigo-800 disabled:opacity-60"
+            >
+              <CheckCircle2 size={16} />
+              {saving ? 'Saving...' : 'Save Payroll History'}
+            </button>
+          )}
+        </div>
+      </form>
+    </div>
+  )
+}
+
+export default function EmployeeMonthlyReportPage({ user, appData, openPayrollHistoryPage }) {
   const employees = appData?.employees || []
   const canViewAll = canAccess(user, ['employee_report.view_all'])
   const canViewOwn = canAccess(user, ['employee_report.view_own'])
   const canExport = canAccess(user, ['employee_report.export'])
+  const canViewPayroll = canAccess(user, ['payroll.view_all', 'payroll.view_own', 'payroll.create', 'payroll.update'])
+  const canSavePayrollHistory = canAccess(user, ['payroll.create', 'payroll.update'])
   const isViewOwnOnly = canViewOwn && !canViewAll
 
   const departments = useMemo(() => {
@@ -1085,6 +1942,16 @@ export default function EmployeeMonthlyReportPage({ user, appData }) {
   const [mobileShown, setMobileShown] = useState(MOBILE_PAGE_SIZE)
   const [exportOpen, setExportOpen] = useState(false)
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(true)
+  const [printLanguage, setPrintLanguage] = useState('en')
+  const [printLanguageDialogOpen, setPrintLanguageDialogOpen] = useState(false)
+  const [printPayrollSummary, setPrintPayrollSummary] = useState(null)
+  const [payrollHistoryOpen, setPayrollHistoryOpen] = useState(false)
+  const [payrollHistoryLoading, setPayrollHistoryLoading] = useState(false)
+  const [payrollHistorySaving, setPayrollHistorySaving] = useState(false)
+  const [payrollHistoryRows, setPayrollHistoryRows] = useState([])
+  const [selectedPayrollHistoryItem, setSelectedPayrollHistoryItem] = useState(null)
+  const [payrollHistoryMonthLabel, setPayrollHistoryMonthLabel] = useState('')
+  const [payrollHistoryDraft, setPayrollHistoryDraft] = useState(EMPTY_PAYROLL_SUMMARY)
   const reportSnapshotRef = useRef(null)
 
   const filteredEmployees = useMemo(() => {
@@ -1131,6 +1998,9 @@ export default function EmployeeMonthlyReportPage({ user, appData }) {
         if (s) params.status = s
         const res = await employeeMonthlyReportService.fetch(params)
         setData(res)
+        setPayrollHistoryRows([])
+        setSelectedPayrollHistoryItem(null)
+        setPrintPayrollSummary(null)
         setMobileShown(MOBILE_PAGE_SIZE)
         reportSnapshotRef.current = {
           data: res,
@@ -1179,6 +2049,9 @@ export default function EmployeeMonthlyReportPage({ user, appData }) {
       setEmployeeId('')
       setData(null)
       setError(null)
+      setPayrollHistoryRows([])
+      setSelectedPayrollHistoryItem(null)
+      setPrintPayrollSummary(null)
       reportSnapshotRef.current = null
       return
     }
@@ -1210,6 +2083,9 @@ export default function EmployeeMonthlyReportPage({ user, appData }) {
     setStatusFilter('')
     setData(null)
     setError(null)
+    setPayrollHistoryRows([])
+    setSelectedPayrollHistoryItem(null)
+    setPrintPayrollSummary(null)
     reportSnapshotRef.current = null
   }
 
@@ -1234,17 +2110,6 @@ export default function EmployeeMonthlyReportPage({ user, appData }) {
     draftDept !== departmentId ||
     draftStatus !== statusFilter
 
-  const buildExportParams = () => {
-    const snap = reportSnapshotRef.current
-    if (!snap) return null
-    const { month: m, employeeId: eid, departmentId: did, status: s } = snap.params
-    const params = { month: m }
-    if (eid) params.employee_id = eid
-    if (did) params.department_id = did
-    if (s) params.status = s
-    return params
-  }
-
   const requireLoadedReport = () => {
     if (filtersDirty) {
       setError('Filters changed. Click Search to load the report, then export or print.')
@@ -1257,43 +2122,110 @@ export default function EmployeeMonthlyReportPage({ user, appData }) {
     return true
   }
 
-  const handleExportExcel = async () => {
+  const exportExcelWithPayroll = async (payrollSummary) => {
     if (!requireLoadedReport()) return
     const snap = reportSnapshotRef.current
-    const exportParams = buildExportParams()
-    if (!exportParams) return
 
     setExporting(true)
     setError(null)
     try {
-      if (canExport) {
-        const blob = await employeeMonthlyReportService.exportCsv(exportParams)
-        downloadBlob(
-          new Blob([blob], { type: 'text/csv;charset=utf-8;' }),
-          `monthly-report-${snap.data.employee?.employee_code || 'emp'}-${snap.data.month}.csv`,
-        )
-        return
-      }
       downloadBlob(
-        new Blob([buildClientCsv(snap.data)], { type: 'text/csv;charset=utf-8;' }),
-        `monthly-report-${snap.data.employee?.employee_code || 'emp'}-${snap.data.month}.csv`,
+        new Blob([buildClientExcel(snap.data, payrollSummary)], { type: 'application/vnd.ms-excel;charset=utf-8;' }),
+        `monthly-report-${snap.data.employee?.employee_code || 'emp'}-${snap.data.month}.xls`,
       )
     } catch (err) {
       setError(err.response?.data?.message || 'Export failed. Click Search and try again.')
-      downloadBlob(
-        new Blob([buildClientCsv(snap.data)], { type: 'text/csv;charset=utf-8;' }),
-        `monthly-report-${snap.data.employee?.employee_code || 'emp'}-${snap.data.month}.csv`,
-      )
     } finally {
       setExporting(false)
     }
   }
 
+  const handleExportExcel = () => {
+    if (!requireLoadedReport()) return
+    setError(null)
+    exportExcelWithPayroll(printPayrollSummary)
+  }
+
   const handlePrint = () => {
     if (!requireLoadedReport()) return
     setError(null)
+    setPrintLanguageDialogOpen(true)
+  }
+
+  const handlePayrollHistoryDraftChange = (key, value) => {
+    setPayrollHistoryDraft((current) => ({ ...current, [key]: value }))
+  }
+
+  const openPayrollHistory = async () => {
+    const historyMonth = reportSnapshotRef.current?.data?.month || draftMonth || month
+    openPayrollHistoryPage?.(historyMonth)
+  }
+
+  const selectPayrollHistoryItem = (item) => {
+    setSelectedPayrollHistoryItem(item)
+    setPayrollHistoryDraft(defaultPayrollSummary({ data: item.report_snapshot }, item.summary))
+    if (reportSnapshotRef.current?.data?.employee?.id === item.employee_id) {
+      setPrintPayrollSummary(item.summary)
+    }
+  }
+
+  const savePayrollHistory = async () => {
+    if (!selectedPayrollHistoryItem) return
+
+    const item = selectedPayrollHistoryItem
+    setPayrollHistorySaving(true)
+    setError(null)
+
+    try {
+      const payload = {
+        month: item.report_snapshot?.month || reportSnapshotRef.current?.data?.month || draftMonth,
+        employee_id: item.employee_id,
+        base_salary: payrollNumber(payrollHistoryDraft.baseSalary),
+        allowances: payrollNumber(payrollHistoryDraft.allowances),
+        overtime: payrollNumber(payrollHistoryDraft.overtime),
+        commission: payrollNumber(payrollHistoryDraft.commission),
+        bonus: payrollNumber(payrollHistoryDraft.bonus),
+        deductions: payrollNumber(payrollHistoryDraft.deductions),
+        tax: payrollNumber(payrollHistoryDraft.tax),
+        report_snapshot: item.report_snapshot,
+      }
+      const res = await employeeMonthlyReportService.savePayrollHistory(payload)
+      if (res.history?.summary) {
+        const updatedItem = {
+          ...item,
+          history: res.history,
+          summary: res.history.summary,
+          gross_salary:
+            payrollNumber(res.history.summary.baseSalary)
+            + payrollNumber(res.history.summary.allowances)
+            + payrollNumber(res.history.summary.overtime)
+            + payrollNumber(res.history.summary.commission)
+            + payrollNumber(res.history.summary.bonus),
+          total_deductions: payrollNumber(res.history.summary.deductions) + payrollNumber(res.history.summary.tax),
+          net_salary: payrollNumber(res.history.net_salary),
+          status: 'paid',
+        }
+        setSelectedPayrollHistoryItem(updatedItem)
+        setPayrollHistoryRows((rows) => rows.map((row) => (row.employee_id === updatedItem.employee_id ? updatedItem : row)))
+        setPayrollHistoryDraft(defaultPayrollSummary({ data: updatedItem.report_snapshot }, res.history.summary))
+        if (reportSnapshotRef.current?.data?.employee?.id === updatedItem.employee_id) {
+          setPrintPayrollSummary(res.history.summary)
+        }
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to save payroll history.')
+    } finally {
+      setPayrollHistorySaving(false)
+    }
+  }
+
+  const printSelectedLanguage = (language) => {
+    setPrintLanguage(language)
+    setPrintLanguageDialogOpen(false)
     requestAnimationFrame(() => {
-      window.print()
+      requestAnimationFrame(() => {
+        window.print()
+      })
     })
   }
 
@@ -1329,10 +2261,37 @@ export default function EmployeeMonthlyReportPage({ user, appData }) {
       </button>
     </>
   )
+  const reportActions = (
+    <>
+      {canViewPayroll && (
+        <button
+          type="button"
+          onClick={openPayrollHistory}
+          disabled={!draftMonth || payrollHistoryLoading}
+          className="inline-flex h-10 items-center gap-2 rounded-xl border border-indigo-200 bg-white px-4 text-sm font-bold text-indigo-700 shadow-sm transition hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-indigo-900 dark:bg-slate-900 dark:hover:bg-indigo-950/30"
+        >
+          <Clock size={16} />
+          Payroll History
+        </button>
+      )}
+      {canExport && exportButtons}
+    </>
+  )
+  const hasReportActions = canViewPayroll || canExport
 
   return (
     <div className="employee-monthly-report space-y-4 p-3 pb-24 sm:space-y-5 sm:p-6 print:space-y-4 print:p-0">
-      <PrintReportSheet report={reportSnapshotRef.current} />
+      <PrintReportSheet
+        report={reportSnapshotRef.current}
+        appSettings={appData?.appSettings || {}}
+        language={printLanguage}
+        payrollSummary={printPayrollSummary}
+      />
+      <PrintLanguageDialog
+        open={printLanguageDialogOpen}
+        onCancel={() => setPrintLanguageDialogOpen(false)}
+        onSelect={printSelectedLanguage}
+      />
 
       <MobileFilterToolbar
         filtersOpen={mobileFiltersOpen}
@@ -1451,9 +2410,9 @@ export default function EmployeeMonthlyReportPage({ user, appData }) {
             </button>
           </div>
 
-          {canExport && (
+          {hasReportActions && (
             <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
-              {exportButtons}
+              {reportActions}
             </div>
           )}
         </div>
@@ -1523,7 +2482,7 @@ export default function EmployeeMonthlyReportPage({ user, appData }) {
           </div>
 
           <div className="ml-auto flex items-center gap-2 pb-px">
-            {canExport && exportButtons}
+            {hasReportActions && reportActions}
             <button
               type="button"
               onClick={handleReset}
@@ -1604,7 +2563,7 @@ export default function EmployeeMonthlyReportPage({ user, appData }) {
               />
             ))}
           </div>
-          <div className="hidden grid-cols-3 gap-3 lg:grid xl:grid-cols-6 print:hidden">
+          <div className="hidden grid-cols-3 gap-3 lg:grid xl:grid-cols-4 print:hidden">
             {CARDS_CONFIG.map((c) => (
               <SummaryCard
                 key={c.key}
@@ -1628,6 +2587,7 @@ export default function EmployeeMonthlyReportPage({ user, appData }) {
           <DesktopReportCard
             days={days}
             monthLabel={monthLabel}
+            employee={employee}
             onPrev={() => handleMonthNav(-1)}
             onNext={() => handleMonthNav(1)}
             onToday={handleToday}
@@ -1637,6 +2597,7 @@ export default function EmployeeMonthlyReportPage({ user, appData }) {
           <MobileReportCard
             days={days}
             monthLabel={monthLabel}
+            employee={employee}
             onPrev={() => handleMonthNav(-1)}
             onNext={() => handleMonthNav(1)}
             mobileShown={mobileShown}

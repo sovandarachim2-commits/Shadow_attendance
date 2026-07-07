@@ -97,6 +97,7 @@ export default function AttendanceHistoryPage({ appData, isLoaded, viewMode = 'a
         employee_id: employee.id,
         employee,
         attendance_date: targetAbsentDate,
+        date: targetAbsentDate,
         check_in_at: null,
         check_out_at: null,
         work_minutes: null,
@@ -431,7 +432,7 @@ export default function AttendanceHistoryPage({ appData, isLoaded, viewMode = 'a
                               <ActionBtn icon={Pencil} label="Edit" tone="sky" onClick={() => setEditing(item)} />
                             </>
                           ) : (
-                            <span className="text-xs font-semibold text-slate-400">No record</span>
+                            <ActionBtn icon={Pencil} label="Edit" tone="sky" onClick={() => setEditing(item)} />
                           )}
                           {mapUrl && (
                             <a

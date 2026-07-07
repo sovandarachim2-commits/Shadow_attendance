@@ -58,8 +58,18 @@ export const permissionRequestService = {
 export const employeeMonthlyReportService = {
   fetch: (params) =>
     api.get('/employee-monthly-report', { params }).then((r) => r.data),
-  exportCsv: (params) =>
-    api.get('/employee-monthly-report/export', { params, responseType: 'blob' }).then((r) => r.data),
+  exportExcel: (params) =>
+    api.get('/employee-monthly-report/export-excel', { params, responseType: 'blob' }).then((r) => r.data),
+  payrollHistory: (params) =>
+    api.get('/employee-monthly-report/payroll-history', { params }).then((r) => r.data),
+  savePayrollHistory: (payload) =>
+    api.post('/employee-monthly-report/payroll-history', payload).then((r) => r.data),
+  payrollSecurityStatus: () =>
+    api.get('/employee-monthly-report/payroll-security').then((r) => r.data),
+  unlockPayrollSecurity: (pin) =>
+    api.post('/employee-monthly-report/payroll-security/unlock', { pin }).then((r) => r.data),
+  updatePayrollSecurity: (payload) =>
+    api.put('/employee-monthly-report/payroll-security', payload).then((r) => r.data),
 }
 
 /** Load every employee page from GET /employees (directory, dropdowns, etc.). */

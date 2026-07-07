@@ -63,7 +63,7 @@ const settingsSections = [
 const SAVEABLE_SECTIONS = new Set(['general', 'gps', 'security'])
 const STANDALONE_SECTIONS = new Set(['late-rules', 'bonus-rules', 'payroll', 'telegram', 'permission-types'])
 
-export default function SecurityPage({ refresh }) {
+export default function SecurityPage({ user, refresh }) {
   const [activeSection, setActiveSection] = useState('general')
   const [notice, setNotice] = useState({ text: '', ok: true })
   const [settings, setSettings] = useState({})
@@ -192,7 +192,7 @@ export default function SecurityPage({ refresh }) {
           <div className={clsx(isStandaloneSection ? '' : 'space-y-5 p-5')}>
             {loadingSettings && !isStandaloneSection
               ? <p className="text-sm text-slate-500 dark:text-slate-400">Loading settings...</p>
-              : renderSettingsContent(activeSection, showNotice, settings, updateSetting, refresh)}
+              : renderSettingsContent(activeSection, showNotice, settings, updateSetting, refresh, user)}
           </div>
         </section>
       </div>
@@ -200,14 +200,14 @@ export default function SecurityPage({ refresh }) {
   )
 }
 
-function renderSettingsContent(section, notify, settings, updateSetting, refresh) {
+function renderSettingsContent(section, notify, settings, updateSetting, refresh, user) {
   const sp = { settings, onUpdate: updateSetting }
   switch (section) {
     case 'general':    return <GeneralSettings {...sp} onSettingsSaved={refresh} />
     case 'attendance': return <AttendanceRulesSettings />
     case 'late-rules': return <LateRulesSettings />
     case 'bonus-rules': return <BonusRulesSettings />
-    case 'payroll': return <PayrollSettingsPanel />
+    case 'payroll': return <PayrollSettingsPanel user={user} notify={notify} />
     case 'schedule':   return <WorkScheduleSettings />
     case 'locations':  return <OfficeLocations notify={notify} />
     case 'gps':        return <GpsTracking {...sp} />
@@ -973,7 +973,53 @@ function ActionCard({ icon: Icon, title, description, action, onAction }) {
   )
 }
 
-function PayrollSettingsPanel() {
+function PayrollSettingsPanel({ user, notify }) {
+  const isSuperAdmin = user?.role?.slug === 'super_admin'
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [security, setSecurity] = useState({ enabled: false, unlock_minutes: 15, has_pin: false })
+  const [pin, setPin] = useState('')
+
+  const loadSecurity = () => {
+    setLoading(true)
+    api.get('/employee-monthly-report/payroll-security')
+      .then((res) => setSecurity(res.data || { enabled: false, unlock_minutes: 15, has_pin: false }))
+      .catch((err) => notify?.(err.response?.data?.message || 'Could not load payroll security.', false))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    loadSecurity()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const savePayrollSecurity = async () => {
+    if (!isSuperAdmin) {
+      notify?.('Only Super Admin can change payroll security.', false)
+      return
+    }
+    if (security.enabled && !security.has_pin && !pin) {
+      notify?.('Set a Payroll PIN before enabling the lock.', false)
+      return
+    }
+    setSaving(true)
+    try {
+      const payload = {
+        enabled: Boolean(security.enabled),
+        unlock_minutes: Number(security.unlock_minutes || 15),
+      }
+      if (pin) payload.pin = pin
+      const res = await api.put('/employee-monthly-report/payroll-security', payload)
+      setSecurity(res.data || security)
+      setPin('')
+      notify?.('Payroll security saved.', true)
+    } catch (err) {
+      notify?.(err.response?.data?.message || 'Failed to save payroll security.', false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <div className="space-y-6 pb-8">
       <div>
@@ -982,6 +1028,66 @@ function PayrollSettingsPanel() {
           Bonuses and deductions flow into payroll when enabled in Late Rules and Bonus Rules.
         </p>
       </div>
+      <SettingsCard title="Payroll History Security" description="Require a Payroll PIN before any user can view Payroll History. Super Admin controls this lock.">
+        {loading ? (
+          <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">Loading payroll security...</p>
+        ) : (
+          <>
+            {!isSuperAdmin && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300">
+                Payroll security can only be changed by Super Admin.
+              </div>
+            )}
+            <div className="grid gap-4 lg:grid-cols-[1fr_220px]">
+              <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="font-bold text-slate-900 dark:text-white">Require Payroll PIN</p>
+                    <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Locks Payroll History for every user until they enter the PIN.</p>
+                  </div>
+                  <button
+                    className={clsx('relative h-7 w-12 shrink-0 rounded-full transition', security.enabled ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700')}
+                    onClick={() => setSecurity((current) => ({ ...current, enabled: !current.enabled }))}
+                    type="button"
+                    disabled={!isSuperAdmin || saving}
+                    aria-pressed={Boolean(security.enabled)}
+                  >
+                    <span className={clsx('absolute top-1 h-5 w-5 rounded-full bg-white shadow transition', security.enabled ? 'left-6' : 'left-1')} />
+                  </button>
+                </div>
+              </div>
+              <Field
+                label="Auto-lock After"
+                type="number"
+                suffix="minutes"
+                value={security.unlock_minutes || 15}
+                onChange={(event) => setSecurity((current) => ({ ...current, unlock_minutes: event.target.value }))}
+              />
+            </div>
+            <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
+              <Field
+                label={security.has_pin ? 'Change Payroll PIN' : 'Set Payroll PIN'}
+                type="password"
+                value={pin}
+                onChange={(event) => setPin(event.target.value)}
+                placeholder={security.has_pin ? 'Leave blank to keep current PIN' : 'Minimum 4 characters'}
+              />
+              <button
+                type="button"
+                onClick={savePayrollSecurity}
+                disabled={!isSuperAdmin || saving}
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-5 text-sm font-bold text-white shadow-sm shadow-emerald-600/20 transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <ShieldCheck size={17} />
+                {saving ? 'Saving...' : 'Save Payroll Security'}
+              </button>
+            </div>
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+              Current status: {security.enabled ? 'Payroll History lock is ON' : 'Payroll History lock is OFF'}.
+            </p>
+          </>
+        )}
+      </SettingsCard>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
           <p className="text-sm font-bold text-slate-900 dark:text-white">Late deductions</p>
