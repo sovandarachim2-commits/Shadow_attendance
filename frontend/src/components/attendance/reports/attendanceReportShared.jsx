@@ -5,14 +5,14 @@ export const STATUS_META = {
   late: { label: 'Late Check In', cls: 'bg-orange-100 text-orange-700 dark:bg-orange-950/60 dark:text-orange-400', dot: 'bg-orange-500' },
   early_checkout: { label: 'Early Check Out', cls: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-950/60 dark:text-yellow-300', dot: 'bg-yellow-500' },
   absent: { label: 'Absent', cls: 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400', dot: 'bg-rose-500' },
-  on_leave: { label: 'Personal Request', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400', dot: 'bg-blue-500' },
-  half_day: { label: 'Personal Request', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400', dot: 'bg-blue-500' },
+  on_leave: { label: 'Personal Leave', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400', dot: 'bg-blue-500' },
+  half_day: { label: 'Half Day', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400', dot: 'bg-amber-500' },
   missing_checkin: { label: 'Missing Check In', cls: 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-400', dot: 'bg-violet-500' },
   missing_checkout: { label: 'Missing Check Out', cls: 'bg-fuchsia-100 text-fuchsia-700 dark:bg-fuchsia-950/60 dark:text-fuchsia-400', dot: 'bg-fuchsia-500' },
   missing_attendance: { label: 'Missing Check In', cls: 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-400', dot: 'bg-violet-500' },
   day_off: { label: 'Day Off', cls: 'bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-400', dot: 'bg-sky-500' },
-  personal_request: { label: 'Personal Request', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400', dot: 'bg-blue-500' },
-  leave: { label: 'Personal Request', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400', dot: 'bg-blue-500' },
+  personal_request: { label: 'Personal Leave', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400', dot: 'bg-blue-500' },
+  leave: { label: 'Personal Leave', cls: 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-400', dot: 'bg-blue-500' },
 }
 
 export const GPS_META = {

@@ -57,14 +57,14 @@ return new class extends Migration
             'description' => 'Request approval for missing check-out records.',
         ],
         [
-            'name' => 'Personal Request',
+            'name' => 'Personal Leave',
             'allowed_times' => 1,
             'limit_type' => 'per_month',
             'duration_control' => 'any',
             'max_hours' => null,
             'deduction_amount' => 0,
             'color' => '#f97316',
-            'description' => 'Request approval for personal matters.',
+            'description' => 'Request approval for personal leave.',
         ],
     ];
 
@@ -75,7 +75,7 @@ return new class extends Migration
 
         DB::table('permission_requests')
             ->whereIn('type', ['Personal Permission', 'Request Permission', 'Custom Request'])
-            ->update(['type' => 'Personal Request']);
+            ->update(['type' => 'Personal Leave']);
 
         DB::table('permission_requests')
             ->whereIn('type', ['Manual Check In', 'Missing Attendance', 'Attendance Edit'])
@@ -91,7 +91,7 @@ return new class extends Migration
 
         DB::table('permission_requests')
             ->whereIn('type', ['Outdoor Work', 'Work From Home', 'Overtime'])
-            ->update(['type' => 'Personal Request']);
+            ->update(['type' => 'Personal Leave']);
 
         DB::table('permission_types')->whereNotIn('name', $names)->delete();
 

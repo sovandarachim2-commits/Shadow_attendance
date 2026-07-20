@@ -290,7 +290,7 @@ function MobileStatsGrid({ summary, loading }) {
     { label: 'Day Off', value: loading ? '-' : (summary.day_off ?? 0), help: 'from this month', icon: Calendar, tone: 'sky' },
     { label: 'Missing Check In', value: loading ? '-' : (summary.missing_checkin ?? summary.missing_attendance ?? 0), help: 'from this month', icon: ClipboardList, tone: 'violet', down: true },
     { label: 'Missing Check Out', value: loading ? '-' : (summary.missing_checkout ?? 0), help: 'from this month', icon: ClipboardList, tone: 'fuchsia', down: true },
-    { label: 'Personal Request', value: loading ? '-' : (summary.personal_request ?? summary.on_leave ?? 0), help: 'from this month', icon: ClipboardList, tone: 'blue' },
+    { label: 'Personal Leave', value: loading ? '-' : (summary.personal_request ?? summary.on_leave ?? 0), help: 'from this month', icon: ClipboardList, tone: 'blue' },
     { label: 'Total Working Hours', value: loading ? '-' : formatHoursCompact(summary.total_work_minutes), help: 'from this month', icon: Timer, tone: 'sky' },
     { label: 'Overtime Hours', value: loading ? '-' : formatHoursCompact(summary.overtime_minutes), help: 'from this month', icon: Clock, tone: 'violet' },
   ]
@@ -366,7 +366,7 @@ function MobileFilters({ open, setOpen, month, draft, setDraft, allRecords, onAp
               <option value="day_off">Day Off</option>
               <option value="missing_checkin">Missing Check In</option>
               <option value="missing_checkout">Missing Check Out</option>
-              <option value="personal_request">Personal Request</option>
+              <option value="personal_request">Personal Leave</option>
               <option value="absent">Absent</option>
             </select>
           </MobileFilterField>
@@ -696,7 +696,7 @@ function MobileAttendanceSummary({ summary }) {
     { label: 'Total Day Off', value: summary.day_off ?? 0, icon: Calendar, tone: 'sky' },
     { label: 'Total Missing Check In', value: summary.missing_checkin ?? summary.missing_attendance ?? 0, icon: ClipboardList, tone: 'violet' },
     { label: 'Total Missing Check Out', value: summary.missing_checkout ?? 0, icon: ClipboardList, tone: 'fuchsia' },
-    { label: 'Total Personal Request', value: summary.personal_request ?? summary.on_leave ?? 0, icon: ClipboardList, tone: 'blue' },
+    { label: 'Total Personal Leave', value: summary.personal_request ?? summary.on_leave ?? 0, icon: ClipboardList, tone: 'blue' },
     { label: 'Total Working Hours', value: formatHoursCompact(summary.total_work_minutes), icon: Timer, tone: 'sky' },
     { label: 'Overtime Hours', value: formatHoursCompact(summary.overtime_minutes), icon: Clock, tone: 'violet' },
   ]
@@ -802,7 +802,8 @@ function statusDotClass(row) {
   if (status === 'day_off') return 'bg-sky-500'
   if (status === 'missing_checkin' || status === 'missing_attendance') return 'bg-violet-500'
   if (status === 'missing_checkout') return 'bg-fuchsia-500'
-  if (status === 'personal_request' || status === 'on_leave' || status === 'half_day' || status === 'leave') return 'bg-blue-500'
+  if (status === 'half_day') return 'bg-amber-500'
+  if (status === 'personal_request' || status === 'on_leave' || status === 'leave') return 'bg-blue-500'
   return 'bg-emerald-500'
 }
 
@@ -813,7 +814,8 @@ function mobileStatusTone(status) {
   if (status === 'day_off') return 'sky'
   if (status === 'missing_checkin' || status === 'missing_attendance') return 'violet'
   if (status === 'missing_checkout') return 'fuchsia'
-  if (status === 'personal_request' || status === 'on_leave' || status === 'half_day' || status === 'leave') return 'blue'
+  if (status === 'half_day') return 'amber'
+  if (status === 'personal_request' || status === 'on_leave' || status === 'leave') return 'blue'
   return 'green'
 }
 

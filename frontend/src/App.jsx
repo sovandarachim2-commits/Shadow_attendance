@@ -35,6 +35,7 @@ import UsersRolesPage from './pages/UsersRolesPage'
 import OutdoorSalesPage from './pages/OutdoorSalesPage'
 import CustomerVisitsPage from './pages/CustomerVisitsPage'
 import ReportsPage from './pages/ReportsPage'
+import ActivityReportPage from './pages/ActivityReportPage'
 import NotificationsPage from './pages/NotificationsPage'
 import ProfilePage from './pages/ProfilePage'
 import SecurityPage from './pages/SecurityPage'
@@ -52,6 +53,9 @@ import MobileNav from './components/layout/MobileNav'
 import AttendanceActionModal from './components/attendance/AttendanceActionModal'
 import EmployeeModal from './components/employees/EmployeeModal'
 import VisitModal from './components/visits/VisitModal'
+import MealModal from './components/visits/MealModal'
+import HotelModal from './components/visits/HotelModal'
+import PlaceVisitModal from './components/visits/PlaceVisitModal'
 import ReportModal from './components/reports/ReportModal'
 import { FloatingSpinner, LoadingScreen, SummaryRow } from './components/shared/UI'
 import { applyDocumentBranding } from './utils/branding'
@@ -69,9 +73,12 @@ const reportSubItems = [
   { label: 'Employee Dashboard', target: 'Employee Dashboard', activeTargets: ['Employee Dashboard', 'Attendance Dashboard'], permissions: ['employee_report.view_all', 'reports.attendance.view_all', 'attendance.view_all'] },
   { label: 'Employee Monthly Report', target: 'Employee Monthly Report', activeTargets: ['Employee Monthly Report', 'Monthly Report'], permissions: ['employee_report.view_all', 'employee_report.view_own'] },
   { label: 'Payroll History', target: 'Payroll History', activeTargets: ['Payroll History'], permissions: ['payroll.view_all', 'payroll.view_own', 'payroll.create', 'payroll.update'] },
+  { label: 'Place Visit Report', target: 'Place Visit Report', activeTargets: ['Place Visit Report'], permissions: ['reports.view_all', 'reports.view_own', 'visits.view', 'visits.manage', 'visits.create'] },
+  { label: 'Meal Report', target: 'Meal Report', activeTargets: ['Meal Report'], permissions: ['reports.view_all', 'reports.view_own', 'visits.view', 'visits.manage', 'visits.create'] },
+  { label: 'Hotel Report', target: 'Hotel Report', activeTargets: ['Hotel Report'], permissions: ['reports.view_all', 'reports.view_own', 'visits.view', 'visits.manage', 'visits.create'] },
 ]
 
-const REPORTS_TARGETS = new Set(['Employee Dashboard', 'Attendance Dashboard', 'Employee Monthly Report', 'Monthly Report', 'Payroll History'])
+const REPORTS_TARGETS = new Set(['Employee Dashboard', 'Attendance Dashboard', 'Employee Monthly Report', 'Monthly Report', 'Payroll History', 'Place Visit Report', 'Meal Report', 'Hotel Report'])
 
 const attendanceSubItems = [
   { label: 'Attendance Records', target: 'Attendance History', activeTargets: ['Attendance History'], permissions: ['attendance.view_all'] },
@@ -97,6 +104,22 @@ const rolePermissionSubItems = [
 
 const ROLE_PERMISSION_TARGETS = new Set(['Roles & Permissions', 'Users & Roles', 'Roles', 'Permissions', 'IP Access'])
 const ACTIVE_PAGE_KEY = 'attendance_active_page'
+
+function findTodayAttendance(rows = [], account) {
+  const employeeId = account?.employee?.id ?? account?.employee_id
+  const todayKey = localDateKey(new Date())
+
+  return rows.find((row) => {
+    const rowEmployeeId = row.employee_id ?? row.employee?.id
+    const rowDate = (row.attendance_date || row.date || '').slice(0, 10) || localDateKey(new Date(row.check_in_at || row.created_at || ''))
+    return String(rowEmployeeId || '') === String(employeeId || '') && rowDate === todayKey
+  }) || null
+}
+
+function localDateKey(date) {
+  if (Number.isNaN(date.getTime())) return ''
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
 
 const sidebarManageItems = [
   { label: 'Employees', target: 'Employees', icon: Users, permissions: ['employees.view'] },
@@ -141,6 +164,9 @@ function AppShell({ isLoaded, initialBranding = {} }) {
     attendance: [],
     employees: [],
     visits: [],
+    placeVisits: [],
+    mealRecords: [],
+    hotelStays: [],
     reports: [],
     notifications: [],
     appSettings: initialBranding,
@@ -158,12 +184,22 @@ function AppShell({ isLoaded, initialBranding = {} }) {
       }
 
       const payload = await bootstrapRequestRef.current
+      const liveToday = await attendanceService.today().catch(() => null)
+      const attendanceRows = payload.attendance ?? []
+      const todayAttendance = liveToday?.check_in_at
+        ? liveToday
+        : payload.todayAttendance?.check_in_at
+        ? payload.todayAttendance
+        : findTodayAttendance(attendanceRows, account)
       setData({
         dashboard: payload.dashboard ?? null,
-        todayAttendance: payload.todayAttendance ?? null,
-        attendance: payload.attendance ?? [],
+        todayAttendance,
+        attendance: attendanceRows,
         employees: payload.employees ?? [],
         visits: payload.visits ?? [],
+        placeVisits: payload.placeVisits ?? [],
+        mealRecords: payload.mealRecords ?? [],
+        hotelStays: payload.hotelStays ?? [],
         reports: payload.reports ?? [],
         notifications: payload.notifications ?? [],
         appSettings: payload.appSettings ?? {},
@@ -241,9 +277,38 @@ function AppShell({ isLoaded, initialBranding = {} }) {
     setDark((value) => !value)
   }
 
-  const openAttendanceAction = (type) => {
+  const openAttendanceAction = async (type) => {
+    if (type === 'check-in') {
+      try {
+        const today = await attendanceService.today()
+        setData((current) => ({ ...current, todayAttendance: today ?? null }))
+        if (today?.check_in_at && !today?.check_out_at) {
+          setAttendanceAction('check-out')
+          return
+        }
+        if (today?.check_in_at && today?.check_out_at) {
+          setAttendanceAction(null)
+          return
+        }
+      } catch {
+        // If refresh fails, keep the requested action and let the submit endpoint validate.
+      }
+    }
+
     setAttendanceAction(type)
   }
+
+  const refreshTodayAttendance = useCallback(async () => {
+    try {
+      const today = await attendanceService.today()
+      setData((current) => ({ ...current, todayAttendance: today?.check_in_at ? today : findTodayAttendance(current.attendance, user) }))
+      return today?.check_in_at ? today : findTodayAttendance(data.attendance, user)
+    } catch {
+      const fallback = findTodayAttendance(data.attendance, user)
+      if (fallback) setData((current) => ({ ...current, todayAttendance: fallback }))
+      return fallback
+    }
+  }, [data.attendance, user])
 
   const openPermissionRequest = (type) => {
     setPendingRequestType(type)
@@ -302,6 +367,9 @@ function AppShell({ isLoaded, initialBranding = {} }) {
     'Employee Dashboard': <EmployeeDashboardPage {...props} />,
     'Attendance Dashboard': <EmployeeDashboardPage {...props} />,
     'Payroll History': <PayrollHistoryPage {...props} initialMonth={payrollHistoryMonth} />,
+    'Place Visit Report': <ActivityReportPage {...props} type="place" />,
+    'Meal Report': <ActivityReportPage {...props} type="meal" />,
+    'Hotel Report': <ActivityReportPage {...props} type="hotel" />,
     'Permission Types': <PermissionTypesPage />,
     Employees: <EmployeesPage {...props} />,
     Branches: <BranchesPage />,
@@ -597,6 +665,7 @@ function AppShell({ isLoaded, initialBranding = {} }) {
             user={user}
             onAttendanceAction={openAttendanceAction}
             todayAttendance={data.todayAttendance}
+            refreshTodayAttendance={refreshTodayAttendance}
           />
         </main>
       </div>
@@ -618,6 +687,43 @@ function AppShell({ isLoaded, initialBranding = {} }) {
         />
       )}
       {modal === 'visit' && <VisitModal onClose={() => setModal(null)} onSaved={() => { setModal(null); loadRealData(user) }} />}
+      {modal === 'place-visit' && (
+        <PlaceVisitModal
+          activeVisit={(data.placeVisits || []).find((visit) => visit.status === 'open')}
+          onClose={() => setModal(null)}
+          onSaved={() => { setModal(null); loadRealData(user) }}
+        />
+      )}
+      {modal === 'meal' && (
+        <MealModal
+          mealRecords={data.mealRecords || []}
+          onClose={() => setModal(null)}
+          onSaved={(options = {}) => {
+            if (!options.keepOpen) setModal(null)
+            loadRealData(user)
+          }}
+        />
+      )}
+      {modal === 'hotel' && (
+        <HotelModal
+          activeStay={(data.hotelStays || []).find((stay) => String(stay.status).toLowerCase() === 'checked_in')}
+          onClose={() => setModal(null)}
+          onSaved={(options = {}) => {
+            if (options.stay) {
+              setData((current) => {
+                const existing = current.hotelStays || []
+                const nextHotelStays = existing.some((stay) => stay.id === options.stay.id)
+                  ? existing.map((stay) => (stay.id === options.stay.id ? options.stay : stay))
+                  : [options.stay, ...existing]
+
+                return { ...current, hotelStays: nextHotelStays }
+              })
+            }
+            if (!options.keepOpen) setModal(null)
+            loadRealData(user)
+          }}
+        />
+      )}
       {modal === 'report' && <ReportModal onClose={() => setModal(null)} onSaved={() => { setModal(null); loadRealData(user) }} />}
       {attendanceAction && (
         <AttendanceActionModal
@@ -627,6 +733,7 @@ function AppShell({ isLoaded, initialBranding = {} }) {
           openPermissionRequest={openPermissionRequest}
           onSaved={() => {
             setAttendanceAction(null)
+            refreshTodayAttendance()
             loadRealData(user)
           }}
         />

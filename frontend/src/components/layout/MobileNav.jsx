@@ -1,11 +1,11 @@
+import { useEffect } from 'react'
 import clsx from 'clsx'
 import { CalendarCheck, CheckCircle2, FileCheck2, Hand, Home, UserRound } from 'lucide-react'
 import { canAccess } from '../../utils/format'
 
-export default function MobileNav({ active, setActive, user, onAttendanceAction, todayAttendance }) {
+export default function MobileNav({ active, setActive, user, onAttendanceAction, todayAttendance, refreshTodayAttendance }) {
   const checkedIn = Boolean(todayAttendance?.check_in_at)
   const completed = Boolean(todayAttendance?.check_out_at)
-  const nextAction = checkedIn && !completed ? 'check-out' : 'check-in'
   const centerLabel = completed ? 'Done' : checkedIn ? 'Check Out' : 'Check In'
 
   const fabClass = completed
@@ -21,6 +21,33 @@ export default function MobileNav({ active, setActive, user, onAttendanceAction,
     : 'text-emerald-600'
 
   const isAttendanceActive = active === 'My Attendance Reports'
+
+  useEffect(() => {
+    refreshTodayAttendance?.()
+
+    const refreshOnFocus = () => refreshTodayAttendance?.()
+    window.addEventListener('focus', refreshOnFocus)
+    document.addEventListener('visibilitychange', refreshOnFocus)
+
+    return () => {
+      window.removeEventListener('focus', refreshOnFocus)
+      document.removeEventListener('visibilitychange', refreshOnFocus)
+    }
+  }, [refreshTodayAttendance])
+
+  const handleCenterAction = async () => {
+    let next = todayAttendance
+
+    if (refreshTodayAttendance) {
+      next = await refreshTodayAttendance()
+    }
+
+    const isCheckedIn = Boolean(next?.check_in_at)
+    const isCompleted = Boolean(next?.check_out_at)
+    if (isCompleted) return
+
+    onAttendanceAction(isCheckedIn ? 'check-out' : 'check-in')
+  }
 
   const leftItems = [
     {
@@ -77,7 +104,7 @@ export default function MobileNav({ active, setActive, user, onAttendanceAction,
             <button
               type="button"
               disabled={completed}
-              onClick={() => !completed && onAttendanceAction(nextAction)}
+              onClick={handleCenterAction}
               className="flex flex-col items-center gap-1 disabled:opacity-60"
               aria-label={centerLabel}
             >

@@ -169,7 +169,7 @@ export default function AdminAttendanceReportsPage({ user, appData, isLoaded }) 
     { label: 'Day Off', value: summary.day_off ?? 0, pct: pct(summary.day_off), trend: 'In selected period', icon: Calendar, tone: 'sky' },
     { label: 'Missing Check In', value: summary.missing_checkin ?? summary.missing_attendance ?? 0, pct: pct(summary.missing_checkin ?? summary.missing_attendance), trend: 'In selected period', icon: AlertCircle, tone: 'violet' },
     { label: 'Missing Check Out', value: summary.missing_checkout ?? 0, pct: pct(summary.missing_checkout), trend: 'In selected period', icon: LogOut, tone: 'fuchsia' },
-    { label: 'Personal Request', value: summary.personal_request ?? summary.on_leave ?? 0, pct: pct(summary.personal_request ?? summary.on_leave), trend: 'In selected period', icon: FileText, tone: 'blue' },
+    { label: 'Personal Leave', value: summary.personal_request ?? summary.on_leave ?? 0, pct: pct(summary.personal_request ?? summary.on_leave), trend: 'In selected period', icon: FileText, tone: 'blue' },
     { label: 'Outdoor Attendance', value: summary.outdoor ?? 0, pct: pct(summary.outdoor), trend: 'In selected period', icon: MapPinned, tone: 'sky' },
     { label: 'Total Working Hours', value: formatWorkHours(summary.total_work_minutes), pct: null, trend: `${summary.total_records ?? 0} records`, icon: Clock, tone: 'slate' },
   ]
@@ -242,7 +242,7 @@ export default function AdminAttendanceReportsPage({ user, appData, isLoaded }) 
               <option value="day_off">Day Off</option>
               <option value="missing_checkin">Missing Check In</option>
               <option value="missing_checkout">Missing Check Out</option>
-              <option value="personal_request">Personal Request</option>
+              <option value="personal_request">Personal Leave</option>
               <option value="absent">Absent</option>
             </select>
           </FilterField>
@@ -494,7 +494,7 @@ function buildAnalytics(records, summary) {
     { name: 'Day Off', value: summary.day_off ?? 0, color: '#0ea5e9' },
     { name: 'Missing Check In', value: summary.missing_checkin ?? summary.missing_attendance ?? 0, color: '#8b5cf6' },
     { name: 'Missing Check Out', value: summary.missing_checkout ?? 0, color: '#d946ef' },
-    { name: 'Personal Request', value: summary.personal_request ?? summary.on_leave ?? 0, color: '#2563eb' },
+    { name: 'Personal Leave', value: summary.personal_request ?? summary.on_leave ?? 0, color: '#2563eb' },
   ].filter((d) => d.value > 0)
 
   const dayMap = {}
@@ -599,7 +599,7 @@ function ReportTrendChart({ data }) {
             <Line type="monotone" dataKey="absent" name="Absent" stroke="#ef4444" strokeWidth={2} dot={false} />
             <Line type="monotone" dataKey="missingIn" name="Missing Check In" stroke="#8b5cf6" strokeWidth={2} dot={false} />
             <Line type="monotone" dataKey="missingOut" name="Missing Check Out" stroke="#d946ef" strokeWidth={2} dot={false} />
-            <Line type="monotone" dataKey="personal" name="Personal Request" stroke="#2563eb" strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey="personal" name="Personal Leave" stroke="#2563eb" strokeWidth={2} dot={false} />
           </LineChart>
         </ResponsiveContainer>
       </div>

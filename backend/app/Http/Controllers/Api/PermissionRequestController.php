@@ -10,6 +10,7 @@ use App\Models\PermissionType;
 use App\Models\User;
 use App\Services\AttendanceService;
 use App\Services\TelegramNotificationService;
+use App\Services\WorkScheduleService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -23,10 +24,12 @@ class PermissionRequestController extends Controller
         'Day Off',
         'Missing Check In',
         'Missing Check Out',
-        'Personal Request',
+        'Personal Leave',
     ];
 
     private const EVENT_KEY = 'permission_request';
+
+    public function __construct(private WorkScheduleService $workSchedules) {}
 
     public function index(Request $request)
     {
@@ -54,7 +57,10 @@ class PermissionRequestController extends Controller
         $data = $this->validatedPayload($request);
         $data = $this->normalizeDurationFields($data);
 
+        $this->assertPermissionTypeAvailable($employee->id, $data);
+        $this->assertSingleTimeWithinMaxHours($employee->id, $data);
         $this->assertNoDuplicateActiveRequest($employee->id, $data);
+        $this->assertPermissionAllowance($employee->id, $data);
 
         $attachment = $this->storeAttachment($request);
 
@@ -65,6 +71,7 @@ class PermissionRequestController extends Controller
             'type' => $data['type'],
             'request_date' => $data['request_date'],
             'request_date_end' => $data['request_date_end'],
+            'return_date' => $data['return_date'] ?? null,
             'request_time' => $data['request_time'] ?? null,
             'start_time' => $data['start_time'] ?? null,
             'end_time' => $data['end_time'] ?? null,
@@ -119,6 +126,7 @@ class PermissionRequestController extends Controller
             'type' => $permissionRequest->type,
             'request_date' => $permissionRequest->request_date->toDateString(),
             'request_date_end' => optional($permissionRequest->request_date_end)->toDateString() ?: $permissionRequest->request_date->toDateString(),
+            'return_date' => optional($permissionRequest->return_date)->toDateString(),
             'duration_type' => $permissionRequest->duration_type ?: 'single_day',
             'replacement_employee_id' => $permissionRequest->replacement_employee_id,
         ], $data));
@@ -140,7 +148,10 @@ class PermissionRequestController extends Controller
             }
         }
 
+        $this->assertPermissionTypeAvailable($permissionRequest->employee_id, $data);
+        $this->assertSingleTimeWithinMaxHours($permissionRequest->employee_id, $data);
         $this->assertNoDuplicateActiveRequest($permissionRequest->employee_id, $data, $permissionRequest->id);
+        $this->assertPermissionAllowance($permissionRequest->employee_id, $data, $permissionRequest->id);
 
         $attachment = $this->storeAttachment($request);
         if ($attachment) {
@@ -246,10 +257,11 @@ class PermissionRequestController extends Controller
         $required = $partial ? 'sometimes' : 'required';
 
         return $request->validate([
-            'type' => [$required, 'string', 'max:100'],
+            'type' => [$required, 'string', 'max:100', Rule::in(self::TYPES)],
             'replacement_employee_id' => ['nullable', 'exists:employees,id'],
             'request_date' => [$required, 'date'],
             'request_date_end' => ['nullable', 'date', 'after_or_equal:request_date'],
+            'return_date' => ['nullable', 'date', 'after:request_date_end'],
             'request_time' => ['nullable', 'string', 'max:20'],
             'start_time' => ['nullable', 'date_format:H:i'],
             'end_time' => ['nullable', 'date_format:H:i'],
@@ -271,6 +283,7 @@ class PermissionRequestController extends Controller
     {
         $data['duration_type'] ??= 'single_day';
         $data['request_date_end'] ??= $data['request_date'];
+        $data['return_date'] ??= null;
 
         if ($data['request_date_end'] < $data['request_date']) {
             throw ValidationException::withMessages(['request_date_end' => 'End date must be on or after start date.']);
@@ -288,7 +301,58 @@ class PermissionRequestController extends Controller
             }
         }
 
-        if ($data['duration_type'] === 'hours') {
+        if ($this->usesDateOnlyRequest($data['type'] ?? null)) {
+            $data['duration_type'] = 'single_day';
+            $data['request_date_end'] = $data['request_date'];
+            $data['start_time'] = null;
+            $data['end_time'] = null;
+            $data['request_time'] = null;
+            $data['total_hours'] = null;
+            $data['total_days'] = 1;
+            $data['day_part'] = null;
+        } elseif ($this->usesDayRangeRequest($data['type'] ?? null)) {
+            if ($data['duration_type'] === 'hours') {
+                throw ValidationException::withMessages([
+                    'duration_type' => "{$data['type']} can only use Single Day or Multiple Day.",
+                ]);
+            }
+
+            if ($data['duration_type'] === 'multiple_day') {
+                $data['start_time'] = null;
+                $data['end_time'] = null;
+                $data['request_time'] = null;
+                $data['total_hours'] = null;
+                $data['day_part'] = null;
+                $data['total_days'] = $data['total_days'] ?? (int) ((strtotime($data['request_date_end']) - strtotime($data['request_date'])) / 86400) + 1;
+
+                if (empty($data['return_date'])) {
+                    throw ValidationException::withMessages([
+                        'return_date' => 'Please select the date you will come back.',
+                    ]);
+                }
+            } else {
+                $data['duration_type'] = 'single_day';
+                $data['request_date_end'] = $data['request_date'];
+                if (($data['day_part'] ?? 'Full Day') === 'Half Day') {
+                    $time = $data['request_time'] ?? $data['start_time'] ?? null;
+                    if (empty($time)) {
+                        throw ValidationException::withMessages([
+                            'request_time' => 'Please select the time you want to go.',
+                        ]);
+                    }
+                    $data['request_time'] = $time;
+                    $data['start_time'] = $time;
+                } else {
+                    $data['request_time'] = null;
+                    $data['start_time'] = null;
+                }
+                $data['end_time'] = null;
+                $data['total_hours'] = null;
+                $data['total_days'] = 1;
+                $data['day_part'] = $data['day_part'] ?? 'Full Day';
+                $data['return_date'] = null;
+            }
+        } elseif ($data['duration_type'] === 'hours') {
             if ($this->usesSingleRequestTime($data['type'] ?? null)) {
                 $time = $data['request_time'] ?? $data['start_time'] ?? null;
                 if (empty($time)) {
@@ -346,7 +410,13 @@ class PermissionRequestController extends Controller
             return;
         }
 
-        if ($type->duration_control !== 'any' && $data['duration_type'] !== $type->duration_control) {
+        if (! $type->is_active) {
+            throw ValidationException::withMessages([
+                'type' => "{$type->name} is not available for new requests.",
+            ]);
+        }
+
+        if (! $this->usesDateOnlyRequest($data['type'] ?? null) && ! $this->usesDayRangeRequest($data['type'] ?? null) && $type->duration_control !== 'any' && $data['duration_type'] !== $type->duration_control) {
             throw ValidationException::withMessages([
                 'duration_type' => "{$type->name} must use {$this->durationControlLabel($type->duration_control)}.",
             ]);
@@ -362,6 +432,16 @@ class PermissionRequestController extends Controller
     private function usesSingleRequestTime(?string $type): bool
     {
         return in_array($type, ['Late Check In', 'Early Check Out'], true);
+    }
+
+    private function usesDateOnlyRequest(?string $type): bool
+    {
+        return in_array($type, ['Missing Check In', 'Missing Check Out'], true);
+    }
+
+    private function usesDayRangeRequest(?string $type): bool
+    {
+        return in_array($type, ['Day Off', 'Personal Leave'], true);
     }
 
     private function durationControlLabel(string $control): string
@@ -513,13 +593,21 @@ class PermissionRequestController extends Controller
             return trim("{$start} {$from} - {$to}{$hours}");
         }
 
+        if ($this->usesDateOnlyRequest($record->type)) {
+            return $start;
+        }
+
         if ($record->duration_type === 'single_day') {
-            return trim($start.' '.($record->day_part ?: 'Full Day'));
+            $dayPart = $record->day_part ?: 'Full Day';
+            $time = $dayPart === 'Half Day' && $record->request_time ? " (go {$record->request_time})" : '';
+
+            return trim($start.' '.$dayPart.$time);
         }
 
         $days = $record->total_days ? " ({$record->total_days} day(s))" : '';
+        $returnDate = $record->return_date ? ' | Come back '.$record->return_date->format('d M Y') : '';
 
-        return ($end === $start ? $start : "{$start} - {$end}").$days;
+        return ($end === $start ? $start : "{$start} - {$end}").$days.$returnDate;
     }
 
     private function assertOwnPending(Request $request, PermissionRequest $permissionRequest): void
@@ -565,5 +653,116 @@ class PermissionRequestController extends Controller
                 'request_date' => 'You already have this permission request for the selected date and time.',
             ]);
         }
+    }
+
+    private function assertPermissionAllowance(int $employeeId, array $data, ?int $ignoreId = null): void
+    {
+        $type = PermissionType::query()->where('name', $data['type'])->first();
+
+        if (! $type || (float) $type->deduction_amount > 0) {
+            return;
+        }
+
+        $allowed = (int) $type->allowed_times;
+        $date = \Carbon\Carbon::parse($data['request_date']);
+        $query = PermissionRequest::query()
+            ->where('employee_id', $employeeId)
+            ->where('type', $data['type'])
+            ->whereIn('status', ['pending', 'approved'])
+            ->when($ignoreId, fn ($query) => $query->whereKeyNot($ignoreId));
+
+        if ($type->limit_type === 'per_day') {
+            $query->whereDate('request_date', $date->toDateString());
+        } else {
+            $query->whereBetween('request_date', [
+                $date->copy()->startOfMonth()->toDateString(),
+                $date->copy()->endOfMonth()->toDateString(),
+            ]);
+        }
+
+        if ($query->count() >= $allowed) {
+            $period = $type->limit_type === 'per_day' ? 'day' : 'month';
+            throw ValidationException::withMessages([
+                'type' => "You already used the {$type->name} allowance for this {$period}.",
+            ]);
+        }
+    }
+
+    private function assertPermissionTypeAvailable(int $employeeId, array $data): void
+    {
+        $type = PermissionType::query()
+            ->with(['employees:id', 'workSchedules:id'])
+            ->where('name', $data['type'])
+            ->first();
+
+        if (! $type) {
+            return;
+        }
+
+        $employeeIds = $type->employees->pluck('id');
+        $scheduleIds = $type->workSchedules->pluck('id');
+
+        if ($employeeIds->isEmpty() && $scheduleIds->isEmpty()) {
+            return;
+        }
+
+        if ($employeeIds->contains($employeeId)) {
+            return;
+        }
+
+        $schedule = $this->workSchedules->scheduleForEmployeeOnDate($employeeId, \Carbon\Carbon::parse($data['request_date']));
+
+        if ($schedule && $scheduleIds->contains($schedule->id)) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'type' => "{$type->name} is not assigned to you for the selected date.",
+        ]);
+    }
+
+    private function assertSingleTimeWithinMaxHours(int $employeeId, array $data): void
+    {
+        if (! $this->usesSingleRequestTime($data['type'] ?? null)) {
+            return;
+        }
+
+        $type = PermissionType::query()->where('name', $data['type'])->first();
+        if (! $type || $type->max_hours === null) {
+            return;
+        }
+
+        $requestTime = $data['request_time'] ?? $data['start_time'] ?? null;
+        if (! $requestTime) {
+            return;
+        }
+
+        $date = \Carbon\Carbon::parse($data['request_date']);
+        $dayInfo = $this->workSchedules->dayInfoForEmployeeOnDate($employeeId, $date);
+        $scheduleTime = $data['type'] === 'Late Check In' ? ($dayInfo['start'] ?? null) : ($dayInfo['end'] ?? null);
+
+        if (! $scheduleTime) {
+            return;
+        }
+
+        $requestedAt = \Carbon\Carbon::parse($date->toDateString().' '.$requestTime);
+        $scheduledAt = \Carbon\Carbon::parse($date->toDateString().' '.$scheduleTime);
+        $minutes = $data['type'] === 'Late Check In'
+            ? $scheduledAt->diffInMinutes($requestedAt, false)
+            : $requestedAt->diffInMinutes($scheduledAt, false);
+
+        if ($minutes <= 0) {
+            return;
+        }
+
+        $hours = $minutes / 60;
+        if ($hours <= (float) $type->max_hours) {
+            return;
+        }
+
+        $direction = $data['type'] === 'Late Check In' ? 'after scheduled check-in' : 'before scheduled check-out';
+        throw ValidationException::withMessages([
+            'request_time' => "{$type->name} cannot be more than {$type->max_hours} hour(s) {$direction}.",
+        ]);
     }
 }

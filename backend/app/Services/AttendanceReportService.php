@@ -53,15 +53,19 @@ class AttendanceReportService
         $request = PermissionRequest::query()
             ->where('employee_id', $row->employee_id)
             ->where('status', 'approved')
-            ->whereIn('type', ['Early Check Out', 'Day Off', 'Missing Check In', 'Missing Check Out', 'Missing Attendance', 'Personal Request'])
+            ->whereIn('type', ['Early Check Out', 'Day Off', 'Missing Check In', 'Missing Check Out', 'Missing Attendance', 'Personal Leave'])
             ->whereDate('request_date', '<=', $date)
             ->where(function ($dateQuery) use ($date) {
                 $dateQuery
                     ->whereDate('request_date_end', '>=', $date)
                     ->orWhereNull('request_date_end');
             })
-            ->orderByRaw("FIELD(type, 'Early Check Out', 'Day Off', 'Missing Check In', 'Missing Check Out', 'Missing Attendance', 'Personal Request')")
+            ->orderByRaw("FIELD(type, 'Early Check Out', 'Day Off', 'Missing Check In', 'Missing Check Out', 'Missing Attendance', 'Personal Leave')")
             ->first();
+
+        if ($request && in_array($request->type, ['Day Off', 'Personal Leave'], true) && $request->day_part === 'Half Day') {
+            return 'half_day';
+        }
 
         return match ($request?->type) {
             'Early Check Out' => 'early_checkout',
@@ -69,7 +73,7 @@ class AttendanceReportService
             'Missing Check In' => 'missing_checkin',
             'Missing Check Out' => 'missing_checkout',
             'Missing Attendance' => 'missing_checkin',
-            'Personal Request' => 'personal_request',
+            'Personal Leave' => 'personal_request',
             default => null,
         };
     }
@@ -181,8 +185,9 @@ class AttendanceReportService
         $earlyCheckout = $displayStatuses->filter(fn ($status) => $status === 'early_checkout')->count();
         $dayOff = $displayStatuses->filter(fn ($status) => $status === 'day_off')->count();
         $personalRequest = $displayStatuses
-            ->filter(fn ($status) => in_array($status, ['personal_request', 'on_leave', 'leave', 'half_day'], true))
+            ->filter(fn ($status) => in_array($status, ['personal_request', 'on_leave', 'leave'], true))
             ->count();
+        $halfDay = $displayStatuses->filter(fn ($status) => $status === 'half_day')->count();
         $missingCheckin = $displayStatuses
             ->filter(fn ($status) => in_array($status, ['missing_checkin', 'missing_attendance'], true))
             ->count();
@@ -202,6 +207,7 @@ class AttendanceReportService
             'day_off' => $dayOff,
             'personal_request' => $personalRequest,
             'on_leave' => $personalRequest,
+            'half_day' => $halfDay,
             'missing_checkin' => $missingCheckin,
             'missing_checkout' => $missingCheckout,
             'missing_attendance' => $missingCheckin,

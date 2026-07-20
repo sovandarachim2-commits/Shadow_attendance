@@ -57,7 +57,8 @@ export default function MyAttendanceReportsDesktop({
     { label: 'Day Off', value: summary.day_off ?? 0, pct: pct(summary.day_off), trend: 'In selected period', trendUp: true, icon: Calendar, tone: 'sky' },
     { label: 'Missing Check In', value: summary.missing_checkin ?? summary.missing_attendance ?? 0, pct: pct(summary.missing_checkin ?? summary.missing_attendance), trend: 'In selected period', trendUp: false, icon: AlertCircle, tone: 'violet' },
     { label: 'Missing Check Out', value: summary.missing_checkout ?? 0, pct: pct(summary.missing_checkout), trend: 'In selected period', trendUp: false, icon: AlertCircle, tone: 'fuchsia' },
-    { label: 'Personal Request', value: summary.personal_request ?? summary.on_leave ?? 0, pct: pct(summary.personal_request ?? summary.on_leave), trend: 'In selected period', trendUp: true, icon: AlertCircle, tone: 'blue' },
+    { label: 'Personal Leave', value: summary.personal_request ?? summary.on_leave ?? 0, pct: pct(summary.personal_request ?? summary.on_leave), trend: 'In selected period', trendUp: true, icon: AlertCircle, tone: 'blue' },
+    { label: 'Half Day', value: summary.half_day ?? 0, pct: pct(summary.half_day), trend: 'In selected period', trendUp: true, icon: Clock, tone: 'amber' },
     { label: 'Total Working Hours', value: formatWorkHours(summary.total_work_minutes), pct: null, trend: `${summary.total_records ?? 0} days logged`, trendUp: true, icon: Timer, tone: 'sky' },
     { label: 'Overtime Hours', value: formatWorkHours(summary.overtime_minutes), pct: null, trend: 'In selected period', trendUp: true, icon: AlertCircle, tone: 'violet' },
   ]
@@ -111,7 +112,8 @@ export default function MyAttendanceReportsDesktop({
               <option value="day_off">Day Off</option>
               <option value="missing_checkin">Missing Check In</option>
               <option value="missing_checkout">Missing Check Out</option>
-              <option value="personal_request">Personal Request</option>
+              <option value="personal_request">Personal Leave</option>
+              <option value="half_day">Half Day</option>
               <option value="absent">Absent</option>
             </select>
           </FilterSelect>
@@ -246,7 +248,8 @@ export default function MyAttendanceReportsDesktop({
               <LegendDot color="bg-sky-500" label="Day Off" />
               <LegendDot color="bg-violet-500" label="Missing Check In" />
               <LegendDot color="bg-fuchsia-500" label="Missing Check Out" />
-              <LegendDot color="bg-blue-500" label="Personal Request" />
+              <LegendDot color="bg-blue-500" label="Personal Leave" />
+              <LegendDot color="bg-amber-500" label="Half Day" />
             </div>
           </div>
 
@@ -429,7 +432,8 @@ function statusDotClass(row) {
   if (s === 'day_off') return 'bg-sky-500'
   if (s === 'missing_checkin' || s === 'missing_attendance') return 'bg-violet-500'
   if (s === 'missing_checkout') return 'bg-fuchsia-500'
-  if (s === 'personal_request' || s === 'on_leave' || s === 'half_day' || s === 'leave') return 'bg-blue-500'
+  if (s === 'half_day') return 'bg-amber-500'
+  if (s === 'personal_request' || s === 'on_leave' || s === 'leave') return 'bg-blue-500'
   return 'bg-emerald-500'
 }
 

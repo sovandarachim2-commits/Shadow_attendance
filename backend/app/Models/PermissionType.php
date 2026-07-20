@@ -24,4 +24,14 @@ class PermissionType extends Model
         'deduction_amount' => 'decimal:2',
         'is_active'        => 'boolean',
     ];
+
+    public function employees()
+    {
+        return $this->belongsToMany(Employee::class, 'permission_type_employee')->withTimestamps();
+    }
+
+    public function workSchedules()
+    {
+        return $this->belongsToMany(WorkSchedule::class, 'permission_type_work_schedule')->withTimestamps();
+    }
 }

@@ -182,6 +182,22 @@ export default function AttendanceActionModal({ action, user, onClose, onSaved }
   }
 
   const submitAttendance = async () => {
+    if (isCheckIn) {
+      try {
+        const today = await attendanceService.today()
+        if (today?.check_in_at && !today?.check_out_at) {
+          openNotice('warning', 'Already checked in', 'You are already checked in today. Please use Check Out instead.', () => onSaved({ action: 'refresh', warnings: [] }))
+          return
+        }
+        if (today?.check_in_at && today?.check_out_at) {
+          openNotice('warning', 'Attendance completed', 'Your attendance is already completed for today.', () => onSaved({ action: 'refresh', warnings: [] }))
+          return
+        }
+      } catch {
+        // Continue with submit; the API will still enforce duplicate attendance protection.
+      }
+    }
+
     if (requireGps && !coords) {
       openNotice('warning', 'Location required', 'Location is required before submitting.')
       return

@@ -29,10 +29,10 @@ class EmployeeMonthlyReportController extends Controller
         'missing_checkout' => 'Missing Check Out',
         'missing_attendance' => 'Missing Check In',
         'day_off'          => 'Day Off',
-        'personal_request' => 'Personal Request',
-        'on_leave'         => 'Personal Request',
-        'leave'            => 'Personal Request',
-        'half_day'         => 'Personal Request',
+        'personal_request' => 'Personal Leave',
+        'on_leave'         => 'Personal Leave',
+        'leave'            => 'Personal Leave',
+        'half_day'         => 'Half Day',
         'holiday'          => 'Holiday',
     ];
 
@@ -233,7 +233,8 @@ class EmployeeMonthlyReportController extends Controller
             ['Missing Check In', $summary['missing_checkin'] ?? 0],
             ['Missing Check Out', $summary['missing_checkout'] ?? 0],
             ['Day Off', $summary['day_off'] ?? 0],
-            ['Personal Request', $summary['personal_request'] ?? 0],
+            ['Personal Leave', $summary['personal_request'] ?? 0],
+            ['Half Day', $summary['half_day'] ?? 0],
         ];
         $monthlyRows = [
             ['Total Working Hours (Expected)', $this->formatWorkDuration($monthly['expected_minutes'] ?? 0)],
@@ -446,7 +447,7 @@ class EmployeeMonthlyReportController extends Controller
         $approvedRequests = PermissionRequest::query()
             ->where('employee_id', $employeeId)
             ->where('status', 'approved')
-            ->whereIn('type', ['Late Check In', 'Early Check Out', 'Day Off', 'Missing Check In', 'Missing Check Out', 'Missing Attendance', 'Personal Request'])
+            ->whereIn('type', ['Late Check In', 'Early Check Out', 'Day Off', 'Missing Check In', 'Missing Check Out', 'Missing Attendance', 'Personal Leave'])
             ->whereDate('request_date', '<=', $to->toDateString())
             ->where(function ($dateQuery) use ($from) {
                 $dateQuery
@@ -534,7 +535,9 @@ class EmployeeMonthlyReportController extends Controller
 
         foreach ($allDays as $d) {
             $s = $d['status'];
-            if (in_array($s, ['on_leave', 'leave', 'half_day', 'personal_request'], true)) {
+            if ($s === 'half_day') {
+                $summary['half_day']++;
+            } elseif (in_array($s, ['on_leave', 'leave', 'personal_request'], true)) {
                 $summary['personal_request']++;
             } elseif (array_key_exists($s, $summary)) {
                 $summary[$s]++;
@@ -811,6 +814,7 @@ class EmployeeMonthlyReportController extends Controller
             'missing_checkout' => 0,
             'day_off'          => 0,
             'personal_request' => 0,
+            'half_day'         => 0,
         ];
     }
 
@@ -851,7 +855,8 @@ class EmployeeMonthlyReportController extends Controller
             'missing_checkin', 'missing_attendance' => 'Missing check-in request approved',
             'missing_checkout' => 'Missing check-out',
             'day_off'          => $this->dayOffNote($dayInfo),
-            'personal_request', 'on_leave', 'leave', 'half_day' => 'Personal request approved',
+            'half_day' => 'Half-day request approved',
+            'personal_request', 'on_leave', 'leave' => 'Personal leave approved',
             'holiday'          => 'Public holiday',
             'absent'           => $dayInfo && $dayInfo['is_working_day']
                 ? 'No attendance record (scheduled work day)'
@@ -918,7 +923,7 @@ class EmployeeMonthlyReportController extends Controller
             'Missing Check In' => 'missing_checkin',
             'Missing Check Out' => 'missing_checkout',
             'Missing Attendance' => 'missing_checkin',
-            'Personal Request' => 'personal_request',
+            'Personal Leave' => 'personal_request',
         ];
 
         foreach ($priority as $type => $status) {
@@ -934,6 +939,10 @@ class EmployeeMonthlyReportController extends Controller
             });
 
             if ($match) {
+                if (in_array($type, ['Day Off', 'Personal Leave'], true) && $match->day_part === 'Half Day') {
+                    return 'half_day';
+                }
+
                 return $status;
             }
         }

@@ -9,6 +9,9 @@ use App\Http\Controllers\Api\ProfileController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\CustomerVisitController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\HotelStayController;
+use App\Http\Controllers\Api\MealRecordController;
+use App\Http\Controllers\Api\PlaceVisitController;
 use App\Http\Controllers\Api\BranchController;
 use App\Http\Controllers\Api\BootstrapController;
 use App\Http\Controllers\Api\DepartmentController;
@@ -116,6 +119,32 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/customer-visits/{customerVisit}/checkout', [CustomerVisitController::class, 'checkout'])
         ->middleware('permission:visits.update,visits.manage');
 
+    // Place Visits
+    Route::get('/place-visits', [PlaceVisitController::class, 'index'])
+        ->middleware('permission:visits.view,visits.manage,visits.create');
+    Route::post('/place-visits/start', [PlaceVisitController::class, 'start'])
+        ->middleware('permission:visits.create,visits.manage');
+    Route::match(['post', 'patch'], '/place-visits/{placeVisit}/end', [PlaceVisitController::class, 'end'])
+        ->middleware('permission:visits.update,visits.manage,visits.create');
+    Route::post('/customer-visits/place/start', [PlaceVisitController::class, 'start'])
+        ->middleware('permission:visits.create,visits.manage');
+    Route::match(['post', 'patch'], '/customer-visits/{placeVisit}/place/end', [PlaceVisitController::class, 'end'])
+        ->middleware('permission:visits.update,visits.manage,visits.create');
+
+    // Meals
+    Route::get('/meal-records', [MealRecordController::class, 'index'])
+        ->middleware('permission:visits.view,visits.manage,visits.create,reports.view_all,reports.view_own');
+    Route::post('/meal-records', [MealRecordController::class, 'store'])
+        ->middleware('permission:visits.create,visits.manage');
+
+    // Hotel Stays
+    Route::get('/hotel-stays', [HotelStayController::class, 'index'])
+        ->middleware('permission:visits.view,visits.manage,visits.create,reports.view_all,reports.view_own');
+    Route::post('/hotel-stays/check-in', [HotelStayController::class, 'checkIn'])
+        ->middleware('permission:visits.create,visits.manage');
+    Route::match(['post', 'patch'], '/hotel-stays/{hotelStay}/check-out', [HotelStayController::class, 'checkOut'])
+        ->middleware('permission:visits.update,visits.manage,visits.create');
+
     // Reports
     Route::get('/reports', [ReportController::class, 'index'])
         ->middleware('permission:reports.view_all,reports.view_own');
@@ -125,8 +154,12 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('permission:reports.export');
 
     // Permission Types
+    Route::get('/permission-types', [PermissionTypeController::class, 'index'])
+        ->middleware('permission:settings.manage,requests.create,requests.view_own,requests.view_all');
+    Route::get('/permission-types/options', [PermissionTypeController::class, 'options'])
+        ->middleware('permission:settings.manage');
     Route::apiResource('/permission-types', PermissionTypeController::class)
-        ->except(['show'])
+        ->except(['index', 'show'])
         ->middleware('permission:settings.manage');
 
     // Employee Monthly Report

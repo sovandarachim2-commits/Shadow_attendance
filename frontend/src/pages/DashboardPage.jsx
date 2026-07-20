@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { GoogleMap, MarkerF, PolylineF } from '@react-google-maps/api'
 import {
   AlertCircle, Bell, CalendarCheck, CheckCircle2, Clock,
-  MapPinned, Plus, ShoppingBag, Users,
+  ChevronRight, Hotel, Lock, LogIn, LogOut, MapPinned, Plus, ShoppingBag, Store, Utensils,
 } from 'lucide-react'
 import {
   Bar, BarChart, CartesianGrid, Cell, Pie, PieChart,
@@ -27,8 +27,8 @@ export default function DashboardPage({ appData, isLoaded, onAttendanceAction, u
 
       {canVisit && (
         <button
-          onClick={() => setModal('visit')}
-          title="New Customer Visit"
+          onClick={() => setModal('place-visit')}
+          title="Place Visit"
           className="fixed bottom-24 right-4 z-20 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-600 text-white shadow-xl shadow-emerald-600/40 transition hover:bg-emerald-700 active:scale-95 lg:hidden"
         >
           <Plus size={26} strokeWidth={2.2} />
@@ -102,6 +102,7 @@ function EmployeeDashboard({ appData, isLoaded, onAttendanceAction, setActive, u
   const workingHours = workMins > 0 ? `${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}m` : '--h --m'
   const completedVisits = appData.visits.filter((v) => v.status === 'completed').length
   const pendingVisits = appData.visits.filter((v) => v.status !== 'completed' && v.status !== 'cancelled').length
+  const canViewActivityFlow = canAccess(user, ['dashboard.activity_flow'])
 
   const todaySubtitle = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })
   const stats = [
@@ -122,6 +123,17 @@ function EmployeeDashboard({ appData, isLoaded, onAttendanceAction, setActive, u
         stats={stats}
         columns={5}
       />
+
+      {canViewActivityFlow && (
+        <OutdoorSaleLabels
+          attendance={today}
+          placeVisits={appData.placeVisits || []}
+          mealRecords={appData.mealRecords || []}
+          hotelStays={appData.hotelStays || []}
+          onAttendanceAction={onAttendanceAction}
+          setModal={setModal}
+        />
+      )}
 
       <div className="grid gap-6">
         <AttendanceControlPanel attendance={today} onAttendanceAction={onAttendanceAction} />
@@ -272,6 +284,266 @@ function AttendanceControlPanel({ attendance, onAttendanceAction }) {
           )}
         </div>
       )}
+    </div>
+  )
+}
+
+function OutdoorSaleLabels({ attendance, placeVisits = [], mealRecords = [], hotelStays = [], onAttendanceAction, setModal }) {
+  const checkedIn = Boolean(attendance?.check_in_at)
+  const completed = Boolean(attendance?.check_out_at)
+  const activePlaceVisit = placeVisits.find((visit) => visit.status === 'open')
+  const completedPlaceVisits = placeVisits.filter((visit) => visit.status === 'completed' || visit.status === 'closed').length
+  const pendingPlaceVisits = placeVisits.filter((visit) => visit.status === 'open').length
+  const todayKey = dateToKey(new Date())
+  const todayMeals = mealRecords.filter((record) => dateToKey(new Date(record.recorded_at || record.created_at)) === todayKey)
+  const completedMealText = todayMeals.map((record) => titleCase(record.meal_type)).join(', ')
+  const activeHotelStay = hotelStays.find((stay) => String(stay.status).toLowerCase() === 'checked_in')
+  const completedHotelStays = hotelStays.filter((stay) => String(stay.status).toLowerCase() === 'completed').length
+  const locationLabel = attendance?.check_in_address || attendance?.branch?.name || attendance?.location_name || 'Current location'
+
+  const steps = [
+    {
+      number: 1,
+      label: 'CHECK_IN',
+      title: checkedIn ? 'Working' : 'Start Day',
+      help: checkedIn ? `Checked in at ${formatTime(attendance.check_in_at)}` : 'Start outdoor sale day',
+      location: checkedIn ? locationLabel : 'GPS location required',
+      icon: LogIn,
+      tone: 'emerald',
+      active: checkedIn && !completed,
+      done: checkedIn,
+      status: checkedIn ? 'Completed' : 'Ready',
+      onClick: !checkedIn ? () => onAttendanceAction?.('check-in') : undefined,
+      actionLabel: checkedIn ? '' : 'Check In',
+    },
+    {
+      number: 2,
+      label: activePlaceVisit ? 'PLACE_VISIT_END' : 'PLACE_VISIT',
+      title: activePlaceVisit ? 'Finish Place Visit' : 'Place Visit',
+      help: activePlaceVisit ? 'Active place visit' : `${completedPlaceVisits} Completed / ${pendingPlaceVisits} Pending`,
+      location: activePlaceVisit?.start_address || (placeVisits.length ? 'Multiple places' : 'Place location'),
+      icon: Store,
+      tone: activePlaceVisit ? 'amber' : 'sky',
+      active: Boolean(activePlaceVisit),
+      done: completedPlaceVisits > 0,
+      status: activePlaceVisit ? 'Live' : checkedIn ? 'Ready' : 'Locked',
+      disabled: !checkedIn || completed,
+      onClick: () => setModal?.('place-visit'),
+      actionLabel: activePlaceVisit ? 'End Place Visit' : 'Start Place Visit',
+      actionCard: true,
+    },
+    {
+      number: 3,
+      label: 'MEAL_TIME',
+      title: 'Meal',
+      help: todayMeals.length ? `${completedMealText} saved` : 'Breakfast / Lunch / Dinner',
+      location: todayMeals.length ? `${todayMeals.length} meal type${todayMeals.length > 1 ? 's' : ''} completed` : 'Record meal location',
+      icon: Utensils,
+      tone: 'orange',
+      done: todayMeals.length >= 3,
+      status: todayMeals.length >= 3 ? 'Completed' : todayMeals.length > 0 ? 'Partial' : checkedIn && !completed ? 'Pending' : 'Locked',
+      disabled: !checkedIn || completed || todayMeals.length >= 3,
+      onClick: () => setModal?.('meal'),
+      actionLabel: todayMeals.length >= 3 ? 'Completed' : 'Record Meal',
+      actionCard: true,
+    },
+    {
+      number: 4,
+      label: 'CHECK_OUT',
+      title: completed ? 'Off Duty' : 'End Day',
+      help: completed ? formatTime(attendance.check_out_at) : checkedIn ? 'Close working day' : 'After check in',
+      location: completed ? (attendance?.check_out_address || 'Checkout location') : 'Available after field activity',
+      icon: LogOut,
+      tone: completed ? 'slate' : checkedIn ? 'amber' : 'slate',
+      active: checkedIn && !completed,
+      done: completed,
+      status: completed ? 'Completed' : checkedIn ? 'Ready' : 'Locked',
+      disabled: !checkedIn || completed,
+      onClick: checkedIn && !completed ? () => onAttendanceAction?.('check-out') : undefined,
+      actionLabel: 'Check Out',
+    },
+    {
+      number: 5,
+      label: 'HOTEL',
+      title: 'Stay',
+      help: activeHotelStay ? `Checked in at ${formatTime(activeHotelStay.check_in_at)}` : 'Check in / Check out',
+      location: activeHotelStay?.check_in_address || 'Optional overnight trip',
+      icon: Hotel,
+      tone: 'violet',
+      status: activeHotelStay ? 'Checked-In' : 'Optional',
+      disabled: !checkedIn || completed,
+      active: Boolean(activeHotelStay),
+      done: completedHotelStays > 0,
+      onClick: () => setModal?.('hotel'),
+      actionLabel: activeHotelStay ? 'Hotel Check Out' : 'Hotel Check In',
+      actionCard: true,
+    },
+  ]
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-md shadow-slate-200/70 dark:border-slate-800 dark:bg-slate-900 dark:shadow-none sm:p-4">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-bold sm:text-base">Daily Activity Flow</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Outdoor sale working route</p>
+        </div>
+        <span className={clsx(
+          'shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold sm:px-3 sm:text-xs',
+          completed
+            ? 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+            : checkedIn
+              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+              : 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300',
+        )}>
+          {completed ? 'Off Duty' : checkedIn ? 'Working' : 'Not Started'}
+        </span>
+      </div>
+
+      <div className="relative space-y-2.5 pl-8 sm:pl-10">
+        <span className="absolute bottom-7 left-4 top-7 border-l-2 border-dashed border-slate-200 dark:border-slate-800 sm:bottom-8 sm:top-8" />
+        {steps.map((step) => (
+          <OutdoorSaleLabelBox key={step.label} step={step} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function OutdoorSaleLabelBox({ step }) {
+  const Icon = step.icon
+  const tones = {
+    emerald: {
+      card: 'border-emerald-200 bg-gradient-to-r from-emerald-50 to-white shadow-emerald-950/5 dark:border-emerald-900 dark:from-emerald-950/25 dark:to-slate-900',
+      icon: 'border-emerald-200 bg-emerald-100 text-emerald-700 shadow-inner dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300',
+      text: 'text-emerald-700 dark:text-emerald-300',
+      pill: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300',
+      action: 'bg-emerald-600 text-white shadow-emerald-600/25 hover:bg-emerald-700',
+      outlineAction: 'border border-emerald-500 bg-white text-emerald-700 hover:bg-emerald-50 dark:border-emerald-700 dark:bg-slate-950 dark:text-emerald-300',
+      dot: 'border-emerald-500 bg-emerald-500 text-white',
+      pointer: 'border-l-emerald-500',
+    },
+    sky: {
+      card: 'border-sky-200 bg-gradient-to-r from-sky-50 to-white shadow-sky-950/5 dark:border-sky-900 dark:from-sky-950/25 dark:to-slate-900',
+      icon: 'border-sky-200 bg-sky-100 text-sky-700 shadow-inner dark:border-sky-800 dark:bg-sky-950/60 dark:text-sky-300',
+      text: 'text-sky-700 dark:text-sky-300',
+      pill: 'bg-sky-100 text-sky-700 dark:bg-sky-950/70 dark:text-sky-300',
+      action: 'bg-blue-600 text-white shadow-blue-600/25 hover:bg-blue-700',
+      outlineAction: 'border border-blue-300 bg-white text-blue-700 hover:bg-blue-50 dark:border-blue-800 dark:bg-slate-950 dark:text-blue-300',
+      dot: 'border-blue-600 bg-white text-blue-600 dark:bg-slate-900',
+      pointer: 'border-l-blue-600',
+    },
+    amber: {
+      card: 'border-amber-200 bg-gradient-to-r from-amber-50 to-white shadow-amber-950/5 dark:border-amber-900 dark:from-amber-950/25 dark:to-slate-900',
+      icon: 'border-amber-200 bg-amber-100 text-amber-700 shadow-inner dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-300',
+      text: 'text-amber-700 dark:text-amber-300',
+      pill: 'bg-amber-100 text-amber-700 dark:bg-amber-950/70 dark:text-amber-300',
+      action: 'bg-amber-500 text-white shadow-amber-500/25 hover:bg-amber-600',
+      outlineAction: 'border border-amber-300 bg-white text-amber-700 hover:bg-amber-50 dark:border-amber-800 dark:bg-slate-950 dark:text-amber-300',
+      dot: 'border-amber-500 bg-white text-amber-500 dark:bg-slate-900',
+      pointer: 'border-l-amber-500',
+    },
+    orange: {
+      card: 'border-orange-200 bg-gradient-to-r from-orange-50 to-white shadow-orange-950/5 dark:border-orange-900 dark:from-orange-950/25 dark:to-slate-900',
+      icon: 'border-orange-200 bg-orange-100 text-orange-700 shadow-inner dark:border-orange-800 dark:bg-orange-950/60 dark:text-orange-300',
+      text: 'text-orange-700 dark:text-orange-300',
+      pill: 'bg-orange-100 text-orange-700 dark:bg-orange-950/70 dark:text-orange-300',
+      action: 'border border-orange-300 bg-white text-orange-700 hover:bg-orange-50 dark:border-orange-900 dark:bg-slate-950 dark:text-orange-300',
+      outlineAction: 'border border-orange-300 bg-white text-orange-700 hover:bg-orange-50 dark:border-orange-900 dark:bg-slate-950 dark:text-orange-300',
+      dot: 'border-orange-500 bg-white text-orange-500 dark:bg-slate-900',
+      pointer: 'border-l-orange-500',
+    },
+    violet: {
+      card: 'border-violet-200 bg-gradient-to-r from-violet-50 to-white shadow-violet-950/5 dark:border-violet-900 dark:from-violet-950/25 dark:to-slate-900',
+      icon: 'border-violet-200 bg-violet-100 text-violet-700 shadow-inner dark:border-violet-800 dark:bg-violet-950/60 dark:text-violet-300',
+      text: 'text-violet-700 dark:text-violet-300',
+      pill: 'bg-violet-100 text-violet-700 dark:bg-violet-950/70 dark:text-violet-300',
+      action: 'border border-violet-300 bg-white text-violet-700 hover:bg-violet-50 dark:border-violet-900 dark:bg-slate-950 dark:text-violet-300',
+      outlineAction: 'border border-violet-300 bg-white text-violet-700 hover:bg-violet-50 dark:border-violet-900 dark:bg-slate-950 dark:text-violet-300',
+      dot: 'border-violet-500 bg-white text-violet-500 dark:bg-slate-900',
+      pointer: 'border-l-violet-500',
+    },
+    slate: {
+      card: 'border-slate-200 bg-gradient-to-r from-slate-50 to-white shadow-slate-950/5 dark:border-slate-800 dark:from-slate-950/80 dark:to-slate-900',
+      icon: 'border-slate-200 bg-slate-100 text-slate-500 shadow-inner dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400',
+      text: 'text-slate-500 dark:text-slate-400',
+      pill: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
+      action: 'bg-slate-200 text-slate-400 dark:bg-slate-800 dark:text-slate-500',
+      outlineAction: 'border border-slate-200 bg-white text-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-500',
+      dot: 'border-slate-300 bg-white text-slate-400 dark:border-slate-700 dark:bg-slate-900',
+      pointer: 'border-l-slate-400',
+    },
+  }
+  const tone = tones[step.tone] || tones.slate
+
+  const content = (
+    <>
+      <span className={clsx(
+        'absolute -left-8 top-1/2 z-10 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full border-[3px] text-xs font-bold shadow-sm sm:-left-10 sm:h-9 sm:w-9 sm:border-4 sm:text-sm',
+        step.done ? tones.emerald.dot : tone.dot,
+      )}>
+        {step.done ? <CheckCircle2 size={16} strokeWidth={2.4} /> : step.number}
+        {step.active && !step.done && (
+          <span className={clsx('absolute left-[calc(100%+6px)] top-1/2 h-0 w-0 -translate-y-1/2 border-y-[7px] border-l-[9px] border-y-transparent', tone.pointer)} />
+        )}
+      </span>
+
+      <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <span className={clsx('grid h-10 w-10 shrink-0 place-items-center rounded-lg border sm:h-12 sm:w-12', tone.icon)}>
+            <Icon size={17} />
+          </span>
+          <div className="min-w-0">
+            <p className={clsx('truncate text-[11px] font-bold uppercase sm:text-xs', tone.text)}>{step.number}. {step.label}</p>
+          </div>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1.5">
+          <span className={clsx('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase sm:px-2.5 sm:text-[10px]', tone.pill)}>
+            {step.status}
+            {step.disabled && <Lock size={10} />}
+          </span>
+          {step.actionLabel && (
+            <span className={clsx(
+              step.actionCard
+                ? 'inline-flex h-9 min-w-[124px] items-center justify-center gap-1.5 rounded-lg px-3 text-[11px] font-bold shadow-md transition sm:h-10 sm:min-w-[150px] sm:text-xs'
+                : 'inline-flex h-8 min-w-[112px] items-center justify-center gap-1 rounded-lg px-3 text-[11px] font-bold shadow-sm transition sm:h-9 sm:min-w-[132px] sm:text-xs',
+              step.disabled ? `${tone.outlineAction} opacity-60` : step.active ? tone.action : tone.outlineAction,
+            )}>
+              <span className="whitespace-nowrap">{step.actionLabel}</span>
+              <ChevronRight size={14} className="shrink-0" />
+            </span>
+          )}
+        </div>
+      </div>
+    </>
+  )
+
+  if (step.onClick && !step.disabled) {
+    return (
+      <button
+        type="button"
+        onClick={step.onClick}
+        className={clsx(
+          'relative w-full rounded-xl border p-2.5 text-left shadow-sm transition hover:shadow-md active:scale-[0.99] sm:p-3',
+          tone.card,
+          step.active && 'ring-2 ring-blue-100 dark:ring-blue-950/70',
+        )}
+      >
+        {content}
+      </button>
+    )
+  }
+
+  return (
+    <div
+      className={clsx(
+        'relative rounded-xl border p-2.5 shadow-sm sm:p-3',
+        tone.card,
+        step.disabled && 'opacity-70',
+        step.active && 'ring-2 ring-blue-100 dark:ring-blue-950/70',
+      )}
+    >
+      {content}
     </div>
   )
 }

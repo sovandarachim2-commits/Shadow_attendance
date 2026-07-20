@@ -112,7 +112,7 @@ class WorkScheduleService
 
         $blockedRequest = PermissionRequest::query()
             ->where('employee_id', $user->employee_id)
-            ->whereIn('type', ['Day Off', 'Personal Request'])
+            ->whereIn('type', ['Day Off', 'Personal Leave'])
             ->where('status', 'approved')
             ->where('request_date', '<=', $today)
             ->where(function ($q) use ($today) {
@@ -122,7 +122,7 @@ class WorkScheduleService
             ->where(function ($q) {
                 $q->where('type', 'Day Off')
                     ->orWhere(function ($personal) {
-                        $personal->where('type', 'Personal Request')
+                        $personal->where('type', 'Personal Leave')
                             ->where(function ($duration) {
                                 $duration->where('duration_type', 'multiple_day')
                                     ->orWhere(function ($singleDay) {

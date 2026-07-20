@@ -49,10 +49,10 @@ const PRINT_STATUS_LABELS = {
   missing_checkout: 'Missing Check Out',
   missing_attendance: 'Missing Check In',
   day_off: 'Day Off',
-  on_leave: 'Personal Request',
-  leave: 'Personal Request',
-  half_day: 'Personal Request',
-  personal_request: 'Personal Request',
+  on_leave: 'Personal Leave',
+  leave: 'Personal Leave',
+  half_day: 'Half Day',
+  personal_request: 'Personal Leave',
   holiday: 'Holiday',
 }
 const PAYROLL_PRINT_TEXT = {
@@ -162,7 +162,7 @@ const PAYROLL_PRINT_STATUS_LABELS = {
     day_off: 'ថ្ងៃឈប់សម្រាក',
     on_leave: 'សំណើផ្ទាល់ខ្លួន',
     leave: 'សំណើផ្ទាល់ខ្លួន',
-    half_day: 'សំណើផ្ទាល់ខ្លួន',
+    half_day: 'ពាក់កណ្តាលថ្ងៃ',
     personal_request: 'សំណើផ្ទាល់ខ្លួន',
     holiday: 'ថ្ងៃឈប់បុណ្យ',
   },
@@ -179,7 +179,7 @@ const ATTENDANCE_STATUS_TEXT_COLOR = {
   personal_request: '#0891B2',
   on_leave: '#0891B2',
   leave: '#0891B2',
-  half_day: '#0891B2',
+  half_day: '#D97706',
 }
 
 function attendanceStatusTextColor(status) {
@@ -431,7 +431,7 @@ function PayrollSummaryModal({ open, item, monthLabel, values, saving, canSave, 
     ['missing_checkin', 'Missing Check In', reportSummary.missing_checkin ?? reportSummary.missing_attendance ?? 0],
     ['missing_checkout', 'Missing Check Out', reportSummary.missing_checkout ?? 0],
     ['day_off', 'Day Off', reportSummary.day_off ?? 0],
-    ['personal_request', 'Personal Request', reportSummary.personal_request ?? 0],
+    ['personal_request', 'Personal Leave', reportSummary.personal_request ?? 0],
   ]
 
   return (
@@ -559,6 +559,7 @@ function PayrollHistoryPrintSheet({ item, companyName = 'Attendance System', lan
     [payrollPrintStatusLabel('missing_checkin', language), summary.missing_checkin ?? 0],
     [payrollPrintStatusLabel('day_off', language), summary.day_off ?? 0],
     [payrollPrintStatusLabel('personal_request', language), summary.personal_request ?? 0],
+    [payrollPrintStatusLabel('half_day', language), summary.half_day ?? 0],
   ]
   const workSummaryTotal = workSummaryRows.reduce((total, [, value]) => total + Number(value || 0), 0)
   const absenceSummaryTotal = absenceSummaryRows.reduce((total, [, value]) => total + Number(value || 0), 0)

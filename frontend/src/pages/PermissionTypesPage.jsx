@@ -53,8 +53,19 @@ function durationControlLabel(control) {
 
 
 // ── Main page ─────────────────────────────────────────────────────────────────
+function assignmentLabel(item) {
+  const employeeCount = (item.employeeIds ?? item.employee_ids ?? []).length
+  const scheduleCount = (item.scheduleIds ?? item.schedule_ids ?? []).length
+  if (!employeeCount && !scheduleCount) return 'Assigned to everyone'
+  return [
+    scheduleCount ? `${scheduleCount} schedule${scheduleCount === 1 ? '' : 's'}` : null,
+    employeeCount ? `${employeeCount} employee${employeeCount === 1 ? '' : 's'}` : null,
+  ].filter(Boolean).join(' + ')
+}
+
 export default function PermissionTypesPage() {
   const [types, setTypes]       = useState([])
+  const [assignmentOptions, setAssignmentOptions] = useState({ employees: [], workSchedules: [] })
   const [loading, setLoading]   = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing]   = useState(null)
@@ -67,8 +78,17 @@ export default function PermissionTypesPage() {
 
   const load = () => {
     setLoading(true)
-    api.get('/permission-types')
-      .then((res) => setTypes(res.data?.data ?? res.data ?? []))
+    Promise.all([
+      api.get('/permission-types'),
+      api.get('/permission-types/options').catch(() => ({ data: { employees: [], work_schedules: [] } })),
+    ])
+      .then(([typesRes, optionsRes]) => {
+        setTypes(typesRes.data?.data ?? typesRes.data ?? [])
+        setAssignmentOptions({
+          employees: optionsRes.data?.employees ?? [],
+          workSchedules: optionsRes.data?.work_schedules ?? optionsRes.data?.workSchedules ?? [],
+        })
+      })
       .catch(() => notify('Could not load permission types.', false))
       .finally(() => setLoading(false))
   }
@@ -205,6 +225,8 @@ export default function PermissionTypesPage() {
         <div>
           <AssignPermissionTypeModal
             initialData={editing}
+            employees={assignmentOptions.employees}
+            workSchedules={assignmentOptions.workSchedules}
             onClose={closeForm}
             onSave={handleSaveAndClose}
           />
@@ -230,6 +252,7 @@ function PermissionTypeListRow({ item, onEdit }) {
         <span className="min-w-0">
           <span className="block truncate font-black text-slate-900 dark:text-white">{item.name}</span>
           <span className="mt-1 block truncate text-xs font-medium text-slate-400">{item.description || 'Fixed request type'}</span>
+          <span className="mt-1 block truncate text-xs font-bold text-emerald-600 dark:text-emerald-400">{assignmentLabel(item)}</span>
         </span>
       </div>
 
@@ -380,6 +403,7 @@ function MobilePermissionTypeRow({ item, onEdit }) {
         <p className="mt-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
           {durationControlLabel(control)}{control === 'hours' && maxHours ? `, max ${Number(maxHours).toFixed(2)}h` : ''}
         </p>
+        <p className="text-xs font-semibold text-slate-400">{assignmentLabel(item)}</p>
         <p className="text-xs font-semibold text-amber-600 dark:text-amber-400">Approval Required</p>
         <span className={clsx(
           'mt-1 inline-flex w-fit rounded-lg px-2.5 py-1 text-xs font-black',

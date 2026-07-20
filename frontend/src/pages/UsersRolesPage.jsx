@@ -149,6 +149,7 @@ const PERMISSION_MODULES = [
     rows: [
       { label: 'Admin Dashboard',    desc: 'View admin/manager dashboard',        view: 'dashboard.admin' },
       { label: 'Employee Dashboard', desc: 'View employee self-service dashboard', view: 'dashboard.employee' },
+      { label: 'Daily Activity Flow', desc: 'Show or hide outdoor sale activity flow on dashboard', view: 'dashboard.activity_flow' },
     ],
   },
   {

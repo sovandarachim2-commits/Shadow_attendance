@@ -13,6 +13,7 @@ class PermissionRequest extends Model
         'type',
         'request_date',
         'request_date_end',
+        'return_date',
         'request_time',
         'start_time',
         'end_time',
@@ -39,6 +40,7 @@ class PermissionRequest extends Model
     protected $casts = [
         'request_date' => 'date',
         'request_date_end' => 'date',
+        'return_date' => 'date',
         'total_hours' => 'decimal:2',
         'total_days' => 'integer',
         'is_emergency' => 'boolean',

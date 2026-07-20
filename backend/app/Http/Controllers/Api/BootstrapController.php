@@ -7,11 +7,15 @@ use App\Models\Attendance;
 use App\Models\CustomerVisit;
 use App\Models\Employee;
 use App\Models\GpsLocation;
+use App\Models\HotelStay;
+use App\Models\MealRecord;
 use App\Models\Notification;
+use App\Models\PlaceVisit;
 use App\Models\Report;
 use App\Models\SystemSetting;
 use App\Repositories\AttendanceRepository;
 use App\Services\AttendanceRuleService;
+use App\Services\ImageUploadService;
 use App\Services\WorkScheduleService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -23,6 +27,7 @@ class BootstrapController extends Controller
         private AttendanceRepository $attendance,
         private AttendanceRuleService $attendanceRules,
         private WorkScheduleService $workSchedules,
+        private ImageUploadService $images,
     ) {}
 
     public function __invoke(Request $request)
@@ -44,6 +49,15 @@ class BootstrapController extends Controller
                 : [],
             'visits' => $this->can($user, ['visits.view', 'visits.create', 'visits.manage'])
                 ? $this->visits($user)
+                : [],
+            'placeVisits' => $this->can($user, ['visits.view', 'visits.create', 'visits.manage'])
+                ? $this->placeVisits($user)
+                : [],
+            'mealRecords' => $this->can($user, ['visits.view', 'visits.create', 'visits.manage', 'reports.view_all', 'reports.view_own'])
+                ? $this->mealRecords($user)
+                : [],
+            'hotelStays' => $this->can($user, ['visits.view', 'visits.create', 'visits.manage', 'reports.view_all', 'reports.view_own'])
+                ? $this->hotelStays($user)
                 : [],
             'reports' => $this->can($user, ['reports.view_all', 'reports.view_own'])
                 ? $this->reports($user)
@@ -144,6 +158,48 @@ class BootstrapController extends Controller
             ->latest('check_in_at')
             ->limit(50)
             ->get();
+    }
+
+    private function placeVisits($user)
+    {
+        $canViewAll = $user->hasAnyPermission('visits.view', 'visits.manage');
+
+        return PlaceVisit::query()
+            ->with(['employee.department', 'employee.position'])
+            ->when(! $canViewAll, fn ($query) => $query->where('employee_id', $user->employee_id))
+            ->latest('started_at')
+            ->limit(50)
+            ->get();
+    }
+
+    private function mealRecords($user)
+    {
+        $canViewAll = $user->hasAnyPermission('visits.view', 'visits.manage', 'reports.view_all');
+
+        return MealRecord::query()
+            ->with(['employee.department', 'employee.position'])
+            ->when(! $canViewAll, fn ($query) => $query->where('employee_id', $user->employee_id))
+            ->latest('recorded_at')
+            ->limit(50)
+            ->get();
+    }
+
+    private function hotelStays($user)
+    {
+        $canViewAll = $user->hasAnyPermission('visits.view', 'visits.manage', 'reports.view_all');
+
+        return HotelStay::query()
+            ->with(['employee.department', 'employee.position'])
+            ->when(! $canViewAll, fn ($query) => $query->where('employee_id', $user->employee_id))
+            ->latest('check_in_at')
+            ->limit(50)
+            ->get()
+            ->map(function (HotelStay $stay) {
+                $stay->check_in_photo_url = $this->images->url($stay->check_in_photo_path);
+                $stay->check_out_photo_url = $this->images->url($stay->check_out_photo_path);
+
+                return $stay;
+            });
     }
 
     private function reports($user)

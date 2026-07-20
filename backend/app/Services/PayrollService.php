@@ -9,6 +9,8 @@ use App\Models\EmployeeBonus;
 use App\Models\Payroll;
 use App\Models\PayrollItem;
 use App\Models\PayrollLog;
+use App\Models\PermissionRequest;
+use App\Models\PermissionType;
 use App\Models\Report;
 use App\Models\SalaryAdvance;
 use App\Models\SalarySetup;
@@ -78,7 +80,7 @@ class PayrollService
         $overtimeAmount = round($overtimeHours * (float) $setup->overtime_rate, 2);
         [$bonusAmount, $bonusBreakdown] = $this->bonusForEmployee($employee, $month);
         [$salesAmount, $commissionAmount, $commissionBreakdown] = $this->commissionForEmployee($employee, $setup, $start, $end);
-        [$deductionAmount, $deductionBreakdown] = $this->deductionsForEmployee($attendances, $dailySalary);
+        [$deductionAmount, $deductionBreakdown] = $this->deductionsForEmployee($employee, $attendances, $dailySalary, $month);
         [$advanceAmount, $advanceBreakdown] = $this->advancesForEmployee($employee, $month);
 
         if ($advanceAmount > 0) {
@@ -226,7 +228,7 @@ class PayrollService
         ];
     }
 
-    private function deductionsForEmployee($attendances, float $dailySalary): array
+    private function deductionsForEmployee(Employee $employee, $attendances, float $dailySalary, Carbon $month): array
     {
         $rules = DeductionRule::query()->where('status', true)->get();
         $total = 0.0;
@@ -254,6 +256,70 @@ class PayrollService
                 'type' => $rule->deduction_type,
                 'label' => $rule->rule_name,
                 'count' => $count,
+                'amount' => $amount,
+            ];
+        }
+
+        [$permissionTotal, $permissionBreakdown] = $this->permissionRequestDeductionsForEmployee($employee, $month);
+        $total += $permissionTotal;
+        $breakdown = array_merge($breakdown, $permissionBreakdown);
+
+        return [round($total, 2), $breakdown];
+    }
+
+    private function permissionRequestDeductionsForEmployee(Employee $employee, Carbon $month): array
+    {
+        $types = PermissionType::query()
+            ->where('is_active', true)
+            ->where('deduction_amount', '>', 0)
+            ->get()
+            ->keyBy('name');
+
+        if ($types->isEmpty()) {
+            return [0.0, []];
+        }
+
+        $requests = PermissionRequest::query()
+            ->where('employee_id', $employee->id)
+            ->where('status', 'approved')
+            ->whereIn('type', $types->keys())
+            ->whereBetween('request_date', [
+                $month->copy()->startOfMonth()->toDateString(),
+                $month->copy()->endOfMonth()->toDateString(),
+            ])
+            ->orderBy('request_date')
+            ->get();
+
+        $total = 0.0;
+        $breakdown = [];
+
+        foreach ($types as $typeName => $type) {
+            $typeRequests = $requests->where('type', $typeName);
+            if ($typeRequests->isEmpty()) {
+                continue;
+            }
+
+            $overage = 0;
+            $allowed = (int) $type->allowed_times;
+
+            if ($type->limit_type === 'per_day') {
+                $overage = $typeRequests
+                    ->groupBy(fn (PermissionRequest $request) => $request->request_date->toDateString())
+                    ->sum(fn ($dailyRequests) => max(0, $dailyRequests->count() - $allowed));
+            } else {
+                $overage = max(0, $typeRequests->count() - $allowed);
+            }
+
+            if ($overage <= 0) {
+                continue;
+            }
+
+            $amount = round($overage * (float) $type->deduction_amount, 2);
+            $total += $amount;
+            $breakdown[] = [
+                'type' => 'permission_request',
+                'label' => "{$typeName} over allowance",
+                'count' => $overage,
                 'amount' => $amount,
             ];
         }

@@ -89,25 +89,25 @@ const STATUS_META = {
     row: 'bg-sky-50/40 dark:bg-sky-950/10',
   },
   on_leave: {
-    label: 'Personal Request',
+    label: 'Personal Leave',
     badge: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-950/60 dark:text-cyan-400',
     dot: 'bg-cyan-500',
     row: '',
   },
   leave: {
-    label: 'Personal Request',
+    label: 'Personal Leave',
     badge: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-950/60 dark:text-cyan-400',
     dot: 'bg-cyan-500',
     row: '',
   },
   half_day: {
-    label: 'Personal Request',
-    badge: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-950/60 dark:text-cyan-400',
-    dot: 'bg-cyan-500',
+    label: 'Half Day',
+    badge: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400',
+    dot: 'bg-amber-500',
     row: '',
   },
   personal_request: {
-    label: 'Personal Request',
+    label: 'Personal Leave',
     badge: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-950/60 dark:text-cyan-400',
     dot: 'bg-cyan-500',
     row: '',
@@ -128,7 +128,8 @@ const CARDS_CONFIG = [
   { key: 'early_checkout', label: 'Early Check Out', icon: LogOut, tone: 'blue' },
   { key: 'day_off', label: 'Day Off', icon: Umbrella, tone: 'violet' },
   { key: 'missing_checkout', label: 'Missing Check Out', icon: LogOut, tone: 'darkOrange' },
-  { key: 'personal_request', label: 'Personal Request', icon: XCircle, tone: 'cyan' },
+  { key: 'personal_request', label: 'Personal Leave', icon: XCircle, tone: 'cyan' },
+  { key: 'half_day', label: 'Half Day', icon: Clock, tone: 'amber' },
 ]
 
 const TONE_ICON = {
@@ -171,7 +172,8 @@ const STATUS_FILTER_OPTIONS = [
   { value: 'absent', label: 'Absent' },
   { value: 'missing_checkin', label: 'Missing Check In' },
   { value: 'missing_checkout', label: 'Missing Check Out' },
-  { value: 'personal_request', label: 'Personal Request' },
+  { value: 'personal_request', label: 'Personal Leave' },
+  { value: 'half_day', label: 'Half Day' },
   { value: 'day_off', label: 'Day Off' },
   { value: 'holiday', label: 'Holiday' },
 ]
@@ -184,7 +186,8 @@ const LEGEND_ITEMS = [
   { dot: 'bg-blue-500', label: 'Early Check Out' },
   { dot: 'bg-violet-500', label: 'Day Off' },
   { dot: 'bg-orange-700', label: 'Missing Check Out' },
-  { dot: 'bg-cyan-500', label: 'Personal Request' },
+  { dot: 'bg-cyan-500', label: 'Personal Leave' },
+  { dot: 'bg-amber-500', label: 'Half Day' },
 ]
 
 const TABLE_COLS = ['Date', 'Schedule', 'Check In', 'Check Out', 'Work Hours', 'Late', 'Deduction', 'Overtime', 'Status']
@@ -214,7 +217,7 @@ const PRINT_TEXT = {
     missingCheckin: 'Missing Check In',
     missingCheckout: 'Missing Check Out',
     dayOff: 'Day Off',
-    personalRequest: 'Personal Request',
+    personalRequest: 'Personal Leave',
     tableCols: TABLE_COLS,
     preparedBy: 'Prepared by',
     hrDepartment: 'HR Department',
@@ -269,7 +272,7 @@ const PRINT_STATUS_LABELS = {
     day_off: PRINT_TEXT.km.dayOff,
     on_leave: PRINT_TEXT.km.personalRequest,
     leave: PRINT_TEXT.km.personalRequest,
-    half_day: PRINT_TEXT.km.personalRequest,
+    half_day: 'ពាក់កណ្តាលថ្ងៃ',
     personal_request: PRINT_TEXT.km.personalRequest,
     holiday: 'ថ្ងៃឈប់បុណ្យ',
   },
@@ -286,7 +289,7 @@ const MOBILE_STATUS_LABELS = {
   day_off: 'Day Off',
   on_leave: 'Personal',
   leave: 'Personal',
-  half_day: 'Personal',
+  half_day: 'Half Day',
   personal_request: 'Personal',
   holiday: 'Holiday',
 }
@@ -385,7 +388,7 @@ const STATUS_SUMMARY_TEXT_COLOR = {
   personal_request: '#0891B2',
   on_leave: '#0891B2',
   leave: '#0891B2',
-  half_day: '#0891B2',
+  half_day: '#D97706',
 }
 
 function statusSummaryColor(key) {
@@ -499,7 +502,8 @@ function buildClientExcel(data, payrollSummary = null) {
     ['absent', 'Absent', summary.absent ?? 0],
     ['missing_checkin', 'Missing Check In', summary.missing_checkin ?? 0],
     ['day_off', 'Day Off', summary.day_off ?? 0],
-    ['personal_request', 'Personal Request', summary.personal_request ?? 0],
+    ['personal_request', 'Personal Leave', summary.personal_request ?? 0],
+    ['half_day', 'Half Day', summary.half_day ?? 0],
   ]
   const workSummaryTotal = workSummaryRows.reduce((total, [, , value]) => total + Number(value || 0), 0)
   const absenceSummaryTotal = absenceSummaryRows.reduce((total, [, , value]) => total + Number(value || 0), 0)
@@ -1371,6 +1375,7 @@ function PrintReportSheet({ report, appSettings = {}, language = 'en', payrollSu
     ['missing_checkin', text.missingCheckin, summary.missing_checkin ?? 0],
     ['day_off', text.dayOff, summary.day_off ?? 0],
     ['personal_request', text.personalRequest, summary.personal_request ?? 0],
+    ['half_day', language === 'km' ? 'ពាក់កណ្តាលថ្ងៃ' : 'Half Day', summary.half_day ?? 0],
   ]
   const workSummaryTotal = workSummaryRows.reduce((total, [, , value]) => total + Number(value || 0), 0)
   const absenceSummaryTotal = absenceSummaryRows.reduce((total, [, , value]) => total + Number(value || 0), 0)

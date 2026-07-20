@@ -39,7 +39,8 @@ class AttendanceRepository
             'present' => $collection->where('status', 'present')->count(),
             'late' => $collection->where('status', 'late')->count(),
             'absent' => $collection->where('status', 'absent')->count(),
-            'on_leave' => $collection->whereIn('status', ['on_leave', 'half_day'])->count(),
+            'on_leave' => $collection->where('status', 'on_leave')->count(),
+            'half_day' => $collection->where('status', 'half_day')->count(),
             'missing_checkout' => $collection->filter(
                 fn ($row) => $row->check_in_at && ! $row->check_out_at && $row->status !== 'absent'
             )->count(),
@@ -75,10 +76,11 @@ class AttendanceRepository
             ->when(($filters['status'] ?? null) === 'early_checkout', fn ($query) => $this->whereApprovedRequestType($query, ['Early Check Out']))
             ->when(($filters['status'] ?? null) === 'day_off', fn ($query) => $this->whereApprovedRequestType($query, ['Day Off']))
             ->when(($filters['status'] ?? null) === 'missing_checkin', fn ($query) => $this->whereApprovedRequestType($query, ['Missing Check In', 'Missing Attendance']))
-            ->when(($filters['status'] ?? null) === 'personal_request', fn ($query) => $this->whereApprovedRequestType($query, ['Personal Request']))
+            ->when(($filters['status'] ?? null) === 'personal_request', fn ($query) => $this->whereApprovedRequestType($query, ['Personal Leave']))
+            ->when(($filters['status'] ?? null) === 'half_day', fn ($query) => $this->whereApprovedRequestType($query, ['Day Off', 'Personal Leave'], 'Half Day'))
             ->when(
                 ($filters['status'] ?? null)
-                    && ! in_array(($filters['status'] ?? null), ['missing_checkout', 'early_checkout', 'day_off', 'missing_checkin', 'personal_request'], true),
+                    && ! in_array(($filters['status'] ?? null), ['missing_checkout', 'early_checkout', 'day_off', 'missing_checkin', 'personal_request', 'half_day'], true),
                 fn ($query) => $query->where('status', $filters['status'])
             )
             ->when($filters['gps_status'] ?? null, function ($query, $gps) {
@@ -104,14 +106,15 @@ class AttendanceRepository
             });
     }
 
-    private function whereApprovedRequestType(Builder $query, array $types): void
+    private function whereApprovedRequestType(Builder $query, array $types, ?string $dayPart = null): void
     {
-        $query->whereExists(function ($subquery) use ($types) {
+        $query->whereExists(function ($subquery) use ($types, $dayPart) {
             $subquery->selectRaw('1')
                 ->from('permission_requests')
                 ->whereColumn('permission_requests.employee_id', 'attendances.employee_id')
                 ->where('permission_requests.status', 'approved')
                 ->whereIn('permission_requests.type', $types)
+                ->when($dayPart, fn ($dayPartQuery) => $dayPartQuery->where('permission_requests.day_part', $dayPart))
                 ->whereColumn('permission_requests.request_date', '<=', 'attendances.attendance_date')
                 ->where(function ($dateQuery) {
                     $dateQuery
