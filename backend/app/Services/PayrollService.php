@@ -271,7 +271,7 @@ class PayrollService
     {
         $types = PermissionType::query()
             ->where('is_active', true)
-            ->where('deduction_amount', '>', 0)
+            ->with('rules')
             ->get()
             ->keyBy('name');
 
@@ -284,7 +284,7 @@ class PayrollService
             ->where('status', 'approved')
             ->whereIn('type', $types->keys())
             ->whereBetween('request_date', [
-                $month->copy()->startOfMonth()->toDateString(),
+                $month->copy()->startOfYear()->toDateString(),
                 $month->copy()->endOfMonth()->toDateString(),
             ])
             ->orderBy('request_date')
@@ -293,38 +293,73 @@ class PayrollService
         $total = 0.0;
         $breakdown = [];
 
-        foreach ($types as $typeName => $type) {
-            $typeRequests = $requests->where('type', $typeName);
-            if ($typeRequests->isEmpty()) {
+        $usage = [];
+        foreach ($requests as $request) {
+            $type = $types->get($request->type);
+            if (! $type) {
                 continue;
             }
 
-            $overage = 0;
-            $allowed = (int) $type->allowed_times;
-
-            if ($type->limit_type === 'per_day') {
-                $overage = $typeRequests
-                    ->groupBy(fn (PermissionRequest $request) => $request->request_date->toDateString())
-                    ->sum(fn ($dailyRequests) => max(0, $dailyRequests->count() - $allowed));
-            } else {
-                $overage = max(0, $typeRequests->count() - $allowed);
-            }
-
-            if ($overage <= 0) {
+            $effective = $this->effectivePermissionTypeForPayroll($type, $employee, $request->request_date);
+            if (! $effective || (float) $effective->deduction_amount <= 0) {
                 continue;
             }
 
-            $amount = round($overage * (float) $type->deduction_amount, 2);
+            $period = match ($effective->limit_type) {
+                'per_day' => $request->request_date->toDateString(),
+                'per_year' => $request->request_date->format('Y'),
+                default => $request->request_date->format('Y-m'),
+            };
+            $key = implode('|', [$request->type, $effective->limit_type, (int) $effective->allowed_times, (float) $effective->deduction_amount, $period]);
+            $usage[$key] = ($usage[$key] ?? 0) + 1;
+
+            if (! $request->request_date->betweenIncluded($month->copy()->startOfMonth(), $month->copy()->endOfMonth())) {
+                continue;
+            }
+
+            if ($usage[$key] <= (int) $effective->allowed_times) {
+                continue;
+            }
+
+            $amount = round((float) $effective->deduction_amount, 2);
             $total += $amount;
-            $breakdown[] = [
-                'type' => 'permission_request',
-                'label' => "{$typeName} over allowance",
-                'count' => $overage,
-                'amount' => $amount,
-            ];
+            $breakdownKey = "{$request->type}|{$effective->limit_type}|{$effective->deduction_amount}";
+            if (! isset($breakdown[$breakdownKey])) {
+                $breakdown[$breakdownKey] = [
+                    'type' => 'permission_request',
+                    'label' => "{$request->type} over allowance",
+                    'count' => 0,
+                    'amount' => 0.0,
+                ];
+            }
+            $breakdown[$breakdownKey]['count']++;
+            $breakdown[$breakdownKey]['amount'] = round($breakdown[$breakdownKey]['amount'] + $amount, 2);
         }
 
-        return [round($total, 2), $breakdown];
+        return [round($total, 2), array_values($breakdown)];
+    }
+
+    private function effectivePermissionTypeForPayroll(PermissionType $type, Employee $employee, Carbon $date): PermissionType
+    {
+        $schedule = app(WorkScheduleService::class)->scheduleForEmployeeOnDate($employee->id, $date);
+        $rule = $type->rules->first(fn ($item) => (int) $item->employee_id === (int) $employee->id)
+            ?: ($schedule ? $type->rules->first(fn ($item) => (int) $item->work_schedule_id === (int) $schedule->id) : null);
+
+        if (! $rule) {
+            return $type;
+        }
+
+        $type = clone $type;
+        $type->forceFill([
+            'allowed_times' => $rule->allowed_times,
+            'limit_type' => $rule->limit_type,
+            'duration_control' => $rule->duration_control,
+            'max_hours' => $rule->max_hours,
+            'deduction_amount' => $rule->deduction_amount,
+            'is_active' => $type->is_active && $rule->is_active,
+        ]);
+
+        return $type;
     }
 
     private function chargeableLateMinutes(Attendance $attendance): int

@@ -24,6 +24,8 @@ class PermissionTypeController extends Controller
             ->with([
                 'employees:id,first_name,last_name,employee_code',
                 'workSchedules:id,schedule_name',
+                'rules.employee:id,first_name,last_name,employee_code',
+                'rules.workSchedule:id,schedule_name',
             ])
             ->whereIn('name', $this->coreTypeNames())
             ->orderByRaw("FIELD(name, 'Late Check In', 'Early Check Out', 'Day Off', 'Missing Check In', 'Missing Check Out', 'Personal Leave')");
@@ -35,7 +37,8 @@ class PermissionTypeController extends Controller
             $date = Carbon::parse($request->query('date', now()->toDateString()));
 
             $types = $types
-                ->filter(fn (PermissionType $type) => $employeeId && $this->isAvailableForEmployee($type, $employeeId, $date))
+                ->map(fn (PermissionType $type) => $employeeId ? $this->applyEffectiveRule($type, $employeeId, $date) : $type)
+                ->filter(fn (?PermissionType $type) => $type && $this->isAvailableForEmployee($type, $employeeId, $date))
                 ->values();
         }
 
@@ -80,7 +83,7 @@ class PermissionTypeController extends Controller
     {
         $data = $request->validate([
             'allowedTimes'     => 'required|integer|min:0',
-            'limitType'        => 'required|in:per_day,per_month',
+            'limitType'        => 'required|in:per_day,per_month,per_year',
             'durationControl'  => 'nullable|in:any,single_day,multiple_day,hours',
             'maxHours'         => 'nullable|numeric|min:0.25|max:24',
             'deductionAmount'  => 'required|numeric|min:0',
@@ -91,6 +94,15 @@ class PermissionTypeController extends Controller
             'employeeIds.*'    => 'integer|exists:employees,id',
             'scheduleIds'      => 'sometimes|array',
             'scheduleIds.*'    => 'integer|exists:work_schedules,id',
+            'rules'            => 'sometimes|array',
+            'rules.*.targetType' => 'required_with:rules|in:employee,schedule',
+            'rules.*.targetId' => 'required_with:rules|integer',
+            'rules.*.allowedTimes' => 'required_with:rules|integer|min:0',
+            'rules.*.limitType' => 'required_with:rules|in:per_day,per_month,per_year',
+            'rules.*.durationControl' => 'nullable|in:any,single_day,multiple_day,hours',
+            'rules.*.maxHours' => 'nullable|numeric|min:0.25|max:24',
+            'rules.*.deductionAmount' => 'required_with:rules|numeric|min:0',
+            'rules.*.isActive' => 'sometimes|boolean',
         ]);
 
         $durationControl = $this->usesSingleRequestTime($permissionType->name)
@@ -116,8 +128,12 @@ class PermissionTypeController extends Controller
             $permissionType->workSchedules()->sync($data['scheduleIds']);
         }
 
+        if (array_key_exists('rules', $data)) {
+            $this->syncRules($permissionType, $data['rules']);
+        }
+
         return response()->json($this->serializeType(
-            $permissionType->fresh(['employees:id,first_name,last_name,employee_code', 'workSchedules:id,schedule_name'])
+            $permissionType->fresh(['employees:id,first_name,last_name,employee_code', 'workSchedules:id,schedule_name', 'rules.employee:id,first_name,last_name,employee_code', 'rules.workSchedule:id,schedule_name'])
         ));
     }
 
@@ -154,28 +170,88 @@ class PermissionTypeController extends Controller
             'employees' => $type->employees,
             'work_schedules' => $type->workSchedules,
             'workSchedules' => $type->workSchedules,
+            'rules' => $type->rules->map(fn ($rule) => $this->serializeRule($rule))->values(),
         ];
+    }
+
+    private function serializeRule($rule): array
+    {
+        $targetType = $rule->employee_id ? 'employee' : 'schedule';
+        $targetId = $rule->employee_id ?: $rule->work_schedule_id;
+
+        return [
+            'id' => $rule->id,
+            'targetType' => $targetType,
+            'target_type' => $targetType,
+            'targetId' => $targetId,
+            'target_id' => $targetId,
+            'employee_id' => $rule->employee_id,
+            'work_schedule_id' => $rule->work_schedule_id,
+            'allowedTimes' => $rule->allowed_times,
+            'allowed_times' => $rule->allowed_times,
+            'limitType' => $rule->limit_type,
+            'limit_type' => $rule->limit_type,
+            'durationControl' => $rule->duration_control,
+            'duration_control' => $rule->duration_control,
+            'maxHours' => $rule->max_hours,
+            'max_hours' => $rule->max_hours,
+            'deductionAmount' => $rule->deduction_amount,
+            'deduction_amount' => $rule->deduction_amount,
+            'isActive' => $rule->is_active,
+            'is_active' => $rule->is_active,
+            'employee' => $rule->employee,
+            'workSchedule' => $rule->workSchedule,
+            'work_schedule' => $rule->workSchedule,
+        ];
+    }
+
+    private function syncRules(PermissionType $permissionType, array $rows): void
+    {
+        $permissionType->rules()->delete();
+
+        foreach ($rows as $row) {
+            $targetType = $row['targetType'];
+            $durationControl = $this->usesSingleRequestTime($permissionType->name)
+                ? 'hours'
+                : ($row['durationControl'] ?? $permissionType->duration_control ?? 'any');
+
+            $permissionType->rules()->create([
+                'employee_id' => $targetType === 'employee' ? $row['targetId'] : null,
+                'work_schedule_id' => $targetType === 'schedule' ? $row['targetId'] : null,
+                'allowed_times' => $row['allowedTimes'],
+                'limit_type' => $row['limitType'],
+                'duration_control' => $durationControl,
+                'max_hours' => $durationControl === 'hours' ? ($row['maxHours'] ?? null) : null,
+                'deduction_amount' => $row['deductionAmount'],
+                'is_active' => array_key_exists('isActive', $row) ? $row['isActive'] : true,
+            ]);
+        }
+    }
+
+    private function applyEffectiveRule(PermissionType $type, int $employeeId, Carbon $date): ?PermissionType
+    {
+        $schedule = $this->workSchedules->scheduleForEmployeeOnDate($employeeId, $date);
+        $rule = $type->rules->first(fn ($item) => (int) $item->employee_id === $employeeId)
+            ?: ($schedule ? $type->rules->first(fn ($item) => (int) $item->work_schedule_id === (int) $schedule->id) : null);
+
+        if (! $rule) {
+            return $type;
+        }
+
+        $type->forceFill([
+            'allowed_times' => $rule->allowed_times,
+            'limit_type' => $rule->limit_type,
+            'duration_control' => $rule->duration_control,
+            'max_hours' => $rule->max_hours,
+            'deduction_amount' => $rule->deduction_amount,
+            'is_active' => $type->is_active && $rule->is_active,
+        ]);
+
+        return $type;
     }
 
     private function isAvailableForEmployee(PermissionType $type, int $employeeId, Carbon $date): bool
     {
-        if (! $type->is_active) {
-            return false;
-        }
-
-        $employeeIds = $type->employees->pluck('id');
-        $scheduleIds = $type->workSchedules->pluck('id');
-
-        if ($employeeIds->isEmpty() && $scheduleIds->isEmpty()) {
-            return true;
-        }
-
-        if ($employeeIds->contains($employeeId)) {
-            return true;
-        }
-
-        $schedule = $this->workSchedules->scheduleForEmployeeOnDate($employeeId, $date);
-
-        return $schedule && $scheduleIds->contains($schedule->id);
+        return (bool) $type->is_active;
     }
 }

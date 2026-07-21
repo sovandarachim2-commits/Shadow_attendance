@@ -347,7 +347,7 @@ function PermissionTypesSettings() {
                     <div className="mt-0.5 flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
                       <span className="flex items-center gap-1">
                         <Clock size={11} />
-                        {item.allowedTimes ?? item.allowed_times ?? 0}× {item.limitType === 'per_day' || item.limit_type === 'per_day' ? 'per day' : 'per month'}
+                        {item.allowedTimes ?? item.allowed_times ?? 0}× {limitLabel(item.limitType ?? item.limit_type)}
                       </span>
                       <span className="text-slate-300 dark:text-slate-600">|</span>
                       <span className="flex items-center gap-1">
@@ -414,7 +414,7 @@ function PermissionTypeFormInline({ initialData, onClose, onSave }) {
     try { await onSave(form) } finally { setSaving(false) }
   }
 
-  const limitLabel = (lt) => lt === 'per_day' ? 'per day' : 'per month'
+  const limitLabel = (lt) => lt === 'per_day' ? 'per day' : lt === 'per_year' ? 'per year' : 'per month'
 
   return (
     <div className="space-y-5">
@@ -504,6 +504,7 @@ function PermissionTypeFormInline({ initialData, onClose, onSave }) {
               {[
                 { id: 'per_day',   label: 'Per Day'   },
                 { id: 'per_month', label: 'Per Month' },
+                { id: 'per_year',  label: 'Per Year'  },
               ].map((opt) => {
                 const sel = form.limitType === opt.id
                 return (

@@ -43,7 +43,7 @@ function fmtRequestDuration(row) {
 
   if (isDayRangeRequest(row.type) && row.duration_type === 'single_day') {
     const part = row.day_part || 'Full Day'
-    const time = part === 'Half Day' && (row.request_time || row.start_time) ? `, departure ${row.request_time || row.start_time}` : ''
+    const time = part === 'Half Day' && (row.request_time || row.start_time) ? `, go to work ${row.request_time || row.start_time}` : ''
     return `${part}${time}`
   }
 
@@ -52,10 +52,10 @@ function fmtRequestDuration(row) {
 }
 
 function calcDays(start, end) {
-  if (!start || !end) return 1
+  if (!start || !end) return 0
   const a = new Date(`${start}T00:00:00`)
   const b = new Date(`${end}T00:00:00`)
-  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime()) || b < a) return 1
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime()) || b < a) return 0
   return Math.round((b - a) / 86400000) + 1
 }
 
@@ -90,12 +90,19 @@ function deductionAmountOf(type) {
 }
 
 function limitLabelOf(limitType) {
+  if (limitType === 'per_year') return 'year'
   return limitType === 'per_day' ? 'day' : 'month'
+}
+
+function limitPeriodLabelOf(limitType) {
+  if (limitType === 'per_year') return 'per year'
+  return limitType === 'per_day' ? 'per day' : 'per month'
 }
 
 function sameLimitPeriod(requestDate, rowDate, limitType) {
   if (!requestDate || !rowDate) return false
   if (limitType === 'per_day') return isoDay(rowDate) === isoDay(requestDate)
+  if (limitType === 'per_year') return isoDay(rowDate).slice(0, 4) === isoDay(requestDate).slice(0, 4)
   return isoDay(rowDate).slice(0, 7) === isoDay(requestDate).slice(0, 7)
 }
 
@@ -553,6 +560,10 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
       notify('Please select the departure time for the half-day request.', false)
       return
     }
+    if (dayRangeRequest && effectiveDurationType === 'multiple_day' && !form.dateEnd) {
+      notify('Please select the leave end date.', false)
+      return
+    }
     if (dayRangeRequest && effectiveDurationType === 'multiple_day' && (!returnDate || returnDate <= endDate)) {
       notify('Please select an expected return date after the final leave date.', false)
       return
@@ -732,9 +743,9 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
         </div>
 
         {/* Main content: table + detail panel */}
-        <div className={clsx('flex gap-5 transition-all', selected ? '' : '')}>
+        <div className="flex gap-5 transition-all">
           {/* Table section */}
-          <div className={clsx('min-w-0 flex-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900', selected ? 'max-w-[calc(100%-340px)]' : '')}>
+          <div className="min-w-0 flex-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
             {/* Tab bar */}
             <div className="flex items-center justify-between border-b border-slate-100 px-5 dark:border-slate-800">
               <div className="flex gap-1">
@@ -829,7 +840,7 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
                       <tr
                         key={req.dbId}
                         className={clsx('cursor-pointer transition', isActive ? 'bg-emerald-50 dark:bg-emerald-950/20' : 'hover:bg-slate-50 dark:hover:bg-slate-950/50')}
-                        onClick={() => setSelected(isActive ? null : req)}
+                        onClick={() => setSelected(req)}
                       >
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-3">
@@ -862,7 +873,7 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
                         </td>
                         <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center gap-2">
-                            <ActionBtn label="View" onClick={() => setSelected(isActive ? null : req)}>
+                            <ActionBtn label="View" onClick={() => setSelected(req)}>
                               <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                               View
                             </ActionBtn>
@@ -893,24 +904,27 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
           </div>
 
           {/* Detail panel */}
-          {selected && (
-            <DesktopDetailPanel
-              req={selected}
-              canApprove={canApprove}
-              canViewAll={canViewAll}
-              canSubmit={canSubmit}
-              employeeId={employeeId}
-              onClose={() => setSelected(null)}
-              onStatus={requestStatusChange}
-              onEdit={openEdit}
-              onDelete={deleteRequest}
-            />
-          )}
         </div>
         </div> {/* end list-view wrapper */}
       </div>   {/* end hidden lg:block */}
 
       {/* ══════════════ MOBILE ═══════════════════════════════════════════════ */}
+      {selected && !showMobileDetail && (
+        <div className="fixed inset-0 z-[60] hidden items-center justify-center overflow-y-auto bg-slate-950/45 p-6 backdrop-blur-sm lg:flex">
+          <DesktopDetailPanel
+            req={selected}
+            canApprove={canApprove}
+            canViewAll={canViewAll}
+            canSubmit={canSubmit}
+            employeeId={employeeId}
+            onClose={() => setSelected(null)}
+            onStatus={requestStatusChange}
+            onEdit={(req) => { setSelected(null); openEdit(req) }}
+            onDelete={deleteRequest}
+          />
+        </div>
+      )}
+
       {showForm && (
         <div className="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/50 p-6 backdrop-blur-sm lg:flex">
           <div className="max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl dark:bg-slate-950">
@@ -1036,8 +1050,8 @@ export default function PermissionRequestsPage({ user, pendingRequestType, onCle
       )}
 
       {statusConfirm && (
-        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-slate-950/45 px-4 pb-6 backdrop-blur-sm sm:items-center sm:pb-0">
-          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center overflow-y-auto bg-slate-950/45 p-4 backdrop-blur-sm">
+          <div className="my-auto w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
             <div className={clsx(
               'mx-auto grid h-12 w-12 place-items-center rounded-full',
               statusConfirm.status === 'Approved'
@@ -1120,17 +1134,17 @@ function DesktopFormView({ form, setForm, replacementOptions, permissionTypes = 
       status: form.status,
       date: form.date,
       dateEnd: form.dateEnd,
-      returnDate: form.returnDate || nextDate(form.dateEnd || form.date),
+      returnDate: form.returnDate,
       durationType: normalizeDurationForType(type, form.durationType, control),
       dayPart: form.dayPart,
-      time: (!dateOnly && (control === 'hours' || form.dayPart === 'Half Day')) ? (form.time || defaultTime()) : '',
-      timeTo: !dateOnly && control === 'hours' && !singleTime ? (form.timeTo || defaultTime(60)) : '',
+      time: (!dateOnly && (control === 'hours' || form.dayPart === 'Half Day')) ? (form.time || '') : '',
+      timeTo: !dateOnly && control === 'hours' && !singleTime ? (form.timeTo || '') : '',
       attachment: form.attachment,
     })
   }
 
   const setDurationType = (durationType) => {
-    setForm((f) => ({ ...f, durationType, dateEnd: durationType === 'multiple_day' ? f.dateEnd : f.date, time: durationType === 'hours' ? (f.time || defaultTime()) : '', timeTo: durationType === 'hours' ? (f.timeTo || defaultTime(60)) : '', dayPart: durationType === 'single_day' ? (f.dayPart || 'Full Day') : 'Full Day' }))
+    setForm((f) => ({ ...f, durationType, dateEnd: durationType === 'multiple_day' ? f.dateEnd : f.date, returnDate: durationType === 'multiple_day' ? f.returnDate : '', time: durationType === 'hours' ? (f.time || '') : '', timeTo: durationType === 'hours' ? (f.timeTo || '') : '', dayPart: durationType === 'single_day' ? (f.dayPart || 'Full Day') : 'Full Day' }))
   }
 
   const selectedType = permissionTypes.find((pt) => pt.name === form.type)
@@ -1250,12 +1264,12 @@ function DesktopFormView({ form, setForm, replacementOptions, permissionTypes = 
                   <FormField label="Date *"><input type="date" className={mobileDateCls} value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value, dateEnd: e.target.value }))} required /></FormField>
                   <div className="grid grid-cols-2 gap-3">
                     {['Full Day', 'Half Day'].map((part) => (
-                      <button key={part} type="button" onClick={() => setForm((f) => ({ ...f, dayPart: part, time: part === 'Half Day' ? (f.time || defaultTime()) : '' }))} className={clsx('h-12 rounded-xl border text-sm font-bold transition', form.dayPart === part ? 'border-emerald-500 bg-white text-emerald-700 shadow-sm' : 'border-slate-200 bg-white/70 text-slate-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300')}>{part}</button>
+                      <button key={part} type="button" onClick={() => setForm((f) => ({ ...f, dayPart: part, time: part === 'Half Day' ? (f.time || '') : '' }))} className={clsx('h-12 rounded-xl border text-sm font-bold transition', form.dayPart === part ? 'border-emerald-500 bg-white text-emerald-700 shadow-sm' : 'border-slate-200 bg-white/70 text-slate-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300')}>{part}</button>
                     ))}
                   </div>
                   {form.dayPart === 'Half Day' && (
                     <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/60 dark:bg-amber-950/20">
-                      <FormField label="Departure Time *">
+                      <FormField label="Go To Work Time *">
                         <input type="time" className={mobileDateCls} value={form.time || ''} onChange={(e) => setForm((f) => ({ ...f, time: e.target.value, timeTo: '' }))} required />
                       </FormField>
                     </div>
@@ -1265,10 +1279,10 @@ function DesktopFormView({ form, setForm, replacementOptions, permissionTypes = 
               {!dateOnlyRequest && form.durationType === 'multiple_day' && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <FormField label="Leave Start Date *"><input type="date" className={mobileDateCls} value={form.date} onChange={(e) => setForm((f) => { const dateEnd = f.dateEnd < e.target.value ? e.target.value : f.dateEnd; return { ...f, date: e.target.value, dateEnd, returnDate: f.returnDate && f.returnDate > dateEnd ? f.returnDate : nextDate(dateEnd) } })} required /></FormField>
-                    <FormField label="Leave End Date *"><input type="date" className={mobileDateCls} value={form.dateEnd} min={form.date} onChange={(e) => setForm((f) => ({ ...f, dateEnd: e.target.value, returnDate: f.returnDate && f.returnDate > e.target.value ? f.returnDate : nextDate(e.target.value) }))} required /></FormField>
+                    <FormField label="Leave Start Date *"><input type="date" className={mobileDateCls} value={form.date} onChange={(e) => setForm((f) => { const dateEnd = f.dateEnd && f.dateEnd < e.target.value ? '' : f.dateEnd; return { ...f, date: e.target.value, dateEnd, returnDate: f.returnDate && dateEnd && f.returnDate > dateEnd ? f.returnDate : '' } })} required /></FormField>
+                    <FormField label="Leave End Date *"><input type="date" className={mobileDateCls} value={form.dateEnd} min={form.date} onChange={(e) => setForm((f) => ({ ...f, dateEnd: e.target.value, returnDate: f.returnDate && f.returnDate > e.target.value ? f.returnDate : '' }))} required /></FormField>
                   </div>
-                  <FormField label="Expected Return Date *"><input type="date" className={mobileDateCls} value={form.returnDate || nextDate(form.dateEnd)} min={nextDate(form.dateEnd)} onChange={(e) => setForm((f) => ({ ...f, returnDate: e.target.value }))} required /></FormField>
+                  <FormField label="Expected Return Date *"><input type="date" className={mobileDateCls} value={form.returnDate || ''} min={nextDate(form.dateEnd)} onChange={(e) => setForm((f) => ({ ...f, returnDate: e.target.value }))} required /></FormField>
                   <ReadOnlyTotal label="Total Days" value={totalDays} suffix="Day(s)" />
                 </div>
               )}
@@ -1317,7 +1331,7 @@ function DesktopFormView({ form, setForm, replacementOptions, permissionTypes = 
                 ...(isEdit && canManageStatus ? [{ label: 'Status', value: form.status || 'Pending' }] : []),
                 { label: 'Allowance', value: allowance.isOverFreeLimit ? (allowance.deduction > 0 ? `Deduction: $${allowance.deduction.toFixed(2)}` : 'Allowance limit reached') : `${allowance.remaining}/${allowance.allowed} remaining this ${limitLabelOf(allowance.limitType)}` },
                 { label: singleTimeRequest ? 'Time' : dateOnlyRequest ? 'Type' : 'Duration', value: dateOnlyRequest ? 'Date only' : form.durationType === 'hours' ? (singleTimeRequest ? (form.time || '—') : `${totalHours} hour(s)`) : form.durationType === 'multiple_day' ? `${totalDays} day(s)` : `1 day (${form.dayPart})` },
-                ...(form.durationType === 'single_day' && form.dayPart === 'Half Day' ? [{ label: 'Departure Time', value: form.time || '—' }] : []),
+                ...(form.durationType === 'single_day' && form.dayPart === 'Half Day' ? [{ label: 'Go To Work Time', value: form.time || '—' }] : []),
                 { label: 'Date',     value: form.date ? fmtDate(form.date) : '—' },
                 ...(form.durationType === 'multiple_day' ? [{ label: 'End', value: form.dateEnd ? fmtDate(form.dateEnd) : '—' }] : []),
                 ...(form.durationType === 'multiple_day' ? [{ label: 'Return Date', value: form.returnDate ? fmtDate(form.returnDate) : '—' }] : []),
@@ -1390,14 +1404,14 @@ function DesktopDetailPanel({ req, canApprove, canViewAll, canSubmit, employeeId
   const canCancel = canSubmit && isOwn && req.status === 'Pending'
 
   return (
-    <div className="w-80 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+    <div className="my-auto w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl dark:border-slate-800 dark:bg-slate-900">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-slate-100 px-4 py-4 dark:border-slate-800">
         <p className="font-bold text-slate-900 dark:text-white">Request Details</p>
         <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"><X size={16} /></button>
       </div>
 
-      <div className="max-h-[calc(100vh-280px)] overflow-y-auto">
+      <div className="max-h-[calc(100vh-260px)] overflow-y-auto">
         {/* Type + status */}
         <div className="flex items-center justify-between px-4 pt-4">
           <div className="flex items-center gap-2.5">
@@ -1740,6 +1754,7 @@ function RequestPermissionFormModal({ form, setForm, replacementOptions, permiss
   const durationControl = durationControlOf(selectedType)
   const maxHours = maxHoursOf(selectedType)
   const allowance = permissionUsageMeta(selectedType, requests, employeeId, form.date, editingId)
+  const confirmDeductionAmount = allowance.isOverFreeLimit && allowance.deduction > 0 ? allowance.deduction : 0
   const [showConfirm, setShowConfirm] = useState(false)
 
   const setType = (type) => {
@@ -1757,11 +1772,11 @@ function RequestPermissionFormModal({ form, setForm, replacementOptions, permiss
       status: form.status,
       date: form.date,
       dateEnd: form.dateEnd,
-      returnDate: form.returnDate || nextDate(form.dateEnd || form.date),
+      returnDate: form.returnDate,
       durationType: normalizeDurationForType(type, form.durationType, control),
       dayPart: form.dayPart,
-      time: (!dateOnly && (control === 'hours' || form.dayPart === 'Half Day')) ? (form.time || defaultTime()) : '',
-      timeTo: !dateOnly && control === 'hours' && !singleTime ? (form.timeTo || defaultTime(60)) : '',
+      time: (!dateOnly && (control === 'hours' || form.dayPart === 'Half Day')) ? (form.time || '') : '',
+      timeTo: !dateOnly && control === 'hours' && !singleTime ? (form.timeTo || '') : '',
       attachment: form.attachment,
     })
   }
@@ -1769,7 +1784,7 @@ function RequestPermissionFormModal({ form, setForm, replacementOptions, permiss
   const setDurationType = (durationType) => {
     setForm((f) => {
       const dateEnd = durationType === 'multiple_day' ? f.dateEnd : f.date
-      return { ...f, durationType, dateEnd, returnDate: durationType === 'multiple_day' ? (f.returnDate && f.returnDate > dateEnd ? f.returnDate : nextDate(dateEnd)) : '', time: durationType === 'hours' ? (f.time || defaultTime()) : '', timeTo: durationType === 'hours' ? (f.timeTo || defaultTime(60)) : '', dayPart: durationType === 'single_day' ? (f.dayPart || 'Full Day') : 'Full Day' }
+      return { ...f, durationType, dateEnd, returnDate: durationType === 'multiple_day' ? f.returnDate : '', time: durationType === 'hours' ? (f.time || '') : '', timeTo: durationType === 'hours' ? (f.timeTo || '') : '', dayPart: durationType === 'single_day' ? (f.dayPart || 'Full Day') : 'Full Day' }
     })
   }
 
@@ -1923,12 +1938,12 @@ function RequestPermissionFormModal({ form, setForm, replacementOptions, permiss
                     <FormField label="Date *"><input type="date" className={mobileDateCls} value={form.date} onChange={(e) => setForm((f) => ({ ...f, date: e.target.value, dateEnd: e.target.value }))} required /></FormField>
                     <div className="grid grid-cols-2 gap-3">
                       {['Full Day', 'Half Day'].map((part) => (
-                        <button key={part} type="button" onClick={() => setForm((f) => ({ ...f, dayPart: part, time: part === 'Half Day' ? (f.time || defaultTime()) : '' }))} className={clsx('h-12 rounded-xl border text-sm font-bold transition', form.dayPart === part ? 'border-emerald-500 bg-white text-emerald-700 shadow-sm' : 'border-slate-200 bg-white/70 text-slate-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300')}>{part}</button>
+                        <button key={part} type="button" onClick={() => setForm((f) => ({ ...f, dayPart: part, time: part === 'Half Day' ? (f.time || '') : '' }))} className={clsx('h-12 rounded-xl border text-sm font-bold transition', form.dayPart === part ? 'border-emerald-500 bg-white text-emerald-700 shadow-sm' : 'border-slate-200 bg-white/70 text-slate-600 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300')}>{part}</button>
                       ))}
                     </div>
                     {form.dayPart === 'Half Day' && (
                       <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/60 dark:bg-amber-950/20">
-                        <FormField label="Departure Time *">
+                        <FormField label="Go To Work Time *">
                           <input type="time" className={mobileDateCls} value={form.time || ''} onChange={(e) => setForm((f) => ({ ...f, time: e.target.value, timeTo: '' }))} required />
                         </FormField>
                       </div>
@@ -1939,10 +1954,10 @@ function RequestPermissionFormModal({ form, setForm, replacementOptions, permiss
                 {!dateOnlyRequest && form.durationType === 'multiple_day' && (
                   <div className="space-y-4">
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      <FormField label="Leave Start Date *"><input type="date" className={mobileDateCls} value={form.date} onChange={(e) => setForm((f) => { const dateEnd = f.dateEnd < e.target.value ? e.target.value : f.dateEnd; return { ...f, date: e.target.value, dateEnd, returnDate: f.returnDate && f.returnDate > dateEnd ? f.returnDate : nextDate(dateEnd) } })} required /></FormField>
-                      <FormField label="Leave End Date *"><input type="date" className={mobileDateCls} value={form.dateEnd} min={form.date} onChange={(e) => setForm((f) => ({ ...f, dateEnd: e.target.value, returnDate: f.returnDate && f.returnDate > e.target.value ? f.returnDate : nextDate(e.target.value) }))} required /></FormField>
+                      <FormField label="Leave Start Date *"><input type="date" className={mobileDateCls} value={form.date} onChange={(e) => setForm((f) => { const dateEnd = f.dateEnd && f.dateEnd < e.target.value ? '' : f.dateEnd; return { ...f, date: e.target.value, dateEnd, returnDate: f.returnDate && dateEnd && f.returnDate > dateEnd ? f.returnDate : '' } })} required /></FormField>
+                      <FormField label="Leave End Date *"><input type="date" className={mobileDateCls} value={form.dateEnd} min={form.date} onChange={(e) => setForm((f) => ({ ...f, dateEnd: e.target.value, returnDate: f.returnDate && f.returnDate > e.target.value ? f.returnDate : '' }))} required /></FormField>
                     </div>
-                    <FormField label="Expected Return Date *"><input type="date" className={mobileDateCls} value={form.returnDate || nextDate(form.dateEnd)} min={nextDate(form.dateEnd)} onChange={(e) => setForm((f) => ({ ...f, returnDate: e.target.value }))} required /></FormField>
+                    <FormField label="Expected Return Date *"><input type="date" className={mobileDateCls} value={form.returnDate || ''} min={nextDate(form.dateEnd)} onChange={(e) => setForm((f) => ({ ...f, returnDate: e.target.value }))} required /></FormField>
                     <ReadOnlyTotal label="Total Days" value={totalDays} suffix="Day(s)" />
                   </div>
                 )}
@@ -2006,8 +2021,8 @@ function RequestPermissionFormModal({ form, setForm, replacementOptions, permiss
         </div>
 
         {showConfirm && (
-          <div className="fixed inset-0 z-40 flex items-end justify-center bg-slate-950/45 px-4 pb-6 backdrop-blur-sm sm:items-center sm:pb-0">
-            <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
+          <div className="fixed inset-0 z-40 flex items-center justify-center overflow-y-auto bg-slate-950/45 p-4 backdrop-blur-sm">
+            <div className="my-auto w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl dark:border-slate-800 dark:bg-slate-900">
               <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300">
                 <Send size={22} />
               </div>
@@ -2017,6 +2032,14 @@ function RequestPermissionFormModal({ form, setForm, replacementOptions, permiss
               <p className="mt-2 text-center text-sm font-medium leading-6 text-slate-500 dark:text-slate-400">
                 {isEdit ? 'The updated request details will be saved.' : `${form.type} will be submitted to HR for review.`}
               </p>
+              {confirmDeductionAmount > 0 && (
+                <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-center dark:border-amber-900/60 dark:bg-amber-950/20">
+                  <p className="text-sm font-black text-amber-700 dark:text-amber-300">Salary deduction required</p>
+                  <p className="mt-1 text-xs font-semibold leading-5 text-amber-700/80 dark:text-amber-200/80">
+                    This request is over the free allowance. ${confirmDeductionAmount.toFixed(2)} will be deducted from the employee salary if HR approves it.
+                  </p>
+                </div>
+              )}
               <div className="mt-5 grid grid-cols-2 gap-3">
                 <button
                   type="button"

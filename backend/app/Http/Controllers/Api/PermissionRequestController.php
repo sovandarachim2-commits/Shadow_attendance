@@ -57,6 +57,7 @@ class PermissionRequestController extends Controller
         $data = $this->validatedPayload($request);
         $data = $this->normalizeDurationFields($data);
 
+        $this->enforcePermissionTypeDuration($employee->id, $data);
         $this->assertPermissionTypeAvailable($employee->id, $data);
         $this->assertSingleTimeWithinMaxHours($employee->id, $data);
         $this->assertNoDuplicateActiveRequest($employee->id, $data);
@@ -96,21 +97,11 @@ class PermissionRequestController extends Controller
 
         $record = $record->fresh(['employee', 'replacementEmployee', 'reviewer']);
 
-        Notification::create([
-            'user_id' => null,
-            'type' => self::EVENT_KEY,
-            'title' => "New Permission Request: {$record->request_code}",
-            'message' => "{$employee->first_name} {$employee->last_name} submitted a {$record->type} for ".$this->formatDuration($record),
-            'payload' => [
-                'request_id' => $record->id,
-                'request_code' => $record->request_code,
-                'status' => $record->status,
-            ],
-        ]);
+        $this->createReviewerNotifications($record);
 
         $telegramResults = $telegram->sendWithResults($this->buildPermissionRequestMessage($record), $this->eventKeyForEmployee($employee));
         $this->storeTelegramMessageReference($record, $telegramResults);
-        $this->sendPrivateAdminTelegram($telegram, $this->buildPermissionRequestMessage($record));
+        $this->sendPrivateAdminTelegram($telegram, $record, $this->buildPermissionRequestMessage($record));
         $telegram->sendToEmployee($employee, $this->buildEmployeeRequestSubmittedMessage($record), 'permission_request_submitted_private');
 
         return $record;
@@ -148,6 +139,7 @@ class PermissionRequestController extends Controller
             }
         }
 
+        $this->enforcePermissionTypeDuration($permissionRequest->employee_id, $data);
         $this->assertPermissionTypeAvailable($permissionRequest->employee_id, $data);
         $this->assertSingleTimeWithinMaxHours($permissionRequest->employee_id, $data);
         $this->assertNoDuplicateActiveRequest($permissionRequest->employee_id, $data, $permissionRequest->id);
@@ -397,14 +389,12 @@ class PermissionRequestController extends Controller
             $data['day_part'] = $data['day_part'] ?? 'Full Day';
         }
 
-        $this->enforcePermissionTypeDuration($data);
-
         return $data;
     }
 
-    private function enforcePermissionTypeDuration(array $data): void
+    private function enforcePermissionTypeDuration(int $employeeId, array $data): void
     {
-        $type = PermissionType::query()->where('name', $data['type'])->first();
+        $type = $this->effectivePermissionType($data['type'], $employeeId, $data['request_date']);
 
         if (! $type) {
             return;
@@ -470,15 +460,70 @@ class PermissionRequestController extends Controller
         ];
     }
 
-    private function sendPrivateAdminTelegram(TelegramNotificationService $telegram, string $message): void
+    private function sendPrivateAdminTelegram(TelegramNotificationService $telegram, PermissionRequest $record, string $message): void
     {
+        $keyboard = $this->telegramReviewKeyboard($record);
+
         User::query()
-            ->with(['role', 'employee'])
+            ->with(['role.permissions', 'employee'])
             ->where('status', 'active')
-            ->whereHas('role', fn ($query) => $query->whereIn('slug', ['super_admin', 'admin']))
+            ->whereHas('role', fn ($query) => $query
+                ->whereIn('slug', ['super_admin', 'admin'])
+                ->orWhereHas('permissions', fn ($permissionQuery) => $permissionQuery
+                    ->whereIn('slug', ['requests.view_all', 'requests.approve'])))
             ->whereHas('employee', fn ($query) => $query->whereNotNull('telegram_chat_id')->where('telegram_chat_id', '!=', ''))
             ->get()
-            ->each(fn (User $user) => $telegram->sendToEmployee($user->employee, $message, 'permission_request_admin_private'));
+            ->unique('employee_id')
+            ->each(fn (User $user) => $telegram->sendToEmployeeWithKeyboard($user->employee, $message, $keyboard, 'permission_request_reviewer_private'));
+    }
+
+    private function telegramReviewKeyboard(PermissionRequest $record): array
+    {
+        return [
+            'inline_keyboard' => [[
+                [
+                    'text' => '✅ អនុម័ត',
+                    'callback_data' => $this->telegramReviewCallbackData($record, 'approve'),
+                ],
+                [
+                    'text' => '❌ បដិសេធ',
+                    'callback_data' => $this->telegramReviewCallbackData($record, 'reject'),
+                ],
+            ]],
+        ];
+    }
+
+    private function telegramReviewCallbackData(PermissionRequest $record, string $action): string
+    {
+        $payload = "pr:{$action}:{$record->id}";
+        $signature = substr(hash_hmac('sha256', $payload, config('app.key')), 0, 12);
+
+        return "{$payload}:{$signature}";
+    }
+
+    private function createReviewerNotifications(PermissionRequest $record): void
+    {
+        $employee = $record->employee;
+        $payload = [
+            'type' => self::EVENT_KEY,
+            'title' => "New Permission Request: {$record->request_code}",
+            'message' => "{$employee->first_name} {$employee->last_name} submitted a {$record->type} for ".$this->formatDuration($record),
+            'payload' => [
+                'request_id' => $record->id,
+                'request_code' => $record->request_code,
+                'status' => $record->status,
+            ],
+        ];
+
+        User::query()
+            ->with('role.permissions')
+            ->where('status', 'active')
+            ->whereHas('role', fn ($query) => $query
+                ->where('slug', 'super_admin')
+                ->orWhereHas('permissions', fn ($permissionQuery) => $permissionQuery
+                    ->whereIn('slug', ['requests.view_all', 'requests.approve'])))
+            ->get()
+            ->each(fn (User $user) => Notification::create($payload + ['user_id' => $user->id]));
     }
 
     private function storeTelegramMessageReference(PermissionRequest $record, array $results): void
@@ -521,60 +566,106 @@ class PermissionRequestController extends Controller
 
     private function buildPermissionRequestMessage(PermissionRequest $record): string
     {
-        $employee = $record->employee;
-
-        return "📄 <b>NEW PERMISSION REQUEST</b>\n\n"
-            ."👤 <b>Employee:</b> {$employee->first_name} {$employee->last_name}\n"
-            ."📌 <b>Type:</b> {$record->type}\n"
-            ."📅 <b>Duration:</b> {$this->formatDuration($record)}\n"
-            ."📝 <b>Reason:</b> {$record->reason}\n\n"
-            ."⏳ <b>Status:</b> Pending Approval";
+        return "📄 <b>សំណើសុំអនុញ្ញាតថ្មី</b>\n\n"
+            .$this->telegramRequestFields($record)."\n\n"
+            ."⏳ <b>ស្ថានភាព:</b> រង់ចាំអនុម័ត";
     }
 
     private function buildEmployeeRequestSubmittedMessage(PermissionRequest $record): string
     {
-        return "📄 <b>Your permission request was submitted</b>\n\n"
-            ."<b>Request:</b> {$record->request_code}\n"
-            ."<b>Type:</b> {$record->type}\n"
-            ."<b>Duration:</b> {$this->formatDuration($record)}\n"
-            ."<b>Reason:</b> {$record->reason}\n\n"
-            ."⏳ <b>Status:</b> Pending Approval";
+        return "📄 <b>សំណើសុំអនុញ្ញាតរបស់អ្នកត្រូវបានដាក់ស្នើ</b>\n\n"
+            .$this->telegramRequestFields($record, false)."\n\n"
+            ."⏳ <b>ស្ថានភាព:</b> រង់ចាំអនុម័ត";
     }
 
     private function buildStatusMessage(PermissionRequest $record, string $adminName): string
     {
-        $status = ucfirst($record->status);
+        $status = $this->khmerStatus($record->status);
 
-        return "📄 <b>PERMISSION REQUEST {$status}</b>\n\n"
-            ."👤 <b>Employee:</b> {$record->employee->first_name} {$record->employee->last_name}\n"
-            ."📌 <b>Type:</b> {$record->type}\n"
-            ."📅 <b>Duration:</b> {$this->formatDuration($record)}\n"
-            ."👨‍💼 <b>Reviewed by:</b> {$adminName}\n"
-            ."📝 <b>Note:</b> {$record->admin_notes}";
+        return "📄 <b>សំណើសុំអនុញ្ញាត {$status}</b>\n\n"
+            .$this->telegramRequestFields($record)."\n"
+            ."👨‍💼 <b>ពិនិត្យដោយ:</b> {$adminName}\n"
+            ."📝 <b>ចំណាំ:</b> {$record->admin_notes}";
     }
 
     private function buildUpdatedReplyMessage(PermissionRequest $record, string $actorName): string
     {
-        $status = ucfirst($record->status);
+        $status = $this->khmerStatus($record->status);
 
-        return "<b>PERMISSION REQUEST UPDATED</b>\n\n"
-            ."<b>Request:</b> {$record->request_code}\n"
-            ."<b>Employee:</b> {$record->employee->first_name} {$record->employee->last_name}\n"
-            ."<b>Type:</b> {$record->type}\n"
-            ."<b>Duration:</b> {$this->formatDuration($record)}\n"
-            ."<b>Status:</b> {$status}\n"
-            ."<b>Updated by:</b> {$actorName}\n"
-            ."<b>HR Reason:</b> {$record->admin_notes}";
+        return "<b>សំណើសុំអនុញ្ញាតត្រូវបានកែប្រែ</b>\n\n"
+            .$this->telegramRequestFields($record)."\n"
+            ."<b>ស្ថានភាព:</b> {$status}\n"
+            ."<b>កែប្រែដោយ:</b> {$actorName}\n"
+            ."<b>មូលហេតុ HR:</b> {$record->admin_notes}";
     }
 
     private function buildDeletedReplyMessage(PermissionRequest $record, string $actorName): string
     {
-        return "<b>PERMISSION REQUEST CANCELLED</b>\n\n"
-            ."<b>Request:</b> {$record->request_code}\n"
-            ."<b>Employee:</b> {$record->employee->first_name} {$record->employee->last_name}\n"
-            ."<b>Type:</b> {$record->type}\n"
-            ."<b>Duration:</b> {$this->formatDuration($record)}\n"
-            ."<b>Cancelled by:</b> {$actorName}";
+        return "<b>សំណើសុំអនុញ្ញាតត្រូវបានបោះបង់</b>\n\n"
+            .$this->telegramRequestFields($record)."\n"
+            ."<b>បោះបង់ដោយ:</b> {$actorName}";
+    }
+
+    private function telegramRequestFields(PermissionRequest $record, bool $includeEmployee = true): string
+    {
+        $record->loadMissing(['employee', 'replacementEmployee']);
+        $employee = $record->employee;
+        $replacement = $record->replacementEmployee;
+        $lines = [
+            "🆔 លេខសំណើ: {$this->telegramText($record->request_code)}",
+        ];
+
+        if ($includeEmployee) {
+            $employeeName = trim(($employee->first_name ?? '').' '.($employee->last_name ?? ''));
+            $lines[] = "👤 បុគ្គលិក: {$this->telegramText($employeeName ?: '-')}";
+        }
+
+        $lines[] = "📌 ប្រភេទសំណើ: {$this->telegramText($this->khmerRequestType($record->type))}";
+
+        if ($this->usesSingleRequestTime($record->type)) {
+            $timeLabel = $record->type === 'Early Check Out' ? 'ម៉ោងចេញដែលស្នើ' : 'ម៉ោងចូលដែលស្នើ';
+            $lines[] = "📅 កាលបរិច្ឆេទ: ".$record->request_date->format('d M Y');
+            $lines[] = "🕒 {$timeLabel}: {$this->telegramText($record->request_time ?: $record->start_time)}";
+        } elseif ($this->usesDateOnlyRequest($record->type)) {
+            $lines[] = "📅 កាលបរិច្ឆេទ: ".$record->request_date->format('d M Y');
+        } elseif ($record->duration_type === 'multiple_day') {
+            $lines[] = "📅 ថ្ងៃចាប់ផ្តើម: ".$record->request_date->format('d M Y');
+            $lines[] = "📅 ថ្ងៃបញ្ចប់: ".($record->request_date_end ?: $record->request_date)->format('d M Y');
+            if ($record->return_date) {
+                $lines[] = "🔁 ថ្ងៃត្រឡប់មកវិញ: ".$record->return_date->format('d M Y');
+            }
+            if ($record->total_days) {
+                $lines[] = "📆 សរុបថ្ងៃ: {$this->telegramText($record->total_days)} ថ្ងៃ";
+            }
+        } else {
+            $lines[] = "📅 កាលបរិច្ឆេទ: ".$record->request_date->format('d M Y');
+            $lines[] = "🗓 រយៈពេលថ្ងៃ: {$this->telegramText($this->khmerDayPart($record->day_part ?: 'Full Day'))}";
+            if ($record->day_part === 'Half Day' && $record->request_time) {
+                $lines[] = "🕒 ម៉ោងទៅធ្វើការ: {$this->telegramText($record->request_time)}";
+            }
+        }
+
+        if ($replacement) {
+            $replacementName = trim(($replacement->first_name ?? '').' '.($replacement->last_name ?? ''));
+            $lines[] = "👥 បុគ្គលិកជំនួស: {$this->telegramText($replacementName ?: '-')}";
+        }
+
+        if ($record->attachment_name) {
+            $lines[] = "📎 ឯកសារភ្ជាប់: {$this->telegramText($record->attachment_name)}";
+        }
+
+        $lines[] = "📝 មូលហេតុ: {$this->telegramText($record->reason)}";
+
+        if ($record->note) {
+            $lines[] = "💬 ចំណាំបន្ថែម: {$this->telegramText($record->note)}";
+        }
+
+        return implode("\n", $lines);
+    }
+
+    private function telegramText($value): string
+    {
+        return htmlspecialchars((string) ($value ?? '-'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
     }
 
     private function formatDuration(PermissionRequest $record): string
@@ -589,7 +680,7 @@ class PermissionRequestController extends Controller
             if ($this->usesSingleRequestTime($record->type)) {
                 return trim("{$start} {$from}");
             }
-            $hours = $record->total_hours ? " ({$record->total_hours} hour(s))" : '';
+            $hours = $record->total_hours ? " ({$record->total_hours} ម៉ោង)" : '';
             return trim("{$start} {$from} - {$to}{$hours}");
         }
 
@@ -599,15 +690,57 @@ class PermissionRequestController extends Controller
 
         if ($record->duration_type === 'single_day') {
             $dayPart = $record->day_part ?: 'Full Day';
-            $time = $dayPart === 'Half Day' && $record->request_time ? " (go {$record->request_time})" : '';
+            $time = $dayPart === 'Half Day' && $record->request_time ? " (ម៉ោងទៅធ្វើការ {$record->request_time})" : '';
 
-            return trim($start.' '.$dayPart.$time);
+            return trim($start.' '.$this->khmerDayPart($dayPart).$time);
         }
 
-        $days = $record->total_days ? " ({$record->total_days} day(s))" : '';
-        $returnDate = $record->return_date ? ' | Come back '.$record->return_date->format('d M Y') : '';
+        $days = $record->total_days ? " ({$record->total_days} ថ្ងៃ)" : '';
+        $returnDate = $record->return_date ? ' | ថ្ងៃត្រឡប់មកវិញ '.$record->return_date->format('d M Y') : '';
 
         return ($end === $start ? $start : "{$start} - {$end}").$days.$returnDate;
+    }
+
+    private function khmerRequestType(?string $type): string
+    {
+        return match ($type) {
+            'Late Check In' => 'ចូលយឺត',
+            'Early Check Out' => 'ចេញមុនម៉ោង',
+            'Day Off' => 'ឈប់សម្រាក',
+            'Missing Check In' => 'ភ្លេចចុះម៉ោងចូល',
+            'Missing Check Out' => 'ភ្លេចចុះម៉ោងចេញ',
+            'Personal Leave' => 'ច្បាប់ផ្ទាល់ខ្លួន',
+            default => (string) $type,
+        };
+    }
+
+    private function khmerStatus(?string $status): string
+    {
+        return match (strtolower((string) $status)) {
+            'approved' => 'បានអនុម័ត',
+            'rejected' => 'បានបដិសេធ',
+            'pending' => 'រង់ចាំអនុម័ត',
+            default => (string) $status,
+        };
+    }
+
+    private function khmerDayPart(?string $dayPart): string
+    {
+        return match ($dayPart) {
+            'Half Day' => 'កន្លះថ្ងៃ',
+            'Full Day' => 'ពេញមួយថ្ងៃ',
+            default => (string) $dayPart,
+        };
+    }
+
+    private function khmerDurationType(?string $durationType): string
+    {
+        return match ($durationType) {
+            'single_day' => 'មួយថ្ងៃ',
+            'multiple_day' => 'ច្រើនថ្ងៃ',
+            'hours' => 'តាមម៉ោង',
+            default => (string) $durationType,
+        };
     }
 
     private function assertOwnPending(Request $request, PermissionRequest $permissionRequest): void
@@ -657,7 +790,7 @@ class PermissionRequestController extends Controller
 
     private function assertPermissionAllowance(int $employeeId, array $data, ?int $ignoreId = null): void
     {
-        $type = PermissionType::query()->where('name', $data['type'])->first();
+        $type = $this->effectivePermissionType($data['type'], $employeeId, $data['request_date']);
 
         if (! $type || (float) $type->deduction_amount > 0) {
             return;
@@ -673,6 +806,11 @@ class PermissionRequestController extends Controller
 
         if ($type->limit_type === 'per_day') {
             $query->whereDate('request_date', $date->toDateString());
+        } elseif ($type->limit_type === 'per_year') {
+            $query->whereBetween('request_date', [
+                $date->copy()->startOfYear()->toDateString(),
+                $date->copy()->endOfYear()->toDateString(),
+            ]);
         } else {
             $query->whereBetween('request_date', [
                 $date->copy()->startOfMonth()->toDateString(),
@@ -681,7 +819,7 @@ class PermissionRequestController extends Controller
         }
 
         if ($query->count() >= $allowed) {
-            $period = $type->limit_type === 'per_day' ? 'day' : 'month';
+            $period = $type->limit_type === 'per_day' ? 'day' : ($type->limit_type === 'per_year' ? 'year' : 'month');
             throw ValidationException::withMessages([
                 'type' => "You already used the {$type->name} allowance for this {$period}.",
             ]);
@@ -691,7 +829,7 @@ class PermissionRequestController extends Controller
     private function assertPermissionTypeAvailable(int $employeeId, array $data): void
     {
         $type = PermissionType::query()
-            ->with(['employees:id', 'workSchedules:id'])
+            ->with(['employees:id', 'workSchedules:id', 'rules'])
             ->where('name', $data['type'])
             ->first();
 
@@ -699,26 +837,7 @@ class PermissionRequestController extends Controller
             return;
         }
 
-        $employeeIds = $type->employees->pluck('id');
-        $scheduleIds = $type->workSchedules->pluck('id');
-
-        if ($employeeIds->isEmpty() && $scheduleIds->isEmpty()) {
-            return;
-        }
-
-        if ($employeeIds->contains($employeeId)) {
-            return;
-        }
-
-        $schedule = $this->workSchedules->scheduleForEmployeeOnDate($employeeId, \Carbon\Carbon::parse($data['request_date']));
-
-        if ($schedule && $scheduleIds->contains($schedule->id)) {
-            return;
-        }
-
-        throw ValidationException::withMessages([
-            'type' => "{$type->name} is not assigned to you for the selected date.",
-        ]);
+        $this->assertEffectiveRuleActive($type, $employeeId, $data);
     }
 
     private function assertSingleTimeWithinMaxHours(int $employeeId, array $data): void
@@ -727,7 +846,7 @@ class PermissionRequestController extends Controller
             return;
         }
 
-        $type = PermissionType::query()->where('name', $data['type'])->first();
+        $type = $this->effectivePermissionType($data['type'], $employeeId, $data['request_date']);
         if (! $type || $type->max_hours === null) {
             return;
         }
@@ -764,5 +883,50 @@ class PermissionRequestController extends Controller
         throw ValidationException::withMessages([
             'request_time' => "{$type->name} cannot be more than {$type->max_hours} hour(s) {$direction}.",
         ]);
+    }
+
+    private function assertEffectiveRuleActive(PermissionType $type, int $employeeId, array $data): void
+    {
+        $effective = $this->effectivePermissionType($type->name, $employeeId, $data['request_date']);
+
+        if ($effective && $effective->is_active) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'type' => "{$type->name} is not assigned to you for the selected date.",
+        ]);
+    }
+
+    private function effectivePermissionType(string $name, int $employeeId, ?string $date): ?PermissionType
+    {
+        $type = PermissionType::query()
+            ->with('rules')
+            ->where('name', $name)
+            ->first();
+
+        if (! $type || ! $date) {
+            return $type;
+        }
+
+        $requestDate = \Carbon\Carbon::parse($date);
+        $schedule = $this->workSchedules->scheduleForEmployeeOnDate($employeeId, $requestDate);
+        $rule = $type->rules->first(fn ($item) => (int) $item->employee_id === $employeeId)
+            ?: ($schedule ? $type->rules->first(fn ($item) => (int) $item->work_schedule_id === (int) $schedule->id) : null);
+
+        if (! $rule) {
+            return $type;
+        }
+
+        $type->forceFill([
+            'allowed_times' => $rule->allowed_times,
+            'limit_type' => $rule->limit_type,
+            'duration_control' => $rule->duration_control,
+            'max_hours' => $rule->max_hours,
+            'deduction_amount' => $rule->deduction_amount,
+            'is_active' => $type->is_active && $rule->is_active,
+        ]);
+
+        return $type;
     }
 }

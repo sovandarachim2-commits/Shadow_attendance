@@ -34,4 +34,9 @@ class PermissionType extends Model
     {
         return $this->belongsToMany(WorkSchedule::class, 'permission_type_work_schedule')->withTimestamps();
     }
+
+    public function rules()
+    {
+        return $this->hasMany(PermissionTypeRule::class);
+    }
 }

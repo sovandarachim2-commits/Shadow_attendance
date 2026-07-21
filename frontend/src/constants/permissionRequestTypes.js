@@ -78,12 +78,10 @@ export function requestTypeMeta(typeId) {
 export function defaultRequestTime(typeId) {
   const meta = requestTypeMeta(typeId)
   if (!meta.showTime) return ''
-  const now = new Date()
-  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  return ''
 }
 
 export function newRequestForm(typeId = 'Late Check In') {
-  const today = new Date().toISOString().slice(0, 10)
   const time = defaultRequestTime(typeId)
   const durationType = ['Late Check In', 'Early Check Out'].includes(typeId)
     ? 'hours'
@@ -93,9 +91,9 @@ export function newRequestForm(typeId = 'Late Check In') {
     replacementEmployeeId: '',
     reasonType: '',
     durationType,
-    date: today,
-    dateEnd: today,
-    returnDate: today,
+    date: '',
+    dateEnd: '',
+    returnDate: '',
     time,
     timeTo: time,
     dayPart: 'Full Day',

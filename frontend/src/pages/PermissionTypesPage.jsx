@@ -41,6 +41,7 @@ function IconField({ icon: Icon, badge, children }) {
 function limitLabel(limitType) {
   if (limitType === 'per_day')   return 'per day'
   if (limitType === 'per_month') return 'per month'
+  if (limitType === 'per_year')  return 'per year'
   return limitType ?? '—'
 }
 
@@ -547,6 +548,7 @@ function DesktopPermissionTypeForm({ initialData, onClose, onSave }) {
               {[
                 { id: 'per_day',   label: 'Per Day'   },
                 { id: 'per_month', label: 'Per Month' },
+                { id: 'per_year',  label: 'Per Year'  },
               ].map((opt) => {
                 const sel = form.limitType === opt.id
                 return (

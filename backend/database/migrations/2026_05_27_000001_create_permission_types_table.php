@@ -12,7 +12,7 @@ return new class extends Migration
             $table->id();
             $table->string('name');
             $table->unsignedSmallInteger('allowed_times')->default(1);
-            $table->enum('limit_type', ['per_day', 'per_month'])->default('per_month');
+            $table->enum('limit_type', ['per_day', 'per_month', 'per_year'])->default('per_month');
             $table->decimal('deduction_amount', 10, 2)->default(0);
             $table->string('color', 20)->default('#f59e0b');
             $table->string('description')->nullable();

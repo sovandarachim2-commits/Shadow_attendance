@@ -6,7 +6,8 @@ import {
   FileText,
   HardDrive,
   Hammer,
-  Users,
+  Plus,
+  Trash2,
   XCircle,
 } from 'lucide-react'
 import clsx from 'clsx'
@@ -34,6 +35,7 @@ export const EMPTY_PERM_FORM = {
   isActive: true,
   employeeIds: [],
   scheduleIds: [],
+  rules: [],
 }
 
 // ── Shared field: icon-left + optional right badge ────────────────────────────
@@ -64,60 +66,23 @@ function normalizeIds(value) {
   return value.map((id) => Number(id)).filter(Boolean)
 }
 
-function isCheckInOutType(name) {
-  return ['Late Check In', 'Early Check Out'].includes(name)
+function normalizeRules(value) {
+  if (!Array.isArray(value)) return []
+  return value.map((rule, index) => ({
+    id: rule.id || `rule-${index}-${Date.now()}`,
+    targetType: rule.targetType || rule.target_type || (rule.employee_id ? 'employee' : 'schedule'),
+    targetId: Number(rule.targetId ?? rule.target_id ?? rule.employee_id ?? rule.work_schedule_id ?? 0),
+    allowedTimes: rule.allowedTimes ?? rule.allowed_times ?? 1,
+    limitType: rule.limitType ?? rule.limit_type ?? 'per_month',
+    durationControl: rule.durationControl ?? rule.duration_control ?? 'any',
+    maxHours: rule.maxHours ?? rule.max_hours ?? '',
+    deductionAmount: rule.deductionAmount ?? rule.deduction_amount ?? 0,
+    isActive: rule.isActive ?? rule.is_active ?? true,
+  })).filter((rule) => rule.targetId)
 }
 
-function AssignmentChecks({ title, icon: Icon, emptyText, options, selectedIds, onChange, labelFor }) {
-  const selected = new Set(selectedIds)
-  const toggle = (id) => {
-    const numericId = Number(id)
-    onChange(selected.has(numericId)
-      ? selectedIds.filter((item) => Number(item) !== numericId)
-      : [...selectedIds, numericId])
-  }
-
-  return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-950/60">
-      <div className="mb-2 flex items-center gap-2">
-        <Icon size={16} className="text-emerald-500" />
-        <span className="text-sm font-bold text-slate-900 dark:text-white">{title}</span>
-      </div>
-      <div className="max-h-44 space-y-1 overflow-y-auto pr-1">
-        {options.length === 0 && (
-          <p className="rounded-lg bg-white px-3 py-2 text-xs font-semibold text-slate-400 dark:bg-slate-900">
-            No options found.
-          </p>
-        )}
-        {options.map((item) => {
-          const id = Number(item.id)
-          const checked = selected.has(id)
-          return (
-            <button
-              key={id}
-              type="button"
-              onClick={() => toggle(id)}
-              className={clsx(
-                'flex w-full items-center gap-2 rounded-lg border px-3 py-2 text-left transition',
-                checked
-                  ? 'border-emerald-500 bg-white text-emerald-700 dark:border-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-300'
-                  : 'border-transparent bg-white text-slate-600 hover:border-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-slate-700',
-              )}
-            >
-              <span className={clsx(
-                'grid h-4 w-4 shrink-0 place-items-center rounded border',
-                checked ? 'border-emerald-600 bg-emerald-600' : 'border-slate-300 dark:border-slate-600',
-              )}>
-                {checked && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
-              </span>
-              <span className="min-w-0 flex-1 truncate text-xs font-bold">{labelFor(item)}</span>
-            </button>
-          )
-        })}
-      </div>
-      {selectedIds.length === 0 && <Helper text={emptyText} />}
-    </div>
-  )
+function isCheckInOutType(name) {
+  return ['Late Check In', 'Early Check Out'].includes(name)
 }
 
 export default function AssignPermissionTypeModal({ onClose, onSave, initialData = null, employees = [], workSchedules = [] }) {
@@ -135,6 +100,7 @@ export default function AssignPermissionTypeModal({ onClose, onSave, initialData
       isActive:         initialData.isActive         ?? initialData.is_active         ?? true,
       employeeIds:      normalizeIds(initialData.employeeIds ?? initialData.employee_ids),
       scheduleIds:      normalizeIds(initialData.scheduleIds ?? initialData.schedule_ids),
+      rules:            normalizeRules(initialData.rules),
     } : EMPTY_PERM_FORM,
   )
   const [errors, setErrors] = useState({})
@@ -145,6 +111,34 @@ export default function AssignPermissionTypeModal({ onClose, onSave, initialData
     if (errors[key]) setErrors((e) => ({ ...e, [key]: null }))
   }
 
+  const addRule = (targetType) => {
+    const options = targetType === 'employee' ? employees : workSchedules
+    const firstId = Number(options[0]?.id || 0)
+    if (!firstId) return
+    set('rules', [
+      ...(form.rules || []),
+      {
+        id: `new-${targetType}-${Date.now()}`,
+        targetType,
+        targetId: firstId,
+        allowedTimes: form.allowedTimes,
+        limitType: form.limitType,
+        durationControl: form.durationControl,
+        maxHours: form.maxHours,
+        deductionAmount: form.deductionAmount,
+        isActive: true,
+      },
+    ])
+  }
+
+  const updateRule = (id, patch) => {
+    set('rules', (form.rules || []).map((rule) => rule.id === id ? { ...rule, ...patch } : rule))
+  }
+
+  const removeRule = (id) => {
+    set('rules', (form.rules || []).filter((rule) => rule.id !== id))
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     const errs = {}
@@ -152,10 +146,16 @@ export default function AssignPermissionTypeModal({ onClose, onSave, initialData
     if (isCheckInOutType(form.name) && (!form.maxHours || Number(form.maxHours) <= 0)) {
       errs.maxHours = 'Max hours is required'
     }
+    ;(form.rules || []).forEach((rule, index) => {
+      if (!rule.targetId) errs.rules = `Rule ${index + 1} needs a target`
+      if (isCheckInOutType(form.name) && (!rule.maxHours || Number(rule.maxHours) <= 0)) {
+        errs.rules = `Rule ${index + 1} needs max hours`
+      }
+    })
     if (Object.keys(errs).length) { setErrors(errs); return }
     setSaving(true)
     const payload = isCheckInOutType(form.name)
-      ? { ...form, durationControl: 'hours', maxHours: Number(form.maxHours) }
+      ? { ...form, durationControl: 'hours', maxHours: Number(form.maxHours), rules: (form.rules || []).map((rule) => ({ ...rule, durationControl: 'hours', maxHours: Number(rule.maxHours) })) }
       : form
     try { await onSave?.(payload); onClose?.() }
     catch { /* parent handles */ }
@@ -268,30 +268,74 @@ export default function AssignPermissionTypeModal({ onClose, onSave, initialData
             </div>
 
             <div className="lg:col-span-2">
-              <label className="mb-1.5 block text-sm font-bold text-slate-900 dark:text-white">
-                Assign To
-              </label>
-              <div className="grid gap-3 lg:grid-cols-2">
-                <AssignmentChecks
-                  title="Work Schedules"
-                  icon={CalendarDays}
-                  options={workSchedules}
-                  selectedIds={form.scheduleIds || []}
-                  onChange={(ids) => set('scheduleIds', ids)}
-                  emptyText="No schedule selected means every schedule can use this type unless employees are selected."
-                  labelFor={(item) => `${item.schedule_name || item.name || 'Schedule'}${item.is_default ? ' (Default)' : ''}`}
-                />
-                <AssignmentChecks
-                  title="Employees"
-                  icon={Users}
-                  options={employees}
-                  selectedIds={form.employeeIds || []}
-                  onChange={(ids) => set('employeeIds', ids)}
-                  emptyText="No employee selected means every employee can use this type unless schedules are selected."
-                  labelFor={(item) => `${item.first_name || ''} ${item.last_name || ''}`.trim() || item.employee_code || `Employee #${item.id}`}
-                />
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <label className="block text-sm font-bold text-slate-900 dark:text-white">
+                    Custom Rules
+                  </label>
+                  <Helper text="Employee rules override schedule rules. Schedule rules override the default rule below." />
+                </div>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => addRule('schedule')} className="flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700 hover:border-emerald-300 hover:text-emerald-700 dark:border-slate-700 dark:text-slate-300">
+                    <Plus size={15} /> Schedule Rule
+                  </button>
+                  <button type="button" onClick={() => addRule('employee')} className="flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-bold text-slate-700 hover:border-emerald-300 hover:text-emerald-700 dark:border-slate-700 dark:text-slate-300">
+                    <Plus size={15} /> Employee Rule
+                  </button>
+                </div>
               </div>
-              <Helper text="Leave both lists empty for everyone. If one list has selected items, the user can submit when their employee or schedule matches." />
+              <div className="space-y-2">
+                {(form.rules || []).length === 0 && (
+                  <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-3 text-xs font-semibold text-slate-400 dark:border-slate-700 dark:bg-slate-950">
+                    No custom rules. Everyone uses the default rule below unless assignment limits access.
+                  </div>
+                )}
+                {(form.rules || []).map((rule) => {
+                  const options = rule.targetType === 'employee' ? employees : workSchedules
+                  return (
+                    <div key={rule.id} className="rounded-lg border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-950/60">
+                      <div className="grid gap-2 lg:grid-cols-6">
+                        <select value={rule.targetType} onChange={(e) => {
+                          const targetType = e.target.value
+                          const nextOptions = targetType === 'employee' ? employees : workSchedules
+                          updateRule(rule.id, { targetType, targetId: Number(nextOptions[0]?.id || 0) })
+                        }} className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-xs font-bold outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white">
+                          <option value="schedule">Schedule</option>
+                          <option value="employee">Employee</option>
+                        </select>
+                        <select value={rule.targetId} onChange={(e) => updateRule(rule.id, { targetId: Number(e.target.value) })} className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-xs font-bold outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white lg:col-span-2">
+                          {options.map((item) => (
+                            <option key={item.id} value={item.id}>
+                              {rule.targetType === 'employee'
+                                ? (`${item.first_name || ''} ${item.last_name || ''}`.trim() || item.employee_code || `Employee #${item.id}`)
+                                : `${item.schedule_name || item.name || 'Schedule'}${item.is_default ? ' (Default)' : ''}`}
+                            </option>
+                          ))}
+                        </select>
+                        <input type="number" min="0" value={rule.allowedTimes} onChange={(e) => updateRule(rule.id, { allowedTimes: Number(e.target.value) })} className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-xs font-bold outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
+                        <select value={rule.limitType} onChange={(e) => updateRule(rule.id, { limitType: e.target.value })} className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-xs font-bold outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white">
+                          <option value="per_day">Per Day</option>
+                          <option value="per_month">Per Month</option>
+                          <option value="per_year">Per Year</option>
+                        </select>
+                        <button type="button" onClick={() => removeRule(rule.id)} className="grid h-10 place-items-center rounded-lg border border-rose-100 bg-white text-rose-500 hover:bg-rose-50 dark:border-rose-900/50 dark:bg-slate-900">
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                      <div className="mt-2 grid gap-2 lg:grid-cols-3">
+                        {isCheckInOutType(form.name) && (
+                          <input type="number" min="0.25" max="24" step="0.25" value={rule.maxHours} onChange={(e) => updateRule(rule.id, { maxHours: e.target.value })} placeholder="Max hours" className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-xs font-bold outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
+                        )}
+                        <input type="number" min="0" step="0.01" value={rule.deductionAmount} onChange={(e) => updateRule(rule.id, { deductionAmount: Number(e.target.value) })} placeholder="Deduction" className="h-10 rounded-lg border border-slate-200 bg-white px-2 text-xs font-bold outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white" />
+                        <button type="button" onClick={() => updateRule(rule.id, { isActive: !rule.isActive })} className={clsx('h-10 rounded-lg border px-3 text-xs font-bold', rule.isActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-slate-200 bg-white text-slate-500 dark:border-slate-700 dark:bg-slate-900')}>
+                          {rule.isActive ? 'On' : 'Off'}
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })}
+                {errors.rules && <p className="text-xs font-semibold text-rose-500">{errors.rules}</p>}
+              </div>
             </div>
 
             {/* Allowed Times */}
@@ -320,6 +364,7 @@ export default function AssignPermissionTypeModal({ onClose, onSave, initialData
                 {[
                   { id: 'per_day',   label: 'Per Day'   },
                   { id: 'per_month', label: 'Per Month' },
+                  { id: 'per_year',  label: 'Per Year'  },
                 ].map((opt) => {
                   const sel = form.limitType === opt.id
                   return (

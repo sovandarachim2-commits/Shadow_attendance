@@ -284,6 +284,11 @@ class TelegramNotificationService
     /** Send a private DM to one employee (uses telegram_chat_id on their profile). */
     public function sendToEmployee(?Employee $employee, string $message, string $messageType = 'employee_private'): array
     {
+        return $this->sendToEmployeeWithKeyboard($employee, $message, null, $messageType);
+    }
+
+    public function sendToEmployeeWithKeyboard(?Employee $employee, string $message, ?array $replyMarkup = null, string $messageType = 'employee_private'): array
+    {
         if (! $employee) {
             return ['ok' => false, 'description' => 'No employee linked.'];
         }
@@ -300,7 +305,7 @@ class TelegramNotificationService
             return ['ok' => false, 'description' => 'Telegram bot is not configured or disabled.'];
         }
 
-        $result = $this->sendPayload($token, $chatId, $message);
+        $result = $this->sendPayload($token, $chatId, $message, null, true, null, null, $replyMarkup);
         $sent = $result['ok'] ? now() : null;
 
         TelegramLog::create([
@@ -312,6 +317,28 @@ class TelegramNotificationService
         ]);
 
         return $result;
+    }
+
+    public function answerCallbackQuery(string $callbackQueryId, string $text, bool $alert = false): array
+    {
+        $token = $this->getToken();
+
+        if (! $token) {
+            return ['ok' => false, 'description' => 'TELEGRAM_BOT_TOKEN is not set.'];
+        }
+
+        try {
+            $response = Http::withOptions(['proxy' => false])->timeout(10)->post("https://api.telegram.org/bot{$token}/answerCallbackQuery", [
+                'callback_query_id' => $callbackQueryId,
+                'text' => $text,
+                'show_alert' => $alert,
+            ]);
+
+            return $response->json() ?: ['ok' => false, 'description' => 'Empty Telegram response'];
+        } catch (\Throwable $e) {
+            Log::warning('Telegram answerCallbackQuery exception', ['message' => $e->getMessage()]);
+            return ['ok' => false, 'description' => 'Network error: '.$e->getMessage()];
+        }
     }
 
     /**
@@ -793,7 +820,7 @@ class TelegramNotificationService
         }
     }
 
-    private function sendPayload(string $token, string $chatId, string $message, ?int $threadId = null, bool $preview = true, ?string $previewUrl = null, ?int $replyToMessageId = null): array
+    private function sendPayload(string $token, string $chatId, string $message, ?int $threadId = null, bool $preview = true, ?string $previewUrl = null, ?int $replyToMessageId = null, ?array $replyMarkup = null): array
     {
         try {
             $linkPreviewOptions = ['is_disabled' => ! $preview];
@@ -818,6 +845,10 @@ class TelegramNotificationService
                     'message_id' => $replyToMessageId,
                     'allow_sending_without_reply' => true,
                 ];
+            }
+
+            if ($replyMarkup) {
+                $payload['reply_markup'] = $replyMarkup;
             }
 
             $response = Http::withOptions(['proxy' => false])->timeout(10)->post("https://api.telegram.org/bot{$token}/sendMessage", $payload);
