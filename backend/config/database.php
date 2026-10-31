@@ -55,7 +55,10 @@ return [
             'unix_socket' => env('DB_SOCKET', ''),
             'charset' => env('DB_CHARSET', 'utf8mb4'),
             'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
-            'timezone' => env('DB_TIMEZONE', '+07:00'),
+            // Attendance timestamps were stored as Cambodia wall-clock
+            // values while MySQL session time was UTC. Keep the session at
+            // +00:00 so MariaDB does not add another offset on read/write.
+            'timezone' => env('DB_TIMEZONE', '+00:00'),
             'prefix' => '',
             'prefix_indexes' => true,
             'strict' => true,
@@ -76,7 +79,10 @@ return [
             'unix_socket' => env('DB_SOCKET', ''),
             'charset' => env('DB_CHARSET', 'utf8mb4'),
             'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
-            'timezone' => env('DB_TIMEZONE', '+07:00'),
+            // Attendance timestamps were stored as Cambodia wall-clock
+            // values while MySQL session time was UTC. Keep the session at
+            // +00:00 so MariaDB does not add another offset on read/write.
+            'timezone' => env('DB_TIMEZONE', '+00:00'),
             'prefix' => '',
             'prefix_indexes' => true,
             'strict' => true,

@@ -87,8 +87,8 @@ return new class extends Migration
             $table->date('attendance_date')->index();
             $table->string('type')->default('office')->index();
             $table->string('status')->default('present')->index();
-            $table->timestamp('check_in_at')->nullable();
-            $table->timestamp('check_out_at')->nullable();
+            $table->dateTime('check_in_at')->nullable();
+            $table->dateTime('check_out_at')->nullable();
             $table->decimal('check_in_latitude', 10, 7)->nullable();
             $table->decimal('check_in_longitude', 10, 7)->nullable();
             $table->decimal('check_out_latitude', 10, 7)->nullable();
@@ -100,8 +100,9 @@ return new class extends Migration
             $table->unsignedInteger('work_minutes')->default(0);
             $table->text('notes')->nullable();
             $table->uuid('offline_sync_uuid')->nullable()->unique();
-            $table->timestamp('synced_at')->nullable();
-            $table->timestamps();
+            $table->dateTime('synced_at')->nullable();
+            $table->dateTime('created_at')->nullable();
+            $table->dateTime('updated_at')->nullable();
             $table->unique(['employee_id', 'attendance_date']);
             $table->index(['employee_id', 'attendance_date', 'status']);
         });
