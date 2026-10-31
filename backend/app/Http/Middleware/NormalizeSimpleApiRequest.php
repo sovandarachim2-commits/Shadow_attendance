@@ -43,7 +43,16 @@ class NormalizeSimpleApiRequest
             }
         }
 
-        return $next($request);
+        $response = $next($request);
+
+        // Ensure Access-Control-Allow-Credentials is always true on API responses
+        $response->headers->set('Access-Control-Allow-Credentials', 'true');
+
+        // Allow the hidden warmup iframe to complete without X-Frame-Options console warnings
+        if ($request->query->has('_warmup')) {
+            $response->headers->remove('X-Frame-Options');
+        }
+
+        return $response;
     }
 }
-
