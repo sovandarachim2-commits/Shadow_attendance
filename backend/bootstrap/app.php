@@ -13,8 +13,13 @@ $app = Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->trustProxies(at: '*');
+        $middleware->prepend([
+            \Illuminate\Http\Middleware\HandleCors::class,
+            \App\Http\Middleware\NormalizeSimpleApiRequest::class,
+        ]);
         $middleware->api(prepend: [
             \Illuminate\Http\Middleware\HandleCors::class,
+            \App\Http\Middleware\NormalizeSimpleApiRequest::class,
         ]);
         $middleware->alias([
             'role' => \App\Http\Middleware\EnsureRole::class,

@@ -1,19 +1,119 @@
 import axios from 'axios'
 
+const baseURL = import.meta.env.VITE_API_URL || '/api'
+
+let shieldWarmupPromise = null
+
+export function warmupBackendShield() {
+  if (typeof document === 'undefined' || !document.body) {
+    return Promise.resolve()
+  }
+  if (shieldWarmupPromise) {
+    return shieldWarmupPromise
+  }
+
+  shieldWarmupPromise = new Promise((resolve) => {
+    const iframe = document.createElement('iframe')
+    iframe.style.position = 'fixed'
+    iframe.style.width = '1px'
+    iframe.style.height = '1px'
+    iframe.style.opacity = '0'
+    iframe.style.pointerEvents = 'none'
+    iframe.style.left = '-9999px'
+    iframe.style.top = '-9999px'
+    iframe.setAttribute('aria-hidden', 'true')
+    iframe.src = `${baseURL.replace(/\/+$/, '')}/settings/branding?_warmup=${Date.now()}`
+
+    document.body.appendChild(iframe)
+
+    setTimeout(() => {
+      try {
+        iframe.remove()
+      } catch {
+        // Ignore cleanup errors
+      }
+      shieldWarmupPromise = null
+      resolve()
+    }, 2200)
+  })
+
+  return shieldWarmupPromise
+}
+
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api',
+  baseURL,
+  withCredentials: true,
   headers: {
     Accept: 'application/json',
   },
 })
 
 api.interceptors.request.use((config) => {
+  if (config.headers && typeof config.headers.delete === 'function') {
+    config.headers.delete('Authorization')
+  } else if (config.headers) {
+    delete config.headers.Authorization
+  }
+
   const token = localStorage.getItem('attendance_token')
   if (token) {
-    config.headers.Authorization = `Bearer ${token}`
+    config.params = {
+      ...(config.params || {}),
+      api_token: token,
+    }
   }
+
+  const method = String(config.method || 'get').toLowerCase()
+  if (method === 'put' || method === 'patch' || method === 'delete') {
+    config.method = 'post'
+    config.params = {
+      ...(config.params || {}),
+      _method: method.toUpperCase(),
+    }
+  }
+
+  const isFormData = typeof FormData !== 'undefined' && config.data instanceof FormData
+  const isBlob = typeof Blob !== 'undefined' && config.data instanceof Blob
+  const isSearchParams =
+    typeof URLSearchParams !== 'undefined' && config.data instanceof URLSearchParams
+
+  if (
+    config.data !== undefined &&
+    config.data !== null &&
+    !isFormData &&
+    !isBlob &&
+    !isSearchParams
+  ) {
+    if (typeof config.data === 'object') {
+      config.data = JSON.stringify(config.data)
+    }
+    if (typeof config.data === 'string') {
+      if (config.headers && typeof config.headers.set === 'function') {
+        config.headers.set('Content-Type', 'text/plain;charset=UTF-8')
+      } else {
+        config.headers = {
+          ...(config.headers || {}),
+          'Content-Type': 'text/plain;charset=UTF-8',
+        }
+      }
+    }
+  }
+
   return config
 })
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const config = error?.config
+    if (config && !error.response && !config._shieldRetried) {
+      config._shieldRetried = true
+      await warmupBackendShield()
+      return api.request(config)
+    }
+    return Promise.reject(error)
+  },
+)
 
 export const authService = {
   async login(credentials) {
