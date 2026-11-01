@@ -906,3 +906,4 @@ export default function UserActivityPage() {
     </div>
   )
 }
+

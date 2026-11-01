@@ -6,6 +6,19 @@ import App from './App.jsx'
 import { warmupBackendShield } from './services/api'
 import { applyDocumentBranding } from './utils/branding'
 
+// Prevent accidental pinch zoom on mobile devices while keeping single-finger scroll & interactions 100% native
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  document.addEventListener('gesturestart', (e) => {
+    e.preventDefault()
+  })
+  document.addEventListener('gesturechange', (e) => {
+    e.preventDefault()
+  })
+  document.addEventListener('gestureend', (e) => {
+    e.preventDefault()
+  })
+}
+
 const apiBase =
   typeof window !== 'undefined' && window.location.hostname.endsWith('vercel.app')
     ? '/api'

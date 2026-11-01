@@ -1,0 +1,18 @@
+{
+  "name": "Shadow Attendance",
+  "short_name": "Shadow HR",
+  "description": "Shadow Attendance & HR System",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#071927",
+  "theme_color": "#071927",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

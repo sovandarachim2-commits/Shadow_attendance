@@ -20,7 +20,7 @@ function ensureLink(rel) {
 
 /** Apply company logo/icon to browser tab and Add to Home Screen. */
 export function applyDocumentBranding(settings = {}) {
-  const title = (settings.site_title || settings.company_name || 'SalesTrack').trim()
+  const title = (settings.site_title || settings.company_name || 'Shadow Attendance').trim()
   const iconUrl = (settings.company_icon_url || settings.company_logo_url || '').trim()
 
   if (title) {
@@ -33,7 +33,7 @@ export function applyDocumentBranding(settings = {}) {
     appTitle.name = 'apple-mobile-web-app-title'
     document.head.appendChild(appTitle)
   }
-  appTitle.content = (settings.company_name || title || 'SalesTrack').trim()
+  appTitle.content = (settings.company_name || title || 'Shadow HR').trim()
 
   if (!iconUrl) return
 
@@ -50,12 +50,13 @@ export function applyDocumentBranding(settings = {}) {
   }
 
   const manifest = {
-    name: title || 'SalesTrack',
-    short_name: (settings.company_name || title || 'SalesTrack').slice(0, 12),
+    name: title || 'Shadow Attendance',
+    short_name: (settings.company_name || title || 'Shadow HR').slice(0, 12),
     start_url: '/',
     display: 'standalone',
-    background_color: '#ffffff',
-    theme_color: '#059669',
+    orientation: 'portrait-primary',
+    background_color: '#071927',
+    theme_color: '#071927',
     icons: [
       { src: iconUrl, sizes: '192x192', type: imageTypeFromUrl(iconUrl), purpose: 'any' },
       { src: iconUrl, sizes: '512x512', type: imageTypeFromUrl(iconUrl), purpose: 'any maskable' },
