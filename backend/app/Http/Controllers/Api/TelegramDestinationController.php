@@ -216,7 +216,7 @@ class TelegramDestinationController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
-            'event_key' => ['required', 'string', Rule::in(self::EVENTS)],
+            'event_key' => ['required', 'string', 'max:80'],
             'chat_id' => ['nullable', 'string', 'max:120'],
             'message_thread_id' => ['nullable', 'integer', 'min:1'],
             'enabled' => ['required', 'boolean'],
