@@ -5,6 +5,7 @@
   "installCommand": "cd frontend && npm ci",
   "framework": "vite",
   "rewrites": [
+    { "source": "/api/(.*)", "destination": "https://shadowgroup.rentroomcambodia.com/api/$1" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }

@@ -1,3 +1,12 @@
+<IfModule mod_headers.c>
+    SetEnvIf Origin "^https://(shadow-attendance\.rentroomcambodia\.com|shadow-attendance\.vercel\.app)$" CORS_ORIGIN=$0
+    Header always set Access-Control-Allow-Origin "%{CORS_ORIGIN}e" env=CORS_ORIGIN
+    Header always set Access-Control-Allow-Credentials "true" env=CORS_ORIGIN
+    Header always set Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS" env=CORS_ORIGIN
+    Header always set Access-Control-Allow-Headers "Authorization, Content-Type, Accept, X-Requested-With, X-XSRF-TOKEN" env=CORS_ORIGIN
+    Header unset X-Frame-Options
+</IfModule>
+
 <IfModule mod_rewrite.c>
     <IfModule mod_negotiation.c>
         Options -MultiViews -Indexes
