@@ -103,3 +103,4 @@ class UserActivityService
         return $sanitized;
     }
 }
+

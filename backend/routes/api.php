@@ -313,6 +313,8 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('permission:notifications.manage,settings.security,settings.manage');
     Route::post('/telegram-notifications/test-chat', [TelegramNotificationController::class, 'testChat'])
         ->middleware('permission:notifications.manage,settings.security,settings.manage');
+    Route::post('/telegram-notifications/test-login-alert', [TelegramNotificationController::class, 'testLoginAlert'])
+        ->middleware('permission:notifications.manage,settings.security,settings.manage');
 
     Route::apiResource('/telegram-destinations', TelegramDestinationController::class)
         ->except(['show'])->middleware('permission:notifications.manage,settings.security');

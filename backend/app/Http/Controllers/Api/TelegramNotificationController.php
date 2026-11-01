@@ -45,6 +45,8 @@ class TelegramNotificationController extends Controller
         'telegram_alert_visit_completed',
         'telegram_alert_daily_report',
         'telegram_alert_route_tracking',
+        'telegram_alert_login_success',
+        'telegram_alert_login_failed',
         'telegram_late_notify_admin_group',
         'telegram_late_notify_employee',
         'telegram_late_include_deduction_amount',
@@ -199,6 +201,25 @@ class TelegramNotificationController extends Controller
             'message' => 'Test notification sent successfully.',
             'settings' => $this->settings(),
             'logs' => TelegramLog::query()->latest()->limit(20)->get(),
+        ]);
+    }
+
+    public function testLoginAlert(Request $request, TelegramNotificationService $telegram)
+    {
+        $data = $request->validate([
+            'status' => ['nullable', 'string', 'in:success,failed'],
+        ]);
+
+        $status = $data['status'] ?? 'success';
+        $result = $telegram->sendLoginAlertTest($status);
+
+        if (! ($result['ok'] ?? false)) {
+            return response()->json(['message' => $result['description'] ?? 'Failed to send test login alert.'], 422);
+        }
+
+        return response()->json([
+            'message' => "Test {$status} login alert sent successfully.",
+            'result' => $result,
         ]);
     }
 

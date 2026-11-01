@@ -102,6 +102,16 @@ const TOGGLE_GROUPS = [
       ['telegram_alert_route_tracking', 'Route Tracking Alert'],
     ],
   },
+  {
+    id: 'security',
+    title: 'Security & Login Notifications',
+    icon: ShieldCheck,
+    description: 'Instant alerts for successful and failed account sign-in attempts.',
+    items: [
+      ['telegram_alert_login_success', 'Successful Login Alert'],
+      ['telegram_alert_login_failed', 'Failed Login Attempt Alert'],
+    ],
+  },
 ]
 
 const LATE_ITEMS = [
@@ -112,6 +122,13 @@ const LATE_ITEMS = [
 ]
 
 const GROUP_DESTINATIONS = [
+  {
+    event_key: 'login_security',
+    name: 'Login & Security Alerts Group',
+    title: 'Login & Security Alerts',
+    description: 'Telegram group or topic for successful sign-ins and failed attempt alerts.',
+    placeholder: '-1005555555555',
+  },
   {
     event_key: 'office_attendance',
     name: 'Office Staff Attendance Group',

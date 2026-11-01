@@ -24,6 +24,7 @@ class TelegramDestinationController extends Controller
         'missing_checkout',
         'outdoor_visit',
         'system_alert',
+        'login_security',
         'bonus_approved',
         'other',
     ];
@@ -41,6 +42,7 @@ class TelegramDestinationController extends Controller
         'missing_checkout' => 'Missing Check Out',
         'outdoor_visit' => 'Outdoor Visits',
         'system_alert' => 'System Alerts',
+        'login_security' => 'Login & Security Alerts',
         'bonus_approved' => 'Bonus Approved',
         'other' => 'Other',
     ];
@@ -90,6 +92,26 @@ class TelegramDestinationController extends Controller
             }
 
             return response()->json(['message' => 'Test visit notification sent.']);
+        }
+
+        if ($telegramDestination->event_key === 'login_security') {
+            $time = now()->format('d M Y, h:i:s A');
+            $sampleLoginMsg = "🔐 <b>Login Alert: Successful Sign-In (Test)</b>\n\n"
+                . "👤 <b>User:</b> Super Admin (Test)\n"
+                . "🏷 <b>Username:</b> superadmin@shadow.com\n"
+                . "🛡 <b>Role:</b> Super Admin\n"
+                . "🌐 <b>IP Address:</b> <code>127.0.0.1</code>\n"
+                . "📱 <b>Device:</b> Chrome on Windows\n"
+                . "⏰ <b>Time:</b> {$time}\n"
+                . "✅ <b>Status:</b> Success (Test Message)";
+
+            $result = $telegram->sendToDestination($telegramDestination, $sampleLoginMsg);
+
+            if (! $result['ok']) {
+                return response()->json(['message' => $result['description']], 422);
+            }
+
+            return response()->json(['message' => 'Test login security notification sent.']);
         }
 
         $result = $telegram->sendToDestination(

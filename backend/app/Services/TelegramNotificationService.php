@@ -8,6 +8,9 @@ use App\Models\SystemSetting;
 use App\Models\TelegramDestination;
 use App\Models\TelegramLog;
 use App\Models\TelegramSetting;
+use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -88,22 +91,22 @@ class TelegramNotificationService
             return $destinations;
         }
 
-        if ($eventKey !== 'daily_attendance') {
-            return collect();
+        if (in_array($eventKey, ['daily_attendance', 'login_security', 'system_alert'], true)) {
+            $chatId = ($eventKey === 'login_security' ? config('services.telegram.security_chat_id') : null)
+                ?: config('services.telegram.chat_id')
+                ?: TelegramSetting::query()->value('chat_id')
+                ?: SystemSetting::where('key', 'telegram_security_chat_id')->value('value')
+                ?: SystemSetting::where('key', 'telegram_default_chat_id')->value('value');
+
+            if ($chatId && trim((string) $chatId) !== '') {
+                return collect([(object) [
+                    'chat_id' => trim((string) $chatId),
+                    'message_thread_id' => null,
+                ]]);
+            }
         }
 
-        $chatId = TelegramSetting::query()->value('chat_id')
-            ?: SystemSetting::where('key', 'telegram_default_chat_id')->value('value')
-            ?: config('services.telegram.chat_id');
-
-        if (! $chatId || trim($chatId) === '') {
-            return collect();
-        }
-
-        return collect([(object) [
-            'chat_id' => $chatId,
-            'message_thread_id' => null,
-        ]]);
+        return collect();
     }
 
     /**
@@ -868,5 +871,185 @@ class TelegramNotificationService
             Log::warning('Telegram notification exception', ['message' => $e->getMessage()]);
             return ['ok' => false, 'description' => 'Network error: '.$e->getMessage()];
         }
+    }
+
+    /**
+     * Send notification for a successful user login.
+     */
+    public function notifyLoginSuccess(User $user, Request $request): void
+    {
+        try {
+            if (! $this->alertEnabled('telegram_alert_login_success', true)) {
+                return;
+            }
+
+            // Throttle: Max 1 notification per user every 15 seconds to prevent multi-tab spam
+            $throttleKey = 'telegram_login_success_' . $user->id;
+            if (Cache::has($throttleKey)) {
+                return;
+            }
+            Cache::put($throttleKey, true, now()->addSeconds(15));
+
+            $ip = $request->ip() ?: 'Unknown IP';
+            $device = self::parseUserAgent($request->userAgent());
+            $time = now()->format('d M Y, h:i:s A');
+            $role = $user->role?->name ?? 'Standard User';
+            $employee = $user->relationLoaded('employee') ? $user->employee : $user->employee()->first();
+            $displayName = $employee ? trim("{$employee->first_name} {$employee->last_name}") : $user->name;
+
+            $escapedName = htmlspecialchars($displayName ?: 'User', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $escapedUsername = htmlspecialchars($user->name ?: ($user->email ?? 'N/A'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $escapedRole = htmlspecialchars($role, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $escapedIp = htmlspecialchars($ip, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $escapedDevice = htmlspecialchars($device, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+
+            $message = "🔐 <b>Login Alert: Successful Sign-In</b>\n\n"
+                . "👤 <b>User:</b> {$escapedName}\n"
+                . "🏷 <b>Username:</b> {$escapedUsername}\n"
+                . "🛡 <b>Role:</b> {$escapedRole}\n"
+                . "🌐 <b>IP Address:</b> <code>{$escapedIp}</code>\n"
+                . "📱 <b>Device:</b> {$escapedDevice}\n"
+                . "⏰ <b>Time:</b> {$time}\n"
+                . "✅ <b>Status:</b> Success";
+
+            $this->send($message, 'login_security');
+        } catch (\Throwable $e) {
+            Log::warning('Telegram notifyLoginSuccess failed', ['error' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Send notification for a failed login attempt with anti-bruteforce throttling.
+     */
+    public function notifyLoginFailed(string $username, string $reason, Request $request, ?User $user = null): void
+    {
+        try {
+            if (! $this->alertEnabled('telegram_alert_login_failed', true)) {
+                return;
+            }
+
+            $ip = $request->ip() ?: 'Unknown IP';
+            $device = self::parseUserAgent($request->userAgent());
+            $time = now()->format('d M Y, h:i:s A');
+
+            // Throttle protection: Max 5 failed login alerts per IP/username per 5 minutes
+            $cacheKey = 'telegram_fail_throttle_' . md5($ip . '_' . strtolower($username));
+            $attempts = (int) Cache::get($cacheKey, 0);
+
+            if ($attempts >= 5) {
+                if ($attempts === 5) {
+                    Cache::put($cacheKey, 6, now()->addMinutes(5));
+                    $throttleWarning = "🚨 <b>Security Warning: Multiple Failed Logins</b>\n\n"
+                        . "⚠️ <b>Exceeded 5 failed login attempts</b> from IP <code>{$ip}</code> for identifier <code>" . htmlspecialchars($username, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . "</code>.\n"
+                        . "Further Telegram alerts for this identifier are throttled for 5 minutes.";
+                    $this->send($throttleWarning, 'login_security');
+                }
+                return;
+            }
+
+            Cache::put($cacheKey, $attempts + 1, now()->addMinutes(5));
+
+            $escapedUsername = htmlspecialchars($username, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $escapedReason = htmlspecialchars($reason, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $escapedIp = htmlspecialchars($ip, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $escapedDevice = htmlspecialchars($device, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+
+            $message = "🚨 <b>Security Alert: Failed Login Attempt</b>\n\n"
+                . "🏷 <b>Attempted Username:</b> <code>{$escapedUsername}</code>\n"
+                . "⚠️ <b>Failure Reason:</b> {$escapedReason}\n"
+                . "🌐 <b>IP Address:</b> <code>{$escapedIp}</code>\n"
+                . "📱 <b>Device:</b> {$escapedDevice}\n"
+                . "⏰ <b>Time:</b> {$time}\n"
+                . "❌ <b>Status:</b> Failed";
+
+            $this->send($message, 'login_security');
+        } catch (\Throwable $e) {
+            Log::warning('Telegram notifyLoginFailed failed', ['error' => $e->getMessage()]);
+        }
+    }
+
+    /**
+     * Send test login alert for Super Admin verification.
+     */
+    public function sendLoginAlertTest(string $status = 'success'): array
+    {
+        $token = $this->getToken();
+        if (! $token) {
+            return ['ok' => false, 'description' => 'TELEGRAM_BOT_TOKEN is not configured.'];
+        }
+
+        $time = now()->format('d M Y, h:i:s A');
+        if ($status === 'success') {
+            $message = "🔐 <b>Login Alert: Successful Sign-In (Test)</b>\n\n"
+                . "👤 <b>User:</b> Super Admin (Test)\n"
+                . "🏷 <b>Username:</b> superadmin@shadow.com\n"
+                . "🛡 <b>Role:</b> Super Admin\n"
+                . "🌐 <b>IP Address:</b> <code>127.0.0.1</code>\n"
+                . "📱 <b>Device:</b> Chrome on Windows\n"
+                . "⏰ <b>Time:</b> {$time}\n"
+                . "✅ <b>Status:</b> Success (Test)";
+        } else {
+            $message = "🚨 <b>Security Alert: Failed Login Attempt (Test)</b>\n\n"
+                . "🏷 <b>Attempted Username:</b> <code>test_user</code>\n"
+                . "⚠️ <b>Failure Reason:</b> Invalid username or password\n"
+                . "🌐 <b>IP Address:</b> <code>127.0.0.1</code>\n"
+                . "📱 <b>Device:</b> Chrome on Windows\n"
+                . "⏰ <b>Time:</b> {$time}\n"
+                . "❌ <b>Status:</b> Failed (Test)";
+        }
+
+        $results = $this->sendWithResults($message, 'login_security');
+        $successful = collect($results)->filter(fn ($r) => ($r['ok'] ?? false))->isNotEmpty();
+
+        if ($successful) {
+            return ['ok' => true, 'description' => 'Test alert sent successfully.', 'results' => $results];
+        }
+
+        if (empty($results)) {
+            return [
+                'ok' => false,
+                'description' => 'No active Telegram destination found for login_security. Please configure a destination or set TELEGRAM_SECURITY_CHAT_ID / TELEGRAM_CHAT_ID in .env.',
+            ];
+        }
+
+        return ['ok' => false, 'description' => $results[0]['description'] ?? 'Telegram API call failed.', 'results' => $results];
+    }
+
+    /**
+     * Parse User-Agent string to human-readable device and browser.
+     */
+    public static function parseUserAgent(?string $ua): string
+    {
+        if (! $ua) {
+            return 'Unknown Device';
+        }
+
+        $browser = 'Browser';
+        if (str_contains($ua, 'Edg/')) {
+            $browser = 'Edge';
+        } elseif (str_contains($ua, 'Chrome/')) {
+            $browser = 'Chrome';
+        } elseif (str_contains($ua, 'Safari/') && ! str_contains($ua, 'Chrome/')) {
+            $browser = 'Safari';
+        } elseif (str_contains($ua, 'Firefox/')) {
+            $browser = 'Firefox';
+        } elseif (str_contains($ua, 'Opera/') || str_contains($ua, 'OPR/')) {
+            $browser = 'Opera';
+        }
+
+        $platform = 'Desktop';
+        if (preg_match('/iPhone|iPad|iPod/i', $ua)) {
+            $platform = 'iOS';
+        } elseif (preg_match('/Android/i', $ua)) {
+            $platform = 'Android';
+        } elseif (preg_match('/Windows/i', $ua)) {
+            $platform = 'Windows';
+        } elseif (preg_match('/Macintosh|Mac OS X/i', $ua)) {
+            $platform = 'macOS';
+        } elseif (preg_match('/Linux/i', $ua)) {
+            $platform = 'Linux';
+        }
+
+        return "{$browser} on {$platform}";
     }
 }

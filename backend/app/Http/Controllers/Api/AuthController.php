@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\TelegramNotificationService;
 use App\Services\UserActivityService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -12,7 +13,7 @@ use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
-    public function login(Request $request)
+    public function login(Request $request, TelegramNotificationService $telegram)
     {
         // Support 'username' (primary frontend payload), 'login', or 'email'
         if (! $request->has('username')) {
@@ -55,6 +56,8 @@ class AuthController extends Controller
                 request: $request
             );
 
+            $telegram->notifyLoginFailed($username, 'Invalid username or password', $request, $user);
+
             throw ValidationException::withMessages([
                 'username' => 'Invalid username or password.',
             ]);
@@ -73,6 +76,8 @@ class AuthController extends Controller
                 request: $request
             );
 
+            $telegram->notifyLoginFailed($username, 'Account is inactive', $request, $user);
+
             throw ValidationException::withMessages([
                 'username' => 'Your account is inactive. Please contact your administrator.',
             ]);
@@ -90,6 +95,8 @@ class AuthController extends Controller
             status: 'success',
             request: $request
         );
+
+        $telegram->notifyLoginSuccess($user, $request);
 
         return response()->json([
             'token' => $user->createToken('attendance-api')->plainTextToken,
