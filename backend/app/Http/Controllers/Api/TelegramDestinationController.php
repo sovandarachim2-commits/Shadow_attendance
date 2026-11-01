@@ -95,13 +95,16 @@ class TelegramDestinationController extends Controller
         }
 
         if ($telegramDestination->event_key === 'login_security') {
-            $time = now()->format('d M Y, h:i:s A');
+            $tz = config('app.timezone', 'Asia/Phnom_Penh');
+            $time = now()->setTimezone($tz)->format('d M Y, h:i:s A') . " ({$tz})";
             $sampleLoginMsg = "🔐 <b>Login Alert: Successful Sign-In (Test)</b>\n\n"
-                . "👤 <b>User:</b> Super Admin (Test)\n"
+                . "👤 <b>Employee:</b> Super Admin (Test)\n"
                 . "🏷 <b>Username:</b> superadmin@shadow.com\n"
                 . "🛡 <b>Role:</b> Super Admin\n"
                 . "🌐 <b>IP Address:</b> <code>127.0.0.1</code>\n"
-                . "📱 <b>Device:</b> Chrome on Windows\n"
+                . "📱 <b>Device:</b> iPhone (model unavailable)\n"
+                . "💻 <b>OS:</b> iOS 17.5\n"
+                . "🌐 <b>Browser:</b> Safari 17.5\n"
                 . "⏰ <b>Time:</b> {$time}\n"
                 . "✅ <b>Status:</b> Success (Test Message)";
 

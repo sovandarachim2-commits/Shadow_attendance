@@ -891,8 +891,9 @@ class TelegramNotificationService
             Cache::put($throttleKey, true, now()->addSeconds(15));
 
             $ip = $request->ip() ?: 'Unknown IP';
-            $device = self::parseUserAgent($request->userAgent());
-            $time = now()->format('d M Y, h:i:s A');
+            $detected = DeviceDetectorService::detect($request);
+            $tz = config('app.timezone', 'Asia/Phnom_Penh');
+            $time = now()->setTimezone($tz)->format('d M Y, h:i:s A') . " ({$tz})";
             $role = $user->role?->name ?? 'Standard User';
             $employee = $user->relationLoaded('employee') ? $user->employee : $user->employee()->first();
             $displayName = $employee ? trim("{$employee->first_name} {$employee->last_name}") : $user->name;
@@ -901,14 +902,18 @@ class TelegramNotificationService
             $escapedUsername = htmlspecialchars($user->name ?: ($user->email ?? 'N/A'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
             $escapedRole = htmlspecialchars($role, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
             $escapedIp = htmlspecialchars($ip, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-            $escapedDevice = htmlspecialchars($device, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $escapedDevice = htmlspecialchars($detected['device'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $escapedOs = htmlspecialchars($detected['os'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $escapedBrowser = htmlspecialchars($detected['browser'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 
             $message = "🔐 <b>Login Alert: Successful Sign-In</b>\n\n"
-                . "👤 <b>User:</b> {$escapedName}\n"
+                . "👤 <b>Employee:</b> {$escapedName}\n"
                 . "🏷 <b>Username:</b> {$escapedUsername}\n"
                 . "🛡 <b>Role:</b> {$escapedRole}\n"
                 . "🌐 <b>IP Address:</b> <code>{$escapedIp}</code>\n"
                 . "📱 <b>Device:</b> {$escapedDevice}\n"
+                . "💻 <b>OS:</b> {$escapedOs}\n"
+                . "🌐 <b>Browser:</b> {$escapedBrowser}\n"
                 . "⏰ <b>Time:</b> {$time}\n"
                 . "✅ <b>Status:</b> Success";
 
@@ -929,8 +934,9 @@ class TelegramNotificationService
             }
 
             $ip = $request->ip() ?: 'Unknown IP';
-            $device = self::parseUserAgent($request->userAgent());
-            $time = now()->format('d M Y, h:i:s A');
+            $detected = DeviceDetectorService::detect($request);
+            $tz = config('app.timezone', 'Asia/Phnom_Penh');
+            $time = now()->setTimezone($tz)->format('d M Y, h:i:s A') . " ({$tz})";
 
             // Throttle protection: Max 5 failed login alerts per IP/username per 5 minutes
             $cacheKey = 'telegram_fail_throttle_' . md5($ip . '_' . strtolower($username));
@@ -949,16 +955,25 @@ class TelegramNotificationService
 
             Cache::put($cacheKey, $attempts + 1, now()->addMinutes(5));
 
+            $employee = $user?->relationLoaded('employee') ? $user->employee : $user?->employee()->first();
+            $displayName = $employee ? trim("{$employee->first_name} {$employee->last_name}") : ($user ? $user->name : 'N/A');
+
+            $escapedName = htmlspecialchars($displayName, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
             $escapedUsername = htmlspecialchars($username, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
             $escapedReason = htmlspecialchars($reason, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
             $escapedIp = htmlspecialchars($ip, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-            $escapedDevice = htmlspecialchars($device, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $escapedDevice = htmlspecialchars($detected['device'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $escapedOs = htmlspecialchars($detected['os'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+            $escapedBrowser = htmlspecialchars($detected['browser'], ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 
             $message = "🚨 <b>Security Alert: Failed Login Attempt</b>\n\n"
-                . "🏷 <b>Attempted Username:</b> <code>{$escapedUsername}</code>\n"
+                . "👤 <b>Employee:</b> {$escapedName}\n"
+                . "🏷 <b>Username:</b> <code>{$escapedUsername}</code>\n"
                 . "⚠️ <b>Failure Reason:</b> {$escapedReason}\n"
                 . "🌐 <b>IP Address:</b> <code>{$escapedIp}</code>\n"
                 . "📱 <b>Device:</b> {$escapedDevice}\n"
+                . "💻 <b>OS:</b> {$escapedOs}\n"
+                . "🌐 <b>Browser:</b> {$escapedBrowser}\n"
                 . "⏰ <b>Time:</b> {$time}\n"
                 . "❌ <b>Status:</b> Failed";
 
@@ -978,22 +993,28 @@ class TelegramNotificationService
             return ['ok' => false, 'description' => 'TELEGRAM_BOT_TOKEN is not configured.'];
         }
 
-        $time = now()->format('d M Y, h:i:s A');
+        $tz = config('app.timezone', 'Asia/Phnom_Penh');
+        $time = now()->setTimezone($tz)->format('d M Y, h:i:s A') . " ({$tz})";
         if ($status === 'success') {
             $message = "🔐 <b>Login Alert: Successful Sign-In (Test)</b>\n\n"
-                . "👤 <b>User:</b> Super Admin (Test)\n"
+                . "👤 <b>Employee:</b> Super Admin (Test)\n"
                 . "🏷 <b>Username:</b> superadmin@shadow.com\n"
                 . "🛡 <b>Role:</b> Super Admin\n"
                 . "🌐 <b>IP Address:</b> <code>127.0.0.1</code>\n"
-                . "📱 <b>Device:</b> Chrome on Windows\n"
+                . "📱 <b>Device:</b> iPhone (model unavailable)\n"
+                . "💻 <b>OS:</b> iOS 17.5\n"
+                . "🌐 <b>Browser:</b> Safari 17.5\n"
                 . "⏰ <b>Time:</b> {$time}\n"
                 . "✅ <b>Status:</b> Success (Test)";
         } else {
             $message = "🚨 <b>Security Alert: Failed Login Attempt (Test)</b>\n\n"
-                . "🏷 <b>Attempted Username:</b> <code>test_user</code>\n"
+                . "👤 <b>Employee:</b> Unknown / Not Found\n"
+                . "🏷 <b>Username:</b> <code>test_user</code>\n"
                 . "⚠️ <b>Failure Reason:</b> Invalid username or password\n"
                 . "🌐 <b>IP Address:</b> <code>127.0.0.1</code>\n"
-                . "📱 <b>Device:</b> Chrome on Windows\n"
+                . "📱 <b>Device:</b> Windows PC\n"
+                . "💻 <b>OS:</b> Windows 11\n"
+                . "🌐 <b>Browser:</b> Chrome 125.0\n"
                 . "⏰ <b>Time:</b> {$time}\n"
                 . "❌ <b>Status:</b> Failed (Test)";
         }
@@ -1020,36 +1041,7 @@ class TelegramNotificationService
      */
     public static function parseUserAgent(?string $ua): string
     {
-        if (! $ua) {
-            return 'Unknown Device';
-        }
-
-        $browser = 'Browser';
-        if (str_contains($ua, 'Edg/')) {
-            $browser = 'Edge';
-        } elseif (str_contains($ua, 'Chrome/')) {
-            $browser = 'Chrome';
-        } elseif (str_contains($ua, 'Safari/') && ! str_contains($ua, 'Chrome/')) {
-            $browser = 'Safari';
-        } elseif (str_contains($ua, 'Firefox/')) {
-            $browser = 'Firefox';
-        } elseif (str_contains($ua, 'Opera/') || str_contains($ua, 'OPR/')) {
-            $browser = 'Opera';
-        }
-
-        $platform = 'Desktop';
-        if (preg_match('/iPhone|iPad|iPod/i', $ua)) {
-            $platform = 'iOS';
-        } elseif (preg_match('/Android/i', $ua)) {
-            $platform = 'Android';
-        } elseif (preg_match('/Windows/i', $ua)) {
-            $platform = 'Windows';
-        } elseif (preg_match('/Macintosh|Mac OS X/i', $ua)) {
-            $platform = 'macOS';
-        } elseif (preg_match('/Linux/i', $ua)) {
-            $platform = 'Linux';
-        }
-
-        return "{$browser} on {$platform}";
+        $detected = DeviceDetectorService::detectFromUserAgent($ua);
+        return $detected['summary'];
     }
 }
