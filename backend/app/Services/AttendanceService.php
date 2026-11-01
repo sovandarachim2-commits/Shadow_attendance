@@ -145,28 +145,39 @@ class AttendanceService
             && $data['latitude'] !== null
             && $data['longitude'] !== null;
 
-        if (
-            $hasLocation
-            && $attendanceType === 'office'
-            && config('attendance.validate_office_gps_radius', false)
-        ) {
-            $branch = $employee->branch;
-            if (! $branch) {
-                throw ValidationException::withMessages(['branch' => 'Employee has no office branch assigned.']);
+        $rules = $this->attendanceRules->rules();
+        $validateOfficeGps = config('attendance.validate_office_gps_radius', false)
+            || (bool) ($rules->gps_verification)
+            || (bool) ($employee->require_gps);
+
+        if ($validateOfficeGps && $attendanceType === 'office') {
+            if (! $hasLocation) {
+                throw ValidationException::withMessages([
+                    'gps' => 'GPS location is required for office check-in. Please turn on location on your device.',
+                ]);
             }
 
-            $result = $this->gps->assertWithinRadius(
-                (float) $data['latitude'],
-                (float) $data['longitude'],
-                (float) $branch->latitude,
-                (float) $branch->longitude,
-                (int) $branch->attendance_radius_meters
-            );
+            $branch = $employee->branch;
+            $targetLat = $branch?->latitude ?? $rules->office_latitude;
+            $targetLng = $branch?->longitude ?? $rules->office_longitude;
+            $targetRadius = (int) ($branch?->attendance_radius_meters ?: ($rules->allowed_radius ?: config('attendance.default_radius_meters', 100)));
 
-            if (! $result['valid']) {
-                throw ValidationException::withMessages([
-                    'gps' => "Outside office radius. Distance {$result['distance_meters']}m, allowed {$result['radius_meters']}m.",
-                ]);
+            if ($targetLat !== null && $targetLng !== null) {
+                $result = $this->gps->assertWithinRadius(
+                    (float) $data['latitude'],
+                    (float) $data['longitude'],
+                    (float) $targetLat,
+                    (float) $targetLng,
+                    $targetRadius
+                );
+
+                if (! $result['valid']) {
+                    throw ValidationException::withMessages([
+                        'gps' => "Outside office radius. You are {$result['distance_meters']}m away (allowed: {$result['radius_meters']}m).",
+                    ]);
+                }
+            } elseif (! $branch) {
+                throw ValidationException::withMessages(['branch' => 'Employee has no office branch or office coordinates assigned. Contact your administrator.']);
             }
         }
 
