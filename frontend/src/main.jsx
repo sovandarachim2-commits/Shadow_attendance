@@ -6,6 +6,20 @@ import App from './App.jsx'
 import { warmupBackendShield } from './services/api'
 import { applyDocumentBranding } from './utils/branding'
 
+// Filter out external/bot-protection script console warnings (e.g. feature_collector.js)
+if (typeof window !== 'undefined' && console.warn) {
+  const originalWarn = console.warn
+  console.warn = function (...args) {
+    if (
+      typeof args[0] === 'string' &&
+      args[0].includes('using deprecated parameters for the initialization function')
+    ) {
+      return
+    }
+    originalWarn.apply(console, args)
+  }
+}
+
 // Prevent accidental pinch zoom on mobile devices while keeping single-finger scroll & interactions 100% native
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   document.addEventListener('gesturestart', (e) => {

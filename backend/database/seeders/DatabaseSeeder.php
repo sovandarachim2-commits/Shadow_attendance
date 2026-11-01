@@ -78,6 +78,7 @@ class DatabaseSeeder extends Seeder
             ['event_key' => 'office_late_attendance', 'name' => 'Office Staff Late Attendance Group'],
             ['event_key' => 'outdoor_late_attendance', 'name' => 'Outdoor Sales Late Attendance Group'],
             ['event_key' => 'outdoor_visit', 'name' => 'Outdoor Visit Topic'],
+            ['event_key' => 'login_security', 'name' => 'Login & Security Alerts Group'],
         ] as $destination) {
             TelegramDestination::updateOrCreate(
                 ['event_key' => $destination['event_key'], 'name' => $destination['name']],
