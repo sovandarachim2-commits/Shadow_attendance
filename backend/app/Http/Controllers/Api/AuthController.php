@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\UserActivityService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
@@ -42,18 +43,53 @@ class AuthController extends Controller
             ->first();
 
         if (! $user || ! Hash::check($request->input('password'), $user->password)) {
+            UserActivityService::log(
+                action: 'failed_login',
+                module: 'auth',
+                description: "Failed login attempt for username: {$username}",
+                userId: $user?->id,
+                recordType: 'users',
+                recordId: $user?->id,
+                newValues: ['username' => $username, 'reason' => 'invalid_credentials'],
+                status: 'failed',
+                request: $request
+            );
+
             throw ValidationException::withMessages([
                 'username' => 'Invalid username or password.',
             ]);
         }
 
         if ($user->status !== 'active') {
+            UserActivityService::log(
+                action: 'failed_login',
+                module: 'auth',
+                description: "Login blocked for inactive account: {$username}",
+                userId: $user->id,
+                recordType: 'users',
+                recordId: $user->id,
+                newValues: ['username' => $username, 'reason' => 'account_inactive'],
+                status: 'warning',
+                request: $request
+            );
+
             throw ValidationException::withMessages([
                 'username' => 'Your account is inactive. Please contact your administrator.',
             ]);
         }
 
         $user->forceFill(['last_login_at' => now()])->save();
+
+        UserActivityService::log(
+            action: 'login',
+            module: 'auth',
+            description: "User {$user->name} logged in successfully",
+            userId: $user->id,
+            recordType: 'users',
+            recordId: $user->id,
+            status: 'success',
+            request: $request
+        );
 
         return response()->json([
             'token' => $user->createToken('attendance-api')->plainTextToken,
@@ -68,7 +104,21 @@ class AuthController extends Controller
 
     public function logout(Request $request)
     {
-        $request->user()->currentAccessToken()?->delete();
+        $user = $request->user();
+        if ($user) {
+            UserActivityService::log(
+                action: 'logout',
+                module: 'auth',
+                description: "User {$user->name} logged out",
+                userId: $user->id,
+                recordType: 'users',
+                recordId: $user->id,
+                status: 'success',
+                request: $request
+            );
+        }
+
+        $user?->currentAccessToken()?->delete();
 
         return response()->json(['message' => 'Logged out.']);
     }

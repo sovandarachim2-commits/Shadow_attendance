@@ -11,6 +11,7 @@ use App\Models\Role;
 use App\Models\User;
 use App\Repositories\EmployeeRepository;
 use App\Services\ImageUploadService;
+use App\Services\UserActivityService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -105,6 +106,18 @@ class EmployeeController extends Controller
 
             return $employee->fresh(['department', 'position', 'branch', 'user.role']);
         });
+
+        UserActivityService::log(
+            action: 'employee_created',
+            module: 'employee',
+            description: "Created employee {$employee->first_name} {$employee->last_name} ({$employee->employee_code})",
+            recordType: 'employees',
+            recordId: $employee->id,
+            newValues: $employee->toArray(),
+            status: 'success'
+        );
+
+        return $employee;
     }
 
     public function show(Employee $employee)
@@ -150,6 +163,8 @@ class EmployeeController extends Controller
         }
         unset($data['photo']);
 
+        $oldValues = $employee->toArray();
+
         DB::transaction(function () use ($employee, $data, $loginUsername, $loginEmail, $loginPassword, $roleId) {
             $employee->update($data);
 
@@ -193,6 +208,17 @@ class EmployeeController extends Controller
             }
         });
 
+        UserActivityService::log(
+            action: 'employee_updated',
+            module: 'employee',
+            description: "Updated employee {$employee->first_name} {$employee->last_name} ({$employee->employee_code})",
+            recordType: 'employees',
+            recordId: $employee->id,
+            oldValues: $oldValues,
+            newValues: $employee->fresh()->toArray(),
+            status: 'success'
+        );
+
         return $employee->fresh(['department', 'position', 'branch', 'user.role']);
     }
 
@@ -204,10 +230,22 @@ class EmployeeController extends Controller
             abort(422, 'Super Admin and Admin employees cannot be deleted.');
         }
 
+        $oldValues = $employee->toArray();
+
         DB::transaction(function () use ($employee) {
             $employee->user()?->delete();
             $employee->delete();
         });
+
+        UserActivityService::log(
+            action: 'employee_deactivated',
+            module: 'employee',
+            description: "Deleted employee {$employee->first_name} {$employee->last_name} ({$employee->employee_code})",
+            recordType: 'employees',
+            recordId: $employee->id,
+            oldValues: $oldValues,
+            status: 'success'
+        );
 
         return response()->noContent();
     }

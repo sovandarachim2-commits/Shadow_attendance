@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\ImageUploadService;
+use App\Services\UserActivityService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
@@ -69,6 +70,16 @@ class ProfileController extends Controller
 
         if (! empty($data['new_password'])) {
             $user->update(['password' => Hash::make($data['new_password'])]);
+
+            UserActivityService::log(
+                action: 'password_changed',
+                module: 'auth',
+                description: "User {$user->name} changed their password",
+                userId: $user->id,
+                recordType: 'users',
+                recordId: $user->id,
+                status: 'success'
+            );
         }
 
         return $user->fresh(['employee.department', 'employee.position', 'employee.branch', 'role.permissions']);

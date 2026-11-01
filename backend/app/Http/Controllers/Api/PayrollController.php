@@ -10,6 +10,7 @@ use App\Models\PayrollItem;
 use App\Models\SalaryAdvance;
 use App\Models\SalarySetup;
 use App\Services\PayrollService;
+use App\Services\UserActivityService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -151,6 +152,17 @@ class PayrollController extends Controller
         $data = $request->validate(['month' => ['required', 'date_format:Y-m']]);
         $payroll = $this->payrollService->generate(Carbon::parse($data['month'].'-01'), $request->user()->id);
 
+        UserActivityService::log(
+            action: 'payroll_created',
+            module: 'payroll',
+            description: "Generated payroll for {$data['month']} by {$request->user()->name}",
+            userId: $request->user()->id,
+            recordType: 'payrolls',
+            recordId: $payroll->id ?? null,
+            status: 'success',
+            request: $request
+        );
+
         return response()->json($this->formatPayroll($payroll));
     }
 
@@ -165,7 +177,21 @@ class PayrollController extends Controller
 
         abort_unless($request->user()->hasPermission($permission), 403, 'You do not have permission to update this payroll status.');
 
-        return response()->json($this->formatPayroll($this->payrollService->changeStatus($payroll, $data['status'], $request->user()->id)));
+        $updatedPayroll = $this->payrollService->changeStatus($payroll, $data['status'], $request->user()->id);
+
+        UserActivityService::log(
+            action: 'payroll_approved',
+            module: 'payroll',
+            description: "Payroll #{$payroll->id} status updated to {$data['status']} by {$request->user()->name}",
+            userId: $request->user()->id,
+            recordType: 'payrolls',
+            recordId: $payroll->id,
+            newValues: ['status' => $data['status']],
+            status: 'success',
+            request: $request
+        );
+
+        return response()->json($this->formatPayroll($updatedPayroll));
     }
 
     public function showItem(Request $request, PayrollItem $payrollItem)

@@ -42,6 +42,7 @@ import SecurityPage from './pages/SecurityPage'
 import BrandingPage from './pages/BrandingPage'
 import PermissionRequestsPage from './pages/PermissionRequestsPage'
 import PermissionTypesPage from './pages/PermissionTypesPage'
+import UserActivityPage from './pages/UserActivityPage'
 import AttendanceHistoryPage from './pages/AttendanceHistoryPage'
 import AdminAttendanceReportsPage from './pages/AdminAttendanceReportsPage'
 import MyAttendanceReportsPage from './pages/MyAttendanceReportsPage'
@@ -261,6 +262,7 @@ const translations = {
     'Visit': 'ការចុះជួប',
     'Weekly': 'ប្រចាំសប្តាហ៍',
     'Users & Roles': 'អ្នកប្រើប្រាស់ និងតួនាទី',
+    'User Activity': 'សកម្មភាពអ្នកប្រើប្រាស់',
     'Website Branding': 'ម៉ាកសញ្ញាគេហទំព័រ',
     'Write notification message...': 'សរសេរសារជូនដំណឹង...',
     'Working Minutes': 'នាទីធ្វើការ',
@@ -768,6 +770,7 @@ const sidebarManageItems = [
   { label: 'Outdoor Sales', target: 'Outdoor Sales', icon: MapPinned, permissions: ['sales.view', 'sales.manage'] },
   { label: 'Website Branding', target: 'Website Branding', icon: Image, permissions: ['settings.manage'] },
   { label: 'Roles & Permissions', target: 'Roles & Permissions', icon: Users, permissions: ['roles.manage', 'permissions.manage'] },
+  { label: 'User Activity', target: 'User Activity', icon: Activity, superAdminOnly: true },
   { label: 'Settings', target: 'Settings', icon: SettingsIcon, permissions: ['settings.view', 'settings.security', 'settings.api', 'settings.manage', 'settings.schedules', 'roles.manage'] },
 ]
 
@@ -1035,6 +1038,7 @@ function AppShell({ isLoaded, initialBranding = {} }) {
     Roles: <UsersRolesPage initialTab="roles" />,
     Permissions: <UsersRolesPage initialTab="permissions" />,
     'IP Access': <UsersRolesPage initialTab="ip" />,
+    'User Activity': user?.role?.slug === 'super_admin' ? <UserActivityPage {...props} /> : null,
     'Outdoor Sales': <OutdoorSalesPage {...props} />,
     Reports: <ReportsPage {...props} />,
     Security: <SecurityPage refresh={() => loadRealData(user)} />,
@@ -1049,7 +1053,12 @@ function AppShell({ isLoaded, initialBranding = {} }) {
   const pageTitle = active === 'Outdoor Sales' ? 'Outdoor Sales Tracking' : active
   const unreadCount = data.notifications.filter((item) => !item.read_at).length
   const mainSidebarItems = sidebarMainItems.filter((item) => canAccess(user, item.permissions))
-  const manageSidebarItems = sidebarManageItems.filter((item) => canAccess(user, item.permissions))
+  const manageSidebarItems = sidebarManageItems.filter((item) => {
+    if (item.superAdminOnly) {
+      return user?.role?.slug === 'super_admin'
+    }
+    return canAccess(user, item.permissions)
+  })
   const canSeeNotifications = canAccess(user, ['notifications.view', 'notifications.manage'])
   const today = data.todayAttendance
   const companyName = data.appSettings?.company_name || 'SalesTrack'

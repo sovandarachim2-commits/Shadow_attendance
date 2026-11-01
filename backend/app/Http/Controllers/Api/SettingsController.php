@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\SystemSetting;
 use App\Services\ImageUploadService;
+use App\Services\UserActivityService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Http\Request;
 
@@ -47,6 +48,17 @@ class SettingsController extends Controller
 
         Cache::forget('system_settings.all');
         Cache::forget('system_settings.branding');
+
+        UserActivityService::log(
+            action: 'settings_updated',
+            module: 'administration',
+            description: "System settings updated by " . ($request->user()?->name ?? 'Admin'),
+            userId: $request->user()?->id,
+            recordType: 'settings',
+            newValues: $data['settings'],
+            status: 'success',
+            request: $request
+        );
 
         return $this->settings();
     }

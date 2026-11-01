@@ -29,6 +29,7 @@ use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\TelegramDestinationController;
 use App\Http\Controllers\Api\TelegramNotificationController;
 use App\Http\Controllers\Api\TelegramWebhookController;
+use App\Http\Controllers\Api\UserActivityController;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/auth/login', [AuthController::class, 'login']);
@@ -325,4 +326,12 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('permission:notifications.manage,settings.security');
     Route::post('/telegram-destinations/save-token', [TelegramDestinationController::class, 'saveToken'])
         ->middleware('permission:notifications.manage,settings.security');
+
+    // Super Admin Exclusive - User Activity Audit Logs
+    Route::middleware('role:super_admin')->prefix('user-activities')->group(function () {
+        Route::get('/summary', [UserActivityController::class, 'summary']);
+        Route::get('/export', [UserActivityController::class, 'export']);
+        Route::get('/', [UserActivityController::class, 'index']);
+        Route::get('/{id}', [UserActivityController::class, 'show']);
+    });
 });

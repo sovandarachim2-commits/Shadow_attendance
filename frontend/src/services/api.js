@@ -193,3 +193,12 @@ export const employeeService = {
     return all
   },
 }
+
+export const userActivityService = {
+  list: (params) => api.get('/user-activities', { params }).then((r) => r.data),
+  summary: () => api.get('/user-activities/summary').then((r) => r.data),
+  get: (id) => api.get(`/user-activities/${id}`).then((r) => r.data),
+  export: (params) =>
+    api.get('/user-activities/export', { params, responseType: 'blob' }).then((r) => r.data),
+}
+

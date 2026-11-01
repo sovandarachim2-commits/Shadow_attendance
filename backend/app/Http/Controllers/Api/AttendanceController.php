@@ -9,6 +9,7 @@ use App\Models\Employee;
 use App\Repositories\AttendanceRepository;
 use App\Services\AttendanceRuleService;
 use App\Services\AttendanceService;
+use App\Services\UserActivityService;
 use App\Services\WorkScheduleService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -172,7 +173,20 @@ class AttendanceController extends Controller
 
         $data['photo'] = $request->file('photo');
 
-        return $this->service->checkIn($user, $data);
+        $result = $this->service->checkIn($user, $data);
+
+        UserActivityService::log(
+            action: 'clock_in',
+            module: 'attendance',
+            description: "Employee {$user->name} clocked in ({$type})",
+            userId: $user->id,
+            recordType: 'attendances',
+            recordId: is_object($result) && isset($result->id) ? $result->id : null,
+            status: 'success',
+            request: $request
+        );
+
+        return $result;
     }
 
     public function checkOut(Request $request)
@@ -190,7 +204,20 @@ class AttendanceController extends Controller
 
         $data['photo'] = $request->file('photo');
 
-        return $this->service->checkOut($user, $data);
+        $result = $this->service->checkOut($user, $data);
+
+        UserActivityService::log(
+            action: 'clock_out',
+            module: 'attendance',
+            description: "Employee {$user->name} clocked out ({$type})",
+            userId: $user->id,
+            recordType: 'attendances',
+            recordId: is_object($result) && isset($result->id) ? $result->id : null,
+            status: 'success',
+            request: $request
+        );
+
+        return $result;
     }
 
     public function edit(Request $request, Attendance $attendance)
@@ -216,6 +243,8 @@ class AttendanceController extends Controller
         ]);
 
         $changes = $data['changes'] ?? [];
+
+        $oldValues = $attendance->toArray();
 
         if (! $changes) {
             if (array_key_exists('date', $data)) {
@@ -276,6 +305,19 @@ class AttendanceController extends Controller
         }
 
         $attendance->save();
+
+        UserActivityService::log(
+            action: 'attendance_edited',
+            module: 'attendance',
+            description: "Attendance record #{$attendance->id} updated by {$request->user()->name}",
+            userId: $request->user()->id,
+            recordType: 'attendances',
+            recordId: $attendance->id,
+            oldValues: $oldValues,
+            newValues: $attendance->toArray(),
+            status: 'success',
+            request: $request
+        );
 
         return $attendance->fresh(['employee', 'logs.editor']);
     }
@@ -352,6 +394,18 @@ class AttendanceController extends Controller
             'reason' => $data['reason'],
             'ip_address' => $request->ip(),
         ]);
+
+        UserActivityService::log(
+            action: 'attendance_created',
+            module: 'attendance',
+            description: "Manual attendance record created for employee #{$attendance->employee_id} on {$attendanceDate}",
+            userId: $request->user()->id,
+            recordType: 'attendances',
+            recordId: $attendance->id,
+            newValues: $attendance->toArray(),
+            status: 'success',
+            request: $request
+        );
 
         return $attendance->fresh(['employee', 'logs.editor']);
     }

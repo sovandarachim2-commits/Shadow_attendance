@@ -10,6 +10,7 @@ use App\Models\PermissionType;
 use App\Models\User;
 use App\Services\AttendanceService;
 use App\Services\TelegramNotificationService;
+use App\Services\UserActivityService;
 use App\Services\WorkScheduleService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -103,6 +104,18 @@ class PermissionRequestController extends Controller
         $this->storeTelegramMessageReference($record, $telegramResults);
         $this->sendPrivateAdminTelegram($telegram, $record, $this->buildPermissionRequestMessage($record));
         $telegram->sendToEmployee($employee, $this->buildEmployeeRequestSubmittedMessage($record), 'permission_request_submitted_private');
+
+        UserActivityService::log(
+            action: 'leave_requested',
+            module: 'leave',
+            description: "Leave request {$record->request_code} ({$record->type}) submitted by {$employee->first_name} {$employee->last_name}",
+            userId: $request->user()->id,
+            recordType: 'permission_requests',
+            recordId: $record->id,
+            newValues: $record->toArray(),
+            status: 'success',
+            request: $request
+        );
 
         return $record;
     }
@@ -210,6 +223,20 @@ class PermissionRequestController extends Controller
         $telegram->send($this->buildStatusMessage($updated, $adminName), $this->eventKeyForEmployee($updated->employee));
         $telegram->sendToEmployee($updated->employee, $this->buildStatusMessage($updated, $adminName), 'permission_status_private');
 
+        $action = $data['status'] === 'approved' ? 'leave_approved' : 'leave_rejected';
+        UserActivityService::log(
+            action: $action,
+            module: 'leave',
+            description: "Leave request {$updated->request_code} ({$updated->type}) {$data['status']} by {$adminName}",
+            userId: $request->user()->id,
+            recordType: 'permission_requests',
+            recordId: $updated->id,
+            oldValues: ['status' => 'pending'],
+            newValues: ['status' => $data['status'], 'admin_notes' => $updated->admin_notes],
+            status: 'success',
+            request: $request
+        );
+
         return $updated;
     }
 
@@ -222,6 +249,18 @@ class PermissionRequestController extends Controller
             $telegram,
             $permissionRequest,
             $this->buildDeletedReplyMessage($permissionRequest, $request->user()->name ?? 'User')
+        );
+
+        UserActivityService::log(
+            action: 'leave_cancelled',
+            module: 'leave',
+            description: "Leave request {$permissionRequest->request_code} ({$permissionRequest->type}) cancelled/deleted by {$request->user()->name}",
+            userId: $request->user()->id,
+            recordType: 'permission_requests',
+            recordId: $permissionRequest->id,
+            oldValues: $permissionRequest->toArray(),
+            status: 'success',
+            request: $request
         );
 
         $permissionRequest->delete();
