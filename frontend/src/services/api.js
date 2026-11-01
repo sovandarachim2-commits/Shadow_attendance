@@ -1,6 +1,9 @@
 import axios from 'axios'
 
-const baseURL = import.meta.env.VITE_API_URL || '/api'
+const baseURL =
+  typeof window !== 'undefined' && window.location.hostname.endsWith('vercel.app')
+    ? '/api'
+    : (import.meta.env.VITE_API_URL || '/api')
 
 let shieldWarmupPromise = null
 

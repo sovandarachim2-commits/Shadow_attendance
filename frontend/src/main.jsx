@@ -6,8 +6,13 @@ import App from './App.jsx'
 import { warmupBackendShield } from './services/api'
 import { applyDocumentBranding } from './utils/branding'
 
+const apiBase =
+  typeof window !== 'undefined' && window.location.hostname.endsWith('vercel.app')
+    ? '/api'
+    : (import.meta.env.VITE_API_URL || '/api')
+
 const publicApi = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || '/api',
+  baseURL: apiBase,
   withCredentials: true,
   headers: { Accept: 'application/json' },
 })
