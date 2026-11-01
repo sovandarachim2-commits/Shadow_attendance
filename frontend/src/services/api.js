@@ -52,17 +52,15 @@ export const api = axios.create({
 })
 
 api.interceptors.request.use((config) => {
-  if (config.headers && typeof config.headers.delete === 'function') {
-    config.headers.delete('Authorization')
-  } else if (config.headers) {
-    delete config.headers.Authorization
-  }
-
   const token = localStorage.getItem('attendance_token')
   if (token) {
-    config.params = {
-      ...(config.params || {}),
-      api_token: token,
+    if (config.headers && typeof config.headers.set === 'function') {
+      config.headers.set('Authorization', `Bearer ${token}`)
+    } else {
+      config.headers = {
+        ...(config.headers || {}),
+        Authorization: `Bearer ${token}`,
+      }
     }
   }
 

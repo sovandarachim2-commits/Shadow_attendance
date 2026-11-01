@@ -290,6 +290,7 @@ export default function TelegramNotificationSettings({ notify }) {
         webhook_url: settings.webhook_url || '',
       })
       await api.put('/telegram-notifications/toggles', { toggles })
+      const destinationErrors = []
       await Promise.all(GROUP_DESTINATIONS.map(async ({ event_key }) => {
         const destination = destinations[event_key]
         if (!destination) return null
@@ -310,9 +311,14 @@ export default function TelegramNotificationSettings({ notify }) {
           send_photo: Boolean(destination.send_photo),
         }
 
-        return destination.id
-          ? api.put(`/telegram-destinations/${destination.id}`, payload)
-          : api.post('/telegram-destinations', payload)
+        try {
+          return destination.id
+            ? await api.put(`/telegram-destinations/${destination.id}`, payload)
+            : await api.post('/telegram-destinations', payload)
+        } catch (err) {
+          const msg = err.response?.data?.message || err.message
+          destinationErrors.push(`${payload.name}: ${msg}`)
+        }
       }))
       if (template?.id) {
         const updated = await api.put(`/telegram-notifications/templates/${template.id}`, {
@@ -322,7 +328,11 @@ export default function TelegramNotificationSettings({ notify }) {
         setTemplates((current) => ({ ...current, [updated.data.type]: updated.data }))
       }
       await loadData()
-      showNotice('Telegram notification settings saved.')
+      if (destinationErrors.length > 0) {
+        showNotice(`Settings saved, but destination notice: ${destinationErrors.join('; ')}`, false)
+      } else {
+        showNotice('Telegram notification settings saved.')
+      }
     } catch (ex) {
       showNotice(ex.response?.data?.message || 'Failed to save Telegram notification settings.', false)
     } finally {
