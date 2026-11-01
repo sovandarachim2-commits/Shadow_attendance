@@ -52,7 +52,8 @@ export function applyDocumentBranding(settings = {}) {
   const manifest = {
     name: title || 'Shadow Attendance',
     short_name: (settings.company_name || title || 'Shadow HR').slice(0, 12),
-    start_url: '/',
+    start_url: typeof window !== 'undefined' ? `${window.location.origin}/` : '/',
+    scope: typeof window !== 'undefined' ? `${window.location.origin}/` : '/',
     display: 'standalone',
     orientation: 'portrait-primary',
     background_color: '#071927',
