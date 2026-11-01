@@ -345,3 +345,4 @@ class DeviceDetectorService
         return $parts[0] ?? $version;
     }
 }
+
