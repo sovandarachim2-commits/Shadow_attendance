@@ -330,10 +330,10 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('permission:notifications.manage,settings.security');
 
     // Super Admin Exclusive - User Activity Audit Logs
-    Route::middleware('role:super_admin')->prefix('user-activities')->group(function () {
-        Route::get('/summary', [UserActivityController::class, 'summary']);
-        Route::get('/export', [UserActivityController::class, 'export']);
-        Route::get('/', [UserActivityController::class, 'index']);
-        Route::get('/{id}', [UserActivityController::class, 'show']);
+    Route::middleware('role:super_admin')->group(function () {
+        Route::get('/user-activities/summary', [UserActivityController::class, 'summary']);
+        Route::get('/user-activities/export', [UserActivityController::class, 'export']);
+        Route::get('/user-activities', [UserActivityController::class, 'index']);
+        Route::get('/user-activities/{id}', [UserActivityController::class, 'show']);
     });
 });
