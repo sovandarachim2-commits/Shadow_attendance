@@ -9,16 +9,12 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class UserActivityController extends Controller
 {
-    public function __construct()
+    private function assertSuperAdmin(Request $request): void
     {
-        $this->middleware(function ($request, $next) {
-            $user = $request->user();
-            if (! $user || ! $user->hasRole('super_admin')) {
-                abort(403, 'User activities audit logs are restricted to Super Admin only.');
-            }
-
-            return $next($request);
-        });
+        $user = $request->user();
+        if (! $user || ! $user->hasRole('super_admin')) {
+            abort(403, 'User activities audit logs are restricted to Super Admin only.');
+        }
     }
 
     /**
@@ -26,6 +22,8 @@ class UserActivityController extends Controller
      */
     public function index(Request $request)
     {
+        $this->assertSuperAdmin($request);
+
         $query = UserActivity::with(['user.role', 'user.employee.position', 'user.employee.department'])
             ->latest('id');
 
@@ -39,8 +37,10 @@ class UserActivityController extends Controller
     /**
      * Get real KPI summary statistics for today.
      */
-    public function summary()
+    public function summary(Request $request)
     {
+        $this->assertSuperAdmin($request);
+
         $todayStart = now()->startOfDay();
         $todayEnd = now()->endOfDay();
 
@@ -81,8 +81,10 @@ class UserActivityController extends Controller
     /**
      * Show detailed activity record.
      */
-    public function show($id)
+    public function show(Request $request, $id)
     {
+        $this->assertSuperAdmin($request);
+
         $activity = UserActivity::with(['user.role', 'user.employee.department', 'user.employee.position'])
             ->findOrFail($id);
 
@@ -94,6 +96,8 @@ class UserActivityController extends Controller
      */
     public function export(Request $request): StreamedResponse
     {
+        $this->assertSuperAdmin($request);
+
         $query = UserActivity::with(['user.role'])->latest('id');
         $this->applyFilters($query, $request);
 
