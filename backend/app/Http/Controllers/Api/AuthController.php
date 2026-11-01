@@ -13,36 +13,48 @@ class AuthController extends Controller
 {
     public function login(Request $request)
     {
-        // Accept either "username" or "email" as the login identifier
+        // Support 'username' (primary frontend payload), 'login', or 'email'
+        if (! $request->has('username')) {
+            $identifier = $request->input('login') ?? $request->input('email');
+            if ($identifier !== null) {
+                $request->merge(['username' => $identifier]);
+            }
+        }
+
         $request->validate([
-            'login'    => ['required', 'string'], // can be username or email
+            'username' => ['required', 'string'],
             'password' => ['required', 'string'],
+        ], [
+            'username.required' => 'The username or email field is required.',
+            'password.required' => 'The password field is required.',
         ]);
 
-        $login = $request->input('login');
+        $username = trim((string) $request->input('username'));
 
-        // Find the user by username (name) or email
         $user = User::with([
                 'role.permissions',
                 'employee.department',
                 'employee.position',
                 'employee.branch',
             ])
-            ->where('name', $login)
-            ->orWhere('email', $login)
+            ->where('name', $username)
+            ->orWhere('email', $username)
             ->first();
 
-        // Validate credentials and active status
-        if (! $user || ! Hash::check($request->input('password'), $user->password) || $user->status !== 'active') {
+        if (! $user || ! Hash::check($request->input('password'), $user->password)) {
             throw ValidationException::withMessages([
-                'login' => 'Invalid username/email or password.',
+                'username' => 'Invalid username or password.',
             ]);
         }
 
-        // Update last login timestamp
+        if ($user->status !== 'active') {
+            throw ValidationException::withMessages([
+                'username' => 'Your account is inactive. Please contact your administrator.',
+            ]);
+        }
+
         $user->forceFill(['last_login_at' => now()])->save();
 
-        // Return token and user data
         return response()->json([
             'token' => $user->createToken('attendance-api')->plainTextToken,
             'user'  => $user,
