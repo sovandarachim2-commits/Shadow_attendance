@@ -13,27 +13,39 @@ class AuthController extends Controller
 {
     public function login(Request $request)
     {
+        // Accept either "username" or "email" as the login identifier
         $request->validate([
-            'username' => ['required', 'string'],
+            'login'    => ['required', 'string'], // can be username or email
             'password' => ['required', 'string'],
         ]);
 
-        $username = $request->input('username');
+        $login = $request->input('login');
 
-        $user = User::with(['role.permissions', 'employee.department', 'employee.position', 'employee.branch'])
-            ->where('name', $username)
-            ->orWhere('email', $username)
+        // Find the user by username (name) or email
+        $user = User::with([
+                'role.permissions',
+                'employee.department',
+                'employee.position',
+                'employee.branch',
+            ])
+            ->where('name', $login)
+            ->orWhere('email', $login)
             ->first();
 
+        // Validate credentials and active status
         if (! $user || ! Hash::check($request->input('password'), $user->password) || $user->status !== 'active') {
-            throw ValidationException::withMessages(['username' => 'Invalid username or password.']);
+            throw ValidationException::withMessages([
+                'login' => 'Invalid username/email or password.',
+            ]);
         }
 
+        // Update last login timestamp
         $user->forceFill(['last_login_at' => now()])->save();
 
+        // Return token and user data
         return response()->json([
             'token' => $user->createToken('attendance-api')->plainTextToken,
-            'user' => $user,
+            'user'  => $user,
         ]);
     }
 

@@ -3,7 +3,10 @@
 return [
     'paths' => ['api/*', 'sanctum/csrf-cookie', 'up'],
     'allowed_methods' => ['*'],
-    'allowed_origins' => ['*'],
+    'allowed_origins' => [
+        'https://shadow-attendance.rentroomcambodia.com',
+        'https://shadow-attendance.vercel.app',
+    ],
     'allowed_origins_patterns' => [],
     'allowed_headers' => ['*'],
     'exposed_headers' => [],
