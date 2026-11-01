@@ -5,13 +5,7 @@ return [
     'allowed_methods' => ['*'],
     'allowed_origins' => array_values(array_unique(array_filter(array_map(
         'trim',
-        array_merge(
-            [
-                'https://shadow-attendance.rentroomcambodia.com',
-                'https://shadow-attendance.vercel.app',
-            ],
-            explode(',', (string) env('CORS_ALLOWED_ORIGINS', ''))
-        )
+        explode(',', (string) env('CORS_ALLOWED_ORIGINS', 'https://shadow-attendance.rentroomcambodia.com,https://shadow-attendance.vercel.app'))
     )))),
     'allowed_origins_patterns' => [],
     'allowed_headers' => ['*'],
