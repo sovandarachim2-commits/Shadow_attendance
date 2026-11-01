@@ -9,6 +9,18 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class UserActivityController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware(function ($request, $next) {
+            $user = $request->user();
+            if (! $user || ! $user->hasRole('super_admin')) {
+                abort(403, 'User activities audit logs are restricted to Super Admin only.');
+            }
+
+            return $next($request);
+        });
+    }
+
     /**
      * Get paginated audit logs with search and filtering.
      */
