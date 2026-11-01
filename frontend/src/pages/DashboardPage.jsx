@@ -742,7 +742,7 @@ function AttendanceDonutChart({ data, total }) {
       </div>
       <div className="flex items-center gap-6">
         <div className="relative h-36 min-h-36 w-36 min-w-36 shrink-0">
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
             <PieChart>
               <Pie data={safeData} cx="50%" cy="50%" innerRadius={42} outerRadius={65} dataKey="value" strokeWidth={2} stroke="#fff">
                 {safeData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
@@ -830,7 +830,7 @@ function MyAttendanceBarChart({ data }) {
         </div>
       </div>
       <div className="h-48 min-h-48 min-w-0">
-        <ResponsiveContainer width="100%" height="100%" debounce={50}>
+        <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0} debounce={50}>
           <BarChart data={data} margin={{ left: -20 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
             <XAxis dataKey="day" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
@@ -914,7 +914,7 @@ export function ReportsPanel({ chartData, notifications }) {
       <h3 className="text-lg font-bold">Reports & Alerts</h3>
       <div className="mt-5 h-52 min-h-52 min-w-0">
         {grouped.length === 0 ? <EmptyState text="No attendance chart data yet." /> : (
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
             <BarChart data={grouped}>
               <CartesianGrid strokeDasharray="3 3" stroke="#cbd5e1" />
               <XAxis dataKey="date" />

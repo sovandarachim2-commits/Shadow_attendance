@@ -294,12 +294,19 @@ export default function TelegramNotificationSettings({ notify }) {
         const destination = destinations[event_key]
         if (!destination) return null
 
+        const chatId = destination.chat_id ? String(destination.chat_id).trim() : ''
+
+        // Do not create empty, unconfigured destination records in the database
+        if (!destination.id && !chatId) {
+          return null
+        }
+
         const payload = {
           name: destination.name || GROUP_DESTINATIONS.find((item) => item.event_key === event_key)?.name,
           event_key,
-          chat_id: destination.chat_id || '',
-          message_thread_id: destination.message_thread_id || null,
-          enabled: Boolean(destination.enabled && destination.chat_id),
+          chat_id: chatId,
+          message_thread_id: destination.message_thread_id ? Number(destination.message_thread_id) : null,
+          enabled: Boolean(destination.enabled && chatId),
           send_photo: Boolean(destination.send_photo),
         }
 
